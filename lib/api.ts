@@ -13,10 +13,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({ message: res.statusText }));
-    throw new Error(body?.message ?? `HTTP ${res.status}`);
+    throw new Error(body?.error?.message ?? body?.message ?? `HTTP ${res.status}`);
   }
 
-  return res.json() as Promise<T>;
+  const json = await res.json() as { success: boolean; data: T };
+  return json.data;
 }
 
 export const api = {

@@ -7,13 +7,14 @@ import { Button } from '@/components/ui/Button';
 import { PageHeader } from '@/components/ui/PageHeader';
 
 interface PredictionConfig {
-  activeModel: string;
-  intervalHours: number;
+  model: string;
+  periodHours: number;
   batchSize: number;
   automationEnabled: boolean;
   outputMarkets: string[];
   inputDataFields: string[];
   historicalContextEnabled: boolean;
+  historicalContextCount: number;
   reasoningEffort: string | null;
 }
 
@@ -110,7 +111,7 @@ export default function ConfigPage() {
   const [showKey, setShowKey] = useState(false);
 
   const addKey = useMutation({
-    mutationFn: () => api.post('/admin/api-keys', { provider: newProvider, apiKey: newKey }),
+    mutationFn: () => api.post('/admin/api-keys', { provider: newProvider, key: newKey }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['api-keys'] }); setNewProvider(''); setNewKey(''); },
   });
 
@@ -139,8 +140,8 @@ export default function ConfigPage() {
       <SectionCard title="Model & Automation">
         <Field label="Active model">
           <select
-            value={form.activeModel}
-            onChange={(e) => setField('activeModel', e.target.value)}
+            value={form.model}
+            onChange={(e) => setField('model', e.target.value)}
             className="h-9 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
           >
             {MODELS.map((m) => <option key={m} value={m}>{m}</option>)}
@@ -162,8 +163,8 @@ export default function ConfigPage() {
             type="number"
             min={1}
             max={24}
-            value={form.intervalHours}
-            onChange={(e) => setField('intervalHours', Number(e.target.value))}
+            value={form.periodHours}
+            onChange={(e) => setField('periodHours', Number(e.target.value))}
             className="h-9 w-24 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
           />
         </Field>
