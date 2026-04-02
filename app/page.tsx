@@ -1,65 +1,123 @@
-import Image from "next/image";
+'use client';
 
-export default function Home() {
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { api } from '@/lib/api';
+import { MetricCard } from '@/components/ui/MetricCard';
+import { StatusBadge } from '@/components/ui/StatusBadge';
+import { Button } from '@/components/ui/Button';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { formatDateTime, formatPct } from '@/lib/utils';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+
+interface DashboardMetrics {
+  mostVisitedMatch: { prediction_id: string; visits: string; home: string; away: string; kickoff: string } | null;
+  globalAccuracy: number | null;
+  weeklyAccuracy: number | null;
+  lastWeekAccuracy: number | null;
+  pendingPredictions: number;
+  activeUsers: number;
+  creditsConsumedLast7Days: number;
+  lastJob: {
+    id: string;
+    status: string;
+    matchesProcessed: number;
+    succeeded: number;
+    failed: number;
+    startedAt: string | null;
+    completedAt: string | null;
+  } | null;
+}
+
+export default function DashboardPage() {
+  const qc = useQueryClient();
+
+  const { data, isLoading } = useQuery<DashboardMetrics>({
+    queryKey: ['dashboard'],
+    queryFn: () => api.get('/admin/dashboard'),
+    refetchInterval: 30_000,
+  });
+
+  const runJob = useMutation({
+    mutationFn: () => api.post('/admin/predictions/run', {}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['dashboard'] }),
+  });
+
+  const chartData = [
+    { label: 'Last week', value: data?.lastWeekAccuracy ?? 0 },
+    { label: 'This week', value: data?.weeklyAccuracy ?? 0 },
+    { label: 'All time',  value: data?.globalAccuracy ?? 0 },
+  ];
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+    <div>
+      <PageHeader
+        title="Dashboard"
+        description="System overview — last 7 days"
+        action={
+          <Button
+            variant="primary"
+            loading={runJob.isPending}
+            onClick={() => runJob.mutate()}
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
+            Run Prediction Job
+          </Button>
+        }
+      />
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <MetricCard label="Global Accuracy" value={formatPct(data?.globalAccuracy)} sub="All settled predictions" accent />
+        <MetricCard label="Weekly Accuracy" value={formatPct(data?.weeklyAccuracy)} sub="This week" />
+        <MetricCard label="Pending" value={isLoading ? '…' : data?.pendingPredictions} sub="Awaiting settlement" />
+        <MetricCard label="Active Users" value={isLoading ? '…' : data?.activeUsers} sub="Last 7 days" />
+        <MetricCard label="Credits Consumed" value={isLoading ? '…' : data?.creditsConsumedLast7Days} sub="Last 7 days" />
+        {data?.mostVisitedMatch && (
+          <MetricCard
+            label="Most Visited"
+            value={`${data.mostVisitedMatch.home} vs ${data.mostVisitedMatch.away}`}
+            sub={`${data.mostVisitedMatch.visits} views`}
+            className="col-span-2"
+          />
+        )}
+      </div>
+
+      <div className="rounded-2xl p-5 mb-6" style={{ background: '#121A2B', border: '1px solid rgba(255,255,255,0.08)' }}>
+        <h2 className="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-4 font-sans">
+          Accuracy Overview
+        </h2>
+        <ResponsiveContainer width="100%" height={180}>
+          <BarChart data={chartData} barSize={48}>
+            <XAxis dataKey="label" tick={{ fill: '#98A2B3', fontSize: 12 }} axisLine={false} tickLine={false} />
+            <YAxis domain={[0, 100]} tick={{ fill: '#98A2B3', fontSize: 12 }} axisLine={false} tickLine={false} />
+            <Tooltip
+              contentStyle={{ background: '#1F2A40', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, color: '#F5F7FB', fontSize: 12 }}
+              cursor={{ fill: 'rgba(255,255,255,0.04)' }}
+              formatter={(v: unknown) => [`${v}%`, 'Accuracy']}
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+            <Bar dataKey="value" radius={[6, 6, 0, 0]}>
+              {chartData.map((_, i) => (
+                <Cell key={i} fill={i === 1 ? '#7CFF5B' : '#4DA8FF'} />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+
+      {data?.lastJob && (
+        <div className="rounded-2xl p-5" style={{ background: '#121A2B', border: '1px solid rgba(255,255,255,0.08)' }}>
+          <h2 className="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-3 font-sans">
+            Last Prediction Job
+          </h2>
+          <div className="flex items-center gap-4 flex-wrap">
+            <StatusBadge status={data.lastJob.status} />
+            <span className="text-text-muted text-sm font-sans">
+              {data.lastJob.succeeded} ok · {data.lastJob.failed} failed · {data.lastJob.matchesProcessed} total
+            </span>
+            <span className="text-text-muted text-xs font-sans ml-auto">
+              {formatDateTime(data.lastJob.startedAt)}
+            </span>
+          </div>
         </div>
-      </main>
+      )}
     </div>
   );
 }

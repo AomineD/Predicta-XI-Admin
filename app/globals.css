@@ -1,26 +1,45 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* Tactical Dark — Predicta XI */
+  --color-background:    #0B1220;
+  --color-surface:       #121A2B;
+  --color-surface-2:     #182235;
+  --color-surface-3:     #1F2A40;
+  --color-primary:       #7CFF5B;
+  --color-primary-pressed: #63E645;
+  --color-secondary:     #4DA8FF;
+  --color-accent:        #A78BFA;
+  --color-text-primary:  #F5F7FB;
+  --color-text-secondary: #98A2B3;
+  --color-text-muted:    #667085;
+  --color-success:       #22C55E;
+  --color-warning:       #F59E0B;
+  --color-danger:        #EF4444;
+  --color-live:          #FF5A5F;
+  --color-border:        rgba(255, 255, 255, 0.08);
+
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-display: 'Sora', system-ui, sans-serif;
+
+  --radius-card: 16px;
+  --radius-btn:  14px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
 }
 
+html,
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: #0B1220;
+  color: #F5F7FB;
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #121A2B; }
+::-webkit-scrollbar-thumb { background: #1F2A40; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #98A2B3; }
