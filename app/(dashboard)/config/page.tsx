@@ -199,7 +199,7 @@ export default function ConfigPage() {
   const [deleteResult, setDeleteResult] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const deleteAllMatches = useMutation({
-    mutationFn: () => api.post('/admin/matches/delete-all') as Promise<{ matchesDeleted: number; predictionsDeleted: number }>,
+    mutationFn: () => api.post('/admin/matches/delete-all', {}) as Promise<{ matchesDeleted: number; predictionsDeleted: number }>,
     onSuccess: (data: { matchesDeleted: number; predictionsDeleted: number }) => {
       setShowDeleteConfirm(false);
       setDeleteResult({ type: 'success', text: `Deleted ${data.matchesDeleted} matches and ${data.predictionsDeleted} predictions` });
