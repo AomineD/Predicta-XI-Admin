@@ -3,20 +3,24 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
+import { logout } from '@/app/actions/auth';
 import {
   LayoutDashboard,
   Sparkles,
   CalendarDays,
+  Trophy,
   Settings,
   ClockIcon,
+  LogOut,
 } from 'lucide-react';
 
 const NAV_ITEMS = [
-  { href: '/',            label: 'Dashboard',    icon: LayoutDashboard },
-  { href: '/predictions', label: 'Predictions',  icon: Sparkles },
-  { href: '/matches',     label: 'Matches',      icon: CalendarDays },
-  { href: '/config',      label: 'Config',       icon: Settings },
-  { href: '/jobs',        label: 'Jobs',         icon: ClockIcon },
+  { href: '/',            label: 'Dashboard',     icon: LayoutDashboard },
+  { href: '/predictions', label: 'Predictions',   icon: Sparkles },
+  { href: '/matches',     label: 'Matches',       icon: CalendarDays },
+  { href: '/competitions', label: 'Competitions', icon: Trophy },
+  { href: '/config',      label: 'Config',        icon: Settings },
+  { href: '/jobs',        label: 'Jobs',          icon: ClockIcon },
 ];
 
 export function Sidebar() {
@@ -58,8 +62,17 @@ export function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="px-5 py-4 border-t text-xs text-text-muted" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
-        v0.1 · Predicta XI
+      <div className="px-3 py-4 border-t space-y-2" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
+        <form action={logout}>
+          <button
+            type="submit"
+            className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-text-secondary hover:bg-surface-2 hover:text-text-primary transition-colors w-full"
+          >
+            <LogOut size={17} className="text-text-muted" />
+            Logout
+          </button>
+        </form>
+        <p className="px-3 text-xs text-text-muted font-sans">v0.1 · Predicta XI</p>
       </div>
     </aside>
   );

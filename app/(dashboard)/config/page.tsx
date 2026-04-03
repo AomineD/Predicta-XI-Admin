@@ -30,19 +30,24 @@ const MARKETS = ['match_result', 'over_under_2_5', 'btts', 'double_chance', 'asi
 const DATA_FIELDS = ['fixture_info', 'standings', 'recent_form', 'season_stats', 'h2h', 'injuries', 'odds', 'top_scorers'];
 const REASONING_OPTIONS = ['', 'low', 'medium', 'high'];
 
-function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
+function SectionCard({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
     <div className="rounded-2xl p-5 mb-4" style={{ background: '#121A2B', border: '1px solid rgba(255,255,255,0.08)' }}>
-      <h2 className="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-4 font-sans">{title}</h2>
+      <h2 className="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-1 font-sans">{title}</h2>
+      {subtitle && <p className="text-xs text-text-muted/60 font-sans mb-4">{subtitle}</p>}
+      {!subtitle && <div className="mb-3" />}
       {children}
     </div>
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, subtitle, children }: { label: string; subtitle?: string; children: React.ReactNode }) {
   return (
     <div className="flex items-start gap-4 py-3 border-b last:border-0" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
-      <span className="w-44 text-sm text-text-muted font-sans pt-0.5 flex-none">{label}</span>
+      <div className="w-44 flex-none">
+        <span className="text-sm text-text-muted font-sans pt-0.5">{label}</span>
+        {subtitle && <p className="text-xs text-text-muted/50 font-sans mt-0.5 leading-tight">{subtitle}</p>}
+      </div>
       <div className="flex-1">{children}</div>
     </div>
   );
@@ -120,7 +125,39 @@ export default function ConfigPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['api-keys'] }),
   });
 
-  if (!form) return <p className="text-text-muted text-sm">Loading config…</p>;
+  // Change password
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordMessage, setPasswordMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const changePassword = useMutation({
+    mutationFn: () => api.put('/admin/change-password', { currentPassword, newPassword }),
+    onSuccess: () => {
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setPasswordMessage({ type: 'success', text: 'Password changed successfully' });
+    },
+    onError: (err: Error) => {
+      setPasswordMessage({ type: 'error', text: err.message });
+    },
+  });
+
+  const handleChangePassword = () => {
+    setPasswordMessage(null);
+    if (newPassword.length < 8) {
+      setPasswordMessage({ type: 'error', text: 'New password must be at least 8 characters' });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordMessage({ type: 'error', text: 'Passwords do not match' });
+      return;
+    }
+    changePassword.mutate();
+  };
+
+  if (!form) return <p className="text-text-muted text-sm">Loading config...</p>;
 
   const setField = <K extends keyof PredictionConfig>(key: K, value: PredictionConfig[K]) =>
     setForm((f) => f ? { ...f, [key]: value } : f);
@@ -138,7 +175,7 @@ export default function ConfigPage() {
       />
 
       <SectionCard title="Model & Automation">
-        <Field label="Active model">
+        <Field label="Active model" subtitle="LLM model used for generating match predictions">
           <select
             value={form.model}
             onChange={(e) => setField('model', e.target.value)}
@@ -148,17 +185,17 @@ export default function ConfigPage() {
           </select>
         </Field>
 
-        <Field label="Reasoning effort">
+        <Field label="Reasoning effort" subtitle="Depth of reasoning for supported models (DeepSeek R1, GPT Think)">
           <select
             value={form.reasoningEffort ?? ''}
             onChange={(e) => setField('reasoningEffort', e.target.value || null)}
             className="h-9 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
           >
-            {REASONING_OPTIONS.map((r) => <option key={r} value={r}>{r || '— default —'}</option>)}
+            {REASONING_OPTIONS.map((r) => <option key={r} value={r}>{r || '-- default --'}</option>)}
           </select>
         </Field>
 
-        <Field label="Interval (hours)">
+        <Field label="Interval (hours)" subtitle="How often the prediction scheduler runs automatically">
           <input
             type="number"
             min={1}
@@ -169,7 +206,7 @@ export default function ConfigPage() {
           />
         </Field>
 
-        <Field label="Batch size">
+        <Field label="Batch size" subtitle="Maximum matches processed per scheduler run">
           <input
             type="number"
             min={1}
@@ -180,7 +217,7 @@ export default function ConfigPage() {
           />
         </Field>
 
-        <Field label="Automation enabled">
+        <Field label="Automation enabled" subtitle="When off, predictions must be triggered manually">
           <button
             type="button"
             onClick={() => setField('automationEnabled', !form.automationEnabled)}
@@ -196,7 +233,7 @@ export default function ConfigPage() {
           </button>
         </Field>
 
-        <Field label="Historical context">
+        <Field label="Historical context" subtitle="Include past prediction outcomes to improve accuracy">
           <button
             type="button"
             onClick={() => setField('historicalContextEnabled', !form.historicalContextEnabled)}
@@ -213,15 +250,15 @@ export default function ConfigPage() {
         </Field>
       </SectionCard>
 
-      <SectionCard title="Output Markets">
+      <SectionCard title="Output Markets" subtitle="Betting markets included in each generated prediction">
         <MultiCheckbox options={MARKETS} value={form.outputMarkets} onChange={(v) => setField('outputMarkets', v)} />
       </SectionCard>
 
-      <SectionCard title="Input Data Fields">
+      <SectionCard title="Input Data Fields" subtitle="Data sources the model receives to generate predictions">
         <MultiCheckbox options={DATA_FIELDS} value={form.inputDataFields} onChange={(v) => setField('inputDataFields', v)} />
       </SectionCard>
 
-      <SectionCard title="API Keys">
+      <SectionCard title="API Keys" subtitle="Encrypted LLM provider keys for prediction generation">
         {/* Existing keys */}
         {(apiKeys ?? []).length > 0 && (
           <div className="divide-y mb-4" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
@@ -257,7 +294,7 @@ export default function ConfigPage() {
                 type={showKey ? 'text' : 'password'}
                 value={newKey}
                 onChange={(e) => setNewKey(e.target.value)}
-                placeholder="sk-…"
+                placeholder="sk-..."
                 className="h-9 flex-1 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none placeholder:text-text-muted"
               />
               <button
@@ -276,6 +313,55 @@ export default function ConfigPage() {
             onClick={() => addKey.mutate()}
           >
             Add Key
+          </Button>
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Security" subtitle="Change your admin panel password">
+        <Field label="Current password" subtitle="Enter your current password to verify identity">
+          <input
+            type="password"
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            placeholder="Current password"
+            className="h-9 w-64 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none placeholder:text-text-muted"
+          />
+        </Field>
+
+        <Field label="New password" subtitle="Minimum 8 characters">
+          <input
+            type="password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            placeholder="New password"
+            className="h-9 w-64 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none placeholder:text-text-muted"
+          />
+        </Field>
+
+        <Field label="Confirm password" subtitle="Re-enter the new password">
+          <input
+            type="password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            placeholder="Confirm new password"
+            className="h-9 w-64 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none placeholder:text-text-muted"
+          />
+        </Field>
+
+        {passwordMessage && (
+          <p className={`text-xs font-sans mt-2 ${passwordMessage.type === 'success' ? 'text-success' : 'text-danger'}`}>
+            {passwordMessage.text}
+          </p>
+        )}
+
+        <div className="mt-4">
+          <Button
+            variant="secondary"
+            loading={changePassword.isPending}
+            disabled={!currentPassword || !newPassword || !confirmPassword}
+            onClick={handleChangePassword}
+          >
+            Change Password
           </Button>
         </div>
       </SectionCard>
