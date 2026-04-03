@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useParams } from 'next/navigation';
 import { api } from '@/lib/api';
@@ -32,11 +33,42 @@ interface PredictionDetail {
   createdAt: string | null;
   latencyMs: number | null;
   tokensUsed: { input: number; output: number; total: number } | null;
+  llmInput: { systemPrompt: string; userPrompt: string } | null;
   contrast?: {
     homeScore: number | null;
     awayScore: number | null;
     matchStatus: string;
   };
+}
+
+function CollapsibleSection({ title, content }: { title: string; content: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="border-b last:border-0" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between px-5 py-3 text-left hover:bg-surface-3/50 transition-colors"
+      >
+        <span className="text-xs font-semibold text-text-secondary uppercase tracking-wider font-sans">{title}</span>
+        <span className="text-text-muted text-xs">{open ? '▼' : '▶'}</span>
+      </button>
+      {open && (
+        <div className="px-5 pb-4">
+          <div className="flex justify-end mb-2">
+            <button
+              onClick={() => navigator.clipboard.writeText(content)}
+              className="px-2 py-1 rounded-md text-xs font-sans bg-surface-3 text-text-secondary hover:text-text-primary transition-colors"
+            >
+              Copy
+            </button>
+          </div>
+          <pre className="text-xs text-text-muted font-mono whitespace-pre-wrap p-3 rounded-xl bg-surface-3 max-h-96 overflow-auto">
+            {content}
+          </pre>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function PredictionDetailPage() {
@@ -101,6 +133,17 @@ export default function PredictionDetailPage() {
           ))}
         </div>
       </div>
+
+      {/* LLM Input (admin only) */}
+      {data.llmInput && (
+        <div className="rounded-2xl overflow-hidden mb-4" style={{ background: '#121A2B', border: '1px solid rgba(255,255,255,0.08)' }}>
+          <div className="px-5 py-3 border-b" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
+            <h2 className="text-xs font-semibold text-text-secondary uppercase tracking-wider font-sans">LLM Input</h2>
+          </div>
+          <CollapsibleSection title="System Prompt" content={data.llmInput.systemPrompt} />
+          <CollapsibleSection title="User Prompt" content={data.llmInput.userPrompt} />
+        </div>
+      )}
 
       {/* Contrast */}
       {data.contrast && (
