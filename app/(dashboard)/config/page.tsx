@@ -8,7 +8,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 
 interface PredictionConfig {
   model: string;
-  periodHours: number;
+  periodMinutes: number;
   batchSize: number;
   automationEnabled: boolean;
   outputMarkets: string[];
@@ -265,13 +265,13 @@ export default function ConfigPage() {
           <Toggle value={form.automationEnabled} onChange={(v) => setField('automationEnabled', v)} />
         </Field>
 
-        <Field label="Interval (hours)" subtitle="How often the prediction scheduler runs automatically">
+        <Field label="Interval (minutes)" subtitle="How often the prediction scheduler runs automatically">
           <input
             type="number"
             min={1}
-            max={24}
-            value={form.periodHours}
-            onChange={(e) => setField('periodHours', Number(e.target.value))}
+            max={1440}
+            value={form.periodMinutes}
+            onChange={(e) => setField('periodMinutes', Number(e.target.value))}
             className="h-9 w-24 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
           />
         </Field>
