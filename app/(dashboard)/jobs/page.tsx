@@ -22,6 +22,15 @@ interface PredictionJob {
   errorLog: unknown;
 }
 
+interface SyncJobProgress {
+  phase: number;
+  totalPhases: number;
+  phaseName: string;
+  current: number;
+  total: number;
+  itemLabel: string;
+}
+
 interface SyncJob {
   id: number;
   type: string;
@@ -33,6 +42,7 @@ interface SyncJob {
   errorLog: string | null;
   startedAt: string | null;
   finishedAt: string | null;
+  progress: SyncJobProgress | null;
 }
 
 interface JobsResponse<T> {
@@ -195,7 +205,22 @@ export default function JobsPage() {
     {
       key: 'status',
       header: 'Status',
-      render: (row) => <StatusBadge status={row.status} />,
+      render: (row) => (
+        <div className="flex flex-col gap-1">
+          <StatusBadge status={row.status} />
+          {row.progress && (
+            <div className="text-xs text-text-muted leading-tight">
+              <span className="text-text-secondary">Phase {row.progress.phase}/{row.progress.totalPhases}:</span>{' '}
+              {row.progress.phaseName}
+              {row.progress.total > 0 && (
+                <span className="block">
+                  {row.progress.itemLabel} {row.progress.current}/{row.progress.total}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      ),
     },
     {
       key: 'type',

@@ -17,6 +17,7 @@ interface Match {
   status: string;
   score: { home: number; away: number } | null;
   predicted: boolean;
+  enriched: boolean;
   competitionName?: string;
 }
 
@@ -254,6 +255,15 @@ export default function MatchesPage() {
       render: (row) => (
         <span className={row.predicted ? 'text-success text-xs' : 'text-text-muted text-xs'}>
           {row.predicted ? 'Yes' : 'No'}
+        </span>
+      ),
+    },
+    {
+      key: 'enriched',
+      header: 'Enriched',
+      render: (row) => (
+        <span className={row.enriched ? 'text-success text-xs' : 'text-text-muted text-xs'}>
+          {row.enriched ? 'Yes' : 'No'}
         </span>
       ),
     },
