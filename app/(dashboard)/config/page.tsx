@@ -20,6 +20,7 @@ interface PredictionConfig {
   matchSyncIntervalHours: number;
   resultSyncEnabled: boolean;
   resultSyncHourUtc: number;
+  predictionWindowMinutes: number;
 }
 
 interface ApiKey {
@@ -139,6 +140,7 @@ export default function ConfigPage() {
       matchSyncIntervalHours: cfg.matchSyncIntervalHours ?? 12,
       resultSyncEnabled: cfg.resultSyncEnabled ?? false,
       resultSyncHourUtc: cfg.resultSyncHourUtc ?? 3,
+      predictionWindowMinutes: cfg.predictionWindowMinutes ?? 0,
     });
   }, [cfg, form]);
 
@@ -281,6 +283,17 @@ export default function ConfigPage() {
             max={100}
             value={form.batchSize}
             onChange={(e) => setField('batchSize', Number(e.target.value))}
+            className="h-9 w-24 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
+          />
+        </Field>
+
+        <Field label="Prediction window (min)" subtitle="Only predict matches kicking off within this many minutes. 0 = predict up to 72h ahead">
+          <input
+            type="number"
+            min={0}
+            max={1440}
+            value={form.predictionWindowMinutes}
+            onChange={(e) => setField('predictionWindowMinutes', Number(e.target.value))}
             className="h-9 w-24 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
           />
         </Field>

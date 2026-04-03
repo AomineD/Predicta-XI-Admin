@@ -141,6 +141,11 @@ export default function MatchesPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['matches'] }),
   });
 
+  const fullSync = useMutation({
+    mutationFn: () => api.post('/admin/flashscore/full-sync', {}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['matches'] }),
+  });
+
   // Fetch matches
   const { data, isLoading } = useQuery<MatchesResponse>({
     queryKey: ['matches', page, status, competitionId, dateRange],
@@ -281,8 +286,11 @@ export default function MatchesPage() {
             <Button variant="secondary" loading={syncResults.isPending} onClick={() => syncResults.mutate()}>
               Sync Results
             </Button>
-            <Button variant="primary" loading={syncMatches.isPending} onClick={() => syncMatches.mutate()}>
+            <Button variant="secondary" loading={syncMatches.isPending} onClick={() => syncMatches.mutate()}>
               Sync Matches
+            </Button>
+            <Button variant="primary" loading={fullSync.isPending} onClick={() => fullSync.mutate()}>
+              Full Sync
             </Button>
           </div>
         }
