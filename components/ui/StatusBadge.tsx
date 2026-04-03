@@ -11,7 +11,7 @@ const STATUS_STYLES: Record<string, string> = {
   partial:   'bg-warning/15 text-warning',
   pending:   'bg-warning/15 text-warning',
   void:      'bg-text-muted/15 text-text-muted',
-  running:   'bg-live/15 text-live',
+  running:   'bg-warning/15 text-warning',
   completed: 'bg-success/15 text-success',
   failed:    'bg-danger/15 text-danger',
   idle:      'bg-text-muted/15 text-text-muted',
