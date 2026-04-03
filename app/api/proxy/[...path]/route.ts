@@ -33,9 +33,9 @@ async function proxyRequest(request: NextRequest, method: string) {
   if (method !== 'GET' && method !== 'HEAD') {
     try {
       const body = await request.text();
-      if (body) init.body = body;
+      init.body = body || '{}';
     } catch {
-      // No body
+      init.body = '{}';
     }
   }
 
