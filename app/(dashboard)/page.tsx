@@ -9,6 +9,19 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { formatDateTime, formatPct } from '@/lib/utils';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
+interface LastSyncJob {
+  id: number;
+  type: string;
+  status: string;
+  synced: number;
+  updated: number;
+  errors: number;
+  duration: number | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  errorLog: string | null;
+}
+
 interface DashboardMetrics {
   mostVisitedMatch: { prediction_id: string; visits: string; home: string; away: string; kickoff: string } | null;
   globalAccuracy: number | null;
@@ -20,13 +33,21 @@ interface DashboardMetrics {
   lastJob: {
     id: string;
     status: string;
-    matchesProcessed: number;
-    succeeded: number;
+    totalMatches: number;
+    predicted: number;
     failed: number;
     startedAt: string | null;
-    completedAt: string | null;
+    finishedAt: string | null;
   } | null;
+  lastSyncJob: LastSyncJob | null;
 }
+
+const SYNC_TYPE_LABELS: Record<string, string> = {
+  match_sync: 'Match Sync',
+  result_sync: 'Result Sync',
+  enrichment: 'Enrichment',
+  full_sync: 'Full Sync',
+};
 
 export default function DashboardPage() {
   const qc = useQueryClient();
@@ -102,22 +123,47 @@ export default function DashboardPage() {
         </ResponsiveContainer>
       </div>
 
-      {data?.lastJob && (
-        <div className="rounded-2xl p-5" style={{ background: '#121A2B', border: '1px solid rgba(255,255,255,0.08)' }}>
-          <h2 className="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-3 font-sans">
-            Last Prediction Job
-          </h2>
-          <div className="flex items-center gap-4 flex-wrap">
-            <StatusBadge status={data.lastJob.status} />
-            <span className="text-text-muted text-sm font-sans">
-              {data.lastJob.succeeded} ok · {data.lastJob.failed} failed · {data.lastJob.matchesProcessed} total
-            </span>
-            <span className="text-text-muted text-xs font-sans ml-auto">
-              {formatDateTime(data.lastJob.startedAt)}
-            </span>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {data?.lastJob && (
+          <div className="rounded-2xl p-5" style={{ background: '#121A2B', border: '1px solid rgba(255,255,255,0.08)' }}>
+            <h2 className="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-3 font-sans">
+              Last Prediction Job
+            </h2>
+            <div className="flex items-center gap-4 flex-wrap">
+              <StatusBadge status={data.lastJob.status} />
+              <span className="text-text-muted text-sm font-sans">
+                {data.lastJob.predicted ?? 0} ok · {data.lastJob.failed ?? 0} failed · {data.lastJob.totalMatches ?? 0} total
+              </span>
+              <span className="text-text-muted text-xs font-sans ml-auto">
+                {formatDateTime(data.lastJob.startedAt)}
+              </span>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+
+        {data?.lastSyncJob && (
+          <div className="rounded-2xl p-5" style={{ background: '#121A2B', border: '1px solid rgba(255,255,255,0.08)' }}>
+            <h2 className="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-3 font-sans">
+              Last Sync Job
+            </h2>
+            <div className="flex items-center gap-4 flex-wrap">
+              <StatusBadge status={data.lastSyncJob.status} />
+              <span className="text-xs px-2 py-0.5 rounded-md bg-surface-3 text-text-secondary font-sans">
+                {SYNC_TYPE_LABELS[data.lastSyncJob.type] ?? data.lastSyncJob.type}
+              </span>
+              <span className="text-text-muted text-sm font-sans">
+                {data.lastSyncJob.synced} new · {data.lastSyncJob.updated} updated · {data.lastSyncJob.errors} errors
+              </span>
+              <span className="text-text-muted text-xs font-sans ml-auto">
+                {formatDateTime(data.lastSyncJob.startedAt)}
+              </span>
+            </div>
+            {data.lastSyncJob.errorLog && (
+              <p className="text-danger text-xs mt-2 truncate font-mono">{data.lastSyncJob.errorLog.slice(0, 120)}</p>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -194,6 +194,23 @@ export default function ConfigPage() {
     changePassword.mutate();
   };
 
+  // Danger zone
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteResult, setDeleteResult] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const deleteAllMatches = useMutation({
+    mutationFn: () => api.post('/admin/matches/delete-all') as Promise<{ matchesDeleted: number; predictionsDeleted: number }>,
+    onSuccess: (data: { matchesDeleted: number; predictionsDeleted: number }) => {
+      setShowDeleteConfirm(false);
+      setDeleteResult({ type: 'success', text: `Deleted ${data.matchesDeleted} matches and ${data.predictionsDeleted} predictions` });
+      qc.invalidateQueries({ queryKey: ['matches'] });
+    },
+    onError: (err: Error) => {
+      setShowDeleteConfirm(false);
+      setDeleteResult({ type: 'error', text: err.message });
+    },
+  });
+
   if (!form) return <p className="text-text-muted text-sm">Loading config...</p>;
 
   const setField = <K extends keyof PredictionConfig>(key: K, value: PredictionConfig[K]) =>
@@ -420,6 +437,55 @@ export default function ConfigPage() {
           </Button>
         </div>
       </SectionCard>
+
+      {/* Danger Zone */}
+      <div className="rounded-2xl p-5 mb-4" style={{ background: '#1A1215', border: '1px solid rgba(239,68,68,0.2)' }}>
+        <h2 className="text-xs font-semibold text-red-400 uppercase tracking-wider mb-1 font-sans">Danger Zone</h2>
+        <p className="text-xs text-red-400/60 font-sans mb-4">Destructive actions that cannot be undone</p>
+
+        <div className="flex items-center justify-between py-3">
+          <div>
+            <p className="text-sm text-text-primary font-sans">Delete all matches</p>
+            <p className="text-xs text-text-muted/60 font-sans mt-0.5">Remove all matches and associated predictions from the database</p>
+          </div>
+          <Button variant="danger" onClick={() => { setDeleteResult(null); setShowDeleteConfirm(true); }}>
+            Delete All Matches
+          </Button>
+        </div>
+
+        {deleteResult && (
+          <p className={`text-xs font-sans mt-2 ${deleteResult.type === 'success' ? 'text-success' : 'text-danger'}`}>
+            {deleteResult.text}
+          </p>
+        )}
+      </div>
+
+      {/* Delete confirmation modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="rounded-2xl p-6 w-full max-w-md" style={{ background: '#121A2B', border: '1px solid rgba(239,68,68,0.3)' }}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-500/15 flex items-center justify-center">
+                <svg className="w-5 h-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-text-primary font-sans">Are you sure?</h3>
+            </div>
+            <p className="text-sm text-text-muted font-sans mb-6">
+              This will permanently delete <strong className="text-text-primary">all matches</strong> and their <strong className="text-text-primary">associated predictions</strong> from the database. This action cannot be undone.
+            </p>
+            <div className="flex justify-end gap-3">
+              <Button variant="secondary" onClick={() => setShowDeleteConfirm(false)}>
+                Cancel
+              </Button>
+              <Button variant="danger" loading={deleteAllMatches.isPending} onClick={() => deleteAllMatches.mutate()}>
+                Yes, Delete All
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
