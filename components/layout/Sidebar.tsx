@@ -33,9 +33,7 @@ export function Sidebar() {
     >
       {/* Logo */}
       <div className="h-16 flex items-center px-5 border-b" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
-        <span className="font-display text-lg font-semibold text-text-primary tracking-tight">
-          Predicta <span className="text-primary">XI</span>
-        </span>
+        <img src="/logo_sidebar.png" alt="Predicta XI" className="h-9 w-auto" />
         <span className="ml-2 text-xs text-text-muted font-sans uppercase tracking-widest">admin</span>
       </div>
 

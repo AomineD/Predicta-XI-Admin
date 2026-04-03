@@ -16,6 +16,10 @@ interface PredictionConfig {
   historicalContextEnabled: boolean;
   historicalContextCount: number;
   reasoningEffort: string | null;
+  matchSyncEnabled: boolean;
+  matchSyncIntervalHours: number;
+  resultSyncEnabled: boolean;
+  resultSyncHourUtc: number;
 }
 
 interface ApiKey {
@@ -29,6 +33,7 @@ const MODELS = ['deepseek-r1', 'gpt-5.4-mini', 'gpt-5.4', 'gpt-5.4-think', 'gemi
 const MARKETS = ['match_result', 'over_under_2_5', 'btts', 'double_chance', 'asian_handicap', 'correct_score', 'first_goal'];
 const DATA_FIELDS = ['fixture_info', 'standings', 'recent_form', 'season_stats', 'h2h', 'injuries', 'odds', 'top_scorers'];
 const REASONING_OPTIONS = ['', 'low', 'medium', 'high'];
+const PROVIDERS = ['deepseek', 'openai', 'google', 'zhipu', 'moonshot'];
 
 function SectionCard({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
@@ -49,6 +54,32 @@ function Field({ label, subtitle, children }: { label: string; subtitle?: string
         {subtitle && <p className="text-xs text-text-muted/50 font-sans mt-0.5 leading-tight">{subtitle}</p>}
       </div>
       <div className="flex-1">{children}</div>
+    </div>
+  );
+}
+
+function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!value)}
+      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+        value ? 'bg-primary' : 'bg-surface-3'
+      }`}
+    >
+      <span
+        className={`inline-block h-4 w-4 transform rounded-full bg-background transition-transform ${
+          value ? 'translate-x-6' : 'translate-x-1'
+        }`}
+      />
+    </button>
+  );
+}
+
+function SubHeading({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="pt-4 pb-1 first:pt-0">
+      <span className="text-xs font-semibold text-text-muted uppercase tracking-wider font-sans">{children}</span>
     </div>
   );
 }
@@ -102,7 +133,13 @@ export default function ConfigPage() {
   const [form, setForm] = useState<PredictionConfig | null>(null);
 
   useEffect(() => {
-    if (cfg && !form) setForm(cfg);
+    if (cfg && !form) setForm({
+      ...cfg,
+      matchSyncEnabled: cfg.matchSyncEnabled ?? false,
+      matchSyncIntervalHours: cfg.matchSyncIntervalHours ?? 12,
+      resultSyncEnabled: cfg.resultSyncEnabled ?? false,
+      resultSyncHourUtc: cfg.resultSyncHourUtc ?? 3,
+    });
   }, [cfg, form]);
 
   const saveConfig = useMutation({
@@ -174,7 +211,8 @@ export default function ConfigPage() {
         }
       />
 
-      <SectionCard title="Model & Automation">
+      {/* Model & Reasoning */}
+      <SectionCard title="Model & Reasoning" subtitle="LLM model configuration for prediction generation">
         <Field label="Active model" subtitle="LLM model used for generating match predictions">
           <select
             value={form.model}
@@ -193,6 +231,19 @@ export default function ConfigPage() {
           >
             {REASONING_OPTIONS.map((r) => <option key={r} value={r}>{r || '-- default --'}</option>)}
           </select>
+        </Field>
+
+        <Field label="Historical context" subtitle="Include past prediction outcomes to improve accuracy">
+          <Toggle value={form.historicalContextEnabled} onChange={(v) => setField('historicalContextEnabled', v)} />
+        </Field>
+      </SectionCard>
+
+      {/* Automations */}
+      <SectionCard title="Automations" subtitle="Scheduled tasks for predictions, match syncing, and result syncing">
+        <SubHeading>Predictions</SubHeading>
+
+        <Field label="Enabled" subtitle="When off, predictions must be triggered manually">
+          <Toggle value={form.automationEnabled} onChange={(v) => setField('automationEnabled', v)} />
         </Field>
 
         <Field label="Interval (hours)" subtitle="How often the prediction scheduler runs automatically">
@@ -217,36 +268,38 @@ export default function ConfigPage() {
           />
         </Field>
 
-        <Field label="Automation enabled" subtitle="When off, predictions must be triggered manually">
-          <button
-            type="button"
-            onClick={() => setField('automationEnabled', !form.automationEnabled)}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-              form.automationEnabled ? 'bg-primary' : 'bg-surface-3'
-            }`}
-          >
-            <span
-              className={`inline-block h-4 w-4 transform rounded-full bg-background transition-transform ${
-                form.automationEnabled ? 'translate-x-6' : 'translate-x-1'
-              }`}
-            />
-          </button>
+        <SubHeading>Match Sync</SubHeading>
+
+        <Field label="Enabled" subtitle="Automatically sync upcoming matches from API-Football">
+          <Toggle value={form.matchSyncEnabled} onChange={(v) => setField('matchSyncEnabled', v)} />
         </Field>
 
-        <Field label="Historical context" subtitle="Include past prediction outcomes to improve accuracy">
-          <button
-            type="button"
-            onClick={() => setField('historicalContextEnabled', !form.historicalContextEnabled)}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-              form.historicalContextEnabled ? 'bg-primary' : 'bg-surface-3'
-            }`}
+        <Field label="Interval (hours)" subtitle="How often to sync upcoming week matches">
+          <select
+            value={form.matchSyncIntervalHours}
+            onChange={(e) => setField('matchSyncIntervalHours', Number(e.target.value))}
+            className="h-9 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
           >
-            <span
-              className={`inline-block h-4 w-4 transform rounded-full bg-background transition-transform ${
-                form.historicalContextEnabled ? 'translate-x-6' : 'translate-x-1'
-              }`}
-            />
-          </button>
+            {[6, 12, 24].map((h) => <option key={h} value={h}>{h}h</option>)}
+          </select>
+        </Field>
+
+        <SubHeading>Result Sync</SubHeading>
+
+        <Field label="Enabled" subtitle="Automatically sync match results daily">
+          <Toggle value={form.resultSyncEnabled} onChange={(v) => setField('resultSyncEnabled', v)} />
+        </Field>
+
+        <Field label="Hour (UTC)" subtitle="UTC hour at which results are synced each day">
+          <select
+            value={form.resultSyncHourUtc}
+            onChange={(e) => setField('resultSyncHourUtc', Number(e.target.value))}
+            className="h-9 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
+          >
+            {Array.from({ length: 24 }, (_, i) => (
+              <option key={i} value={i}>{String(i).padStart(2, '0')}:00 UTC</option>
+            ))}
+          </select>
         </Field>
       </SectionCard>
 
@@ -280,12 +333,14 @@ export default function ConfigPage() {
         <div className="flex items-end gap-3">
           <div className="flex flex-col gap-1">
             <label className="text-xs text-text-muted font-sans">Provider</label>
-            <input
+            <select
               value={newProvider}
               onChange={(e) => setNewProvider(e.target.value)}
-              placeholder="e.g. openai"
-              className="h-9 w-36 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none placeholder:text-text-muted"
-            />
+              className="h-9 w-36 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
+            >
+              <option value="">Select provider</option>
+              {PROVIDERS.map((p) => <option key={p} value={p}>{p}</option>)}
+            </select>
           </div>
           <div className="flex flex-col gap-1 flex-1">
             <label className="text-xs text-text-muted font-sans">API Key</label>
