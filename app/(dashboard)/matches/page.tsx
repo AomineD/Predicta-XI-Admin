@@ -105,8 +105,10 @@ function getDateRange(range: DateRange): { from: string; to: string } | null {
 }
 
 function formatGroupDate(dateStr: string): string {
-  const d = new Date(dateStr);
-  return d.toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'short', year: 'numeric' });
+  // dateStr is "YYYY-MM-DD" — parse as UTC to avoid timezone shift
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d));
+  return date.toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' });
 }
 
 function getMatchDateKey(kickoff: string | null): string {
@@ -156,6 +158,16 @@ export default function MatchesPage() {
   });
 
   const items = data?.items ?? [];
+
+  // Match counts by status
+  const matchCounts = useMemo(() => {
+    let upcoming = 0, finished = 0;
+    for (const m of items) {
+      if (m.status === 'NS') upcoming++;
+      else if (['FT', 'AET', 'PEN'].includes(m.status)) finished++;
+    }
+    return { upcoming, finished, total: data?.total ?? 0 };
+  }, [items, data?.total]);
 
   // Group matches based on view mode
   const grouped = useMemo(() => {
@@ -316,6 +328,13 @@ export default function MatchesPage() {
         >
           Reset filters
         </button>
+
+        {/* Match counts */}
+        <div className="flex gap-2 text-xs font-sans">
+          <span className="px-2 py-1 rounded-md bg-success/15 text-success">{matchCounts.upcoming} upcoming</span>
+          <span className="px-2 py-1 rounded-md bg-text-muted/15 text-text-muted">{matchCounts.finished} finished</span>
+          <span className="px-2 py-1 rounded-md bg-primary/15 text-primary">{matchCounts.total} total</span>
+        </div>
 
         {/* View mode */}
         <div className="ml-auto flex gap-1">
