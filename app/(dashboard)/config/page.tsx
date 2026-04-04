@@ -21,6 +21,7 @@ interface PredictionConfig {
   resultSyncEnabled: boolean;
   resultSyncHourUtc: number;
   predictionWindowMinutes: number;
+  featuredLeagueIds: number[];
 }
 
 interface ApiKey {
@@ -141,6 +142,7 @@ export default function ConfigPage() {
       resultSyncEnabled: cfg.resultSyncEnabled ?? false,
       resultSyncHourUtc: cfg.resultSyncHourUtc ?? 3,
       predictionWindowMinutes: cfg.predictionWindowMinutes ?? 0,
+      featuredLeagueIds: cfg.featuredLeagueIds ?? [39, 140, 135],
     });
   }, [cfg, form]);
 
