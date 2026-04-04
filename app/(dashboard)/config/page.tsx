@@ -169,8 +169,7 @@ export default function ConfigPage() {
     queryKey: ['app-key-info'],
     queryFn: async () => {
       try {
-        const res = await api.get('/admin/app-key/info');
-        return res;
+        return await api.get('/admin/app-key/info') as { prefix: string; isActive: boolean; createdAt: string } | null;
       } catch {
         return null;
       }
