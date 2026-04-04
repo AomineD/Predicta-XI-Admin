@@ -49,11 +49,17 @@ interface JobsResponse<T> {
   items: T[];
 }
 
-interface NextRunInfo {
-  nextRunAt: string;
-  periodMinutes: number;
+interface SchedulerInfo {
   enabled: boolean;
   isRunning: boolean;
+  nextRunAt: string;
+  interval: string;
+}
+
+interface SchedulerStatus {
+  predictions: SchedulerInfo;
+  matchSync: SchedulerInfo;
+  resultSync: SchedulerInfo;
 }
 
 type Tab = 'predictions' | 'sync';
@@ -78,59 +84,78 @@ function truncateLog(log: string | null, maxLen = 80): string {
   return log.length > maxLen ? log.slice(0, maxLen) + '…' : log;
 }
 
-// ── Countdown Banner ───────────────────────────────────────
+// ── Scheduler Countdown Banners ───────────────────────────
 
-function CountdownBanner({ info }: { info: NextRunInfo }) {
+function useCountdown(nextRunAt: string): number {
   const [secondsLeft, setSecondsLeft] = useState<number>(() => {
-    const diff = Math.floor((new Date(info.nextRunAt).getTime() - Date.now()) / 1000);
+    const diff = Math.floor((new Date(nextRunAt).getTime() - Date.now()) / 1000);
     return Math.max(0, diff);
   });
 
   useEffect(() => {
-    const diff = Math.floor((new Date(info.nextRunAt).getTime() - Date.now()) / 1000);
+    const diff = Math.floor((new Date(nextRunAt).getTime() - Date.now()) / 1000);
     setSecondsLeft(Math.max(0, diff));
 
     const timer = setInterval(() => {
       setSecondsLeft((s) => Math.max(0, s - 1));
     }, 1000);
     return () => clearInterval(timer);
-  }, [info.nextRunAt]);
+  }, [nextRunAt]);
 
-  const formatCountdown = (s: number) => {
-    if (s <= 0) return 'any moment now';
-    const m = Math.floor(s / 60);
-    const secs = s % 60;
-    if (m === 0) return `${secs}s`;
-    return `${m}m ${String(secs).padStart(2, '0')}s`;
-  };
+  return secondsLeft;
+}
 
+function formatCountdown(s: number): string {
+  if (s <= 0) return 'any moment now';
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const secs = s % 60;
+  if (h > 0) return `${h}h ${String(m).padStart(2, '0')}m`;
+  if (m > 0) return `${m}m ${String(secs).padStart(2, '0')}s`;
+  return `${secs}s`;
+}
+
+function SchedulerBanner({ label, info }: { label: string; info: SchedulerInfo }) {
+  const secondsLeft = useCountdown(info.nextRunAt);
   const nextRunDate = new Date(info.nextRunAt);
   const timeStr = nextRunDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
   if (!info.enabled) {
     return (
-      <div className="rounded-2xl px-4 py-3 mb-4 flex items-center gap-3" style={{ background: '#121A2B', border: '1px solid rgba(255,255,255,0.08)' }}>
+      <div className="rounded-2xl px-4 py-3 flex items-center gap-3" style={{ background: '#121A2B', border: '1px solid rgba(255,255,255,0.08)' }}>
         <span className="w-2 h-2 rounded-full bg-text-muted flex-none" />
-        <span className="text-sm text-text-muted font-sans">Automation disabled — predictions must be triggered manually</span>
+        <span className="text-sm text-text-muted font-sans">{label}</span>
+        <span className="text-xs text-text-muted font-sans ml-auto">disabled</span>
       </div>
     );
   }
 
   if (info.isRunning) {
     return (
-      <div className="rounded-2xl px-4 py-3 mb-4 flex items-center gap-3" style={{ background: '#121A2B', border: '1px solid rgba(124,255,91,0.3)' }}>
+      <div className="rounded-2xl px-4 py-3 flex items-center gap-3" style={{ background: '#121A2B', border: '1px solid rgba(124,255,91,0.3)' }}>
         <span className="w-2 h-2 rounded-full bg-success animate-pulse flex-none" />
-        <span className="text-sm text-success font-sans font-medium">Running now...</span>
+        <span className="text-sm text-text-secondary font-sans">{label}</span>
+        <span className="text-sm text-success font-sans font-medium ml-auto">Running now...</span>
       </div>
     );
   }
 
   return (
-    <div className="rounded-2xl px-4 py-3 mb-4 flex items-center gap-3" style={{ background: '#121A2B', border: '1px solid rgba(77,168,255,0.2)' }}>
+    <div className="rounded-2xl px-4 py-3 flex items-center gap-3" style={{ background: '#121A2B', border: '1px solid rgba(77,168,255,0.2)' }}>
       <span className="w-2 h-2 rounded-full bg-blue-400 flex-none" />
-      <span className="text-sm text-text-secondary font-sans">Next run in:</span>
+      <span className="text-sm text-text-secondary font-sans">{label}</span>
       <span className="text-sm font-semibold text-blue-400 font-mono">{formatCountdown(secondsLeft)}</span>
-      <span className="text-xs text-text-muted font-sans ml-auto">at {timeStr} · every {info.periodMinutes}m</span>
+      <span className="text-xs text-text-muted font-sans ml-auto">at {timeStr} · every {info.interval}</span>
+    </div>
+  );
+}
+
+function SchedulerBanners({ status }: { status: SchedulerStatus }) {
+  return (
+    <div className="flex flex-col gap-2 mb-4">
+      <SchedulerBanner label="Match Sync" info={status.matchSync} />
+      <SchedulerBanner label="Result Sync" info={status.resultSync} />
+      <SchedulerBanner label="Predictions" info={status.predictions} />
     </div>
   );
 }
@@ -264,9 +289,9 @@ export default function JobsPage() {
     refetchInterval: 10_000,
   });
 
-  const { data: nextRunInfo } = useQuery<NextRunInfo>({
-    queryKey: ['next-run'],
-    queryFn: () => api.get('/admin/predictions/next-run'),
+  const { data: schedulerStatus } = useQuery<SchedulerStatus>({
+    queryKey: ['scheduler-status'],
+    queryFn: () => api.get('/admin/scheduler-status'),
     refetchInterval: 30_000,
   });
 
@@ -437,7 +462,7 @@ export default function JobsPage() {
     <div>
       <PageHeader title="Jobs" description="Scheduler job history — auto-refreshes every 10s" />
 
-      {nextRunInfo && <CountdownBanner info={nextRunInfo} />}
+      {schedulerStatus && <SchedulerBanners status={schedulerStatus} />}
 
       <div className="flex gap-2 mb-4">
         <TabButton active={tab === 'sync'} label="Sync Jobs" onClick={() => setTab('sync')} />
