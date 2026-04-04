@@ -11,6 +11,7 @@ import {
   Trophy,
   Settings,
   ClockIcon,
+  Activity,
   LogOut,
 } from 'lucide-react';
 
@@ -21,6 +22,7 @@ const NAV_ITEMS = [
   { href: '/competitions', label: 'Competitions', icon: Trophy },
   { href: '/config',      label: 'Config',        icon: Settings },
   { href: '/jobs',        label: 'Jobs',          icon: ClockIcon },
+  { href: '/consumo',    label: 'Consumo',       icon: Activity },
 ];
 
 export function Sidebar() {
