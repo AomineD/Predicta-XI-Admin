@@ -42,6 +42,13 @@ interface DashboardMetrics {
   lastSyncJob: LastSyncJob | null;
 }
 
+interface DashboardStats {
+  scheduledMatches: number;
+  finishedMatches: number;
+  todayMatches: number;
+  registeredUsers: number;
+}
+
 const SYNC_TYPE_LABELS: Record<string, string> = {
   match_sync: 'Match Sync',
   result_sync: 'Result Sync',
@@ -56,6 +63,12 @@ export default function DashboardPage() {
     queryKey: ['dashboard'],
     queryFn: () => api.get('/admin/dashboard'),
     refetchInterval: 30_000,
+  });
+
+  const { data: stats } = useQuery<DashboardStats>({
+    queryKey: ['dashboard-stats'],
+    queryFn: () => api.get('/admin/dashboard/stats'),
+    refetchInterval: 60_000,
   });
 
   const runJob = useMutation({
@@ -85,6 +98,31 @@ export default function DashboardPage() {
         }
       />
 
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div className="rounded-2xl p-4 flex flex-col" style={{ background: '#121A2B', border: '1px solid rgba(77,168,255,0.2)' }}>
+          <span className="text-xs font-semibold text-blue-400 uppercase tracking-wider font-sans mb-1">Scheduled</span>
+          <span className="text-3xl font-bold text-text-primary font-sans">{stats?.scheduledMatches ?? '—'}</span>
+          <span className="text-xs text-text-muted font-sans mt-1">Upcoming matches</span>
+        </div>
+        <div className="rounded-2xl p-4 flex flex-col" style={{ background: '#121A2B', border: '1px solid rgba(124,255,91,0.2)' }}>
+          <span className="text-xs font-semibold text-success uppercase tracking-wider font-sans mb-1">Finished</span>
+          <span className="text-3xl font-bold text-text-primary font-sans">{stats?.finishedMatches ?? '—'}</span>
+          <span className="text-xs text-text-muted font-sans mt-1">Completed matches</span>
+        </div>
+        <div className="rounded-2xl p-4 flex flex-col" style={{ background: '#121A2B', border: '1px solid rgba(245,158,11,0.2)' }}>
+          <span className="text-xs font-semibold text-amber-400 uppercase tracking-wider font-sans mb-1">Today</span>
+          <span className="text-3xl font-bold text-text-primary font-sans">{stats?.todayMatches ?? '—'}</span>
+          <span className="text-xs text-text-muted font-sans mt-1">Matches today</span>
+        </div>
+        <div className="rounded-2xl p-4 flex flex-col" style={{ background: '#121A2B', border: '1px solid rgba(168,85,247,0.2)' }}>
+          <span className="text-xs font-semibold text-purple-400 uppercase tracking-wider font-sans mb-1">Users</span>
+          <span className="text-3xl font-bold text-text-primary font-sans">{stats?.registeredUsers ?? '—'}</span>
+          <span className="text-xs text-text-muted font-sans mt-1">Registered users</span>
+        </div>
+      </div>
+
+      {/* Prediction metrics */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <MetricCard label="Global Accuracy" value={formatPct(data?.globalAccuracy)} sub="All settled predictions" accent />
         <MetricCard label="Weekly Accuracy" value={formatPct(data?.weeklyAccuracy)} sub="This week" />

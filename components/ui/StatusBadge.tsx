@@ -1,7 +1,7 @@
 import { cn } from '@/lib/utils';
 
 type Settlement = 'won' | 'lost' | 'partial' | 'pending' | 'void';
-type JobStatus = 'running' | 'completed' | 'failed' | 'idle';
+type JobStatus = 'running' | 'completed' | 'failed' | 'cancelled' | 'idle';
 
 type Status = Settlement | JobStatus | string;
 
@@ -14,6 +14,7 @@ const STATUS_STYLES: Record<string, string> = {
   running:   'bg-warning/15 text-warning',
   completed: 'bg-success/15 text-success',
   failed:    'bg-danger/15 text-danger',
+  cancelled: 'bg-amber-500/15 text-amber-400',
   idle:      'bg-text-muted/15 text-text-muted',
   active:    'bg-success/15 text-success',
   expired:   'bg-danger/15 text-danger',

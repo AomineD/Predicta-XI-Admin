@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { StatusBadge } from '@/components/ui/StatusBadge';
@@ -49,6 +49,13 @@ interface JobsResponse<T> {
   items: T[];
 }
 
+interface NextRunInfo {
+  nextRunAt: string;
+  periodMinutes: number;
+  enabled: boolean;
+  isRunning: boolean;
+}
+
 type Tab = 'predictions' | 'sync';
 
 // ── Helpers ────────────────────────────────────────────────
@@ -69,6 +76,63 @@ function formatDuration(ms: number | null): string {
 function truncateLog(log: string | null, maxLen = 80): string {
   if (!log) return '';
   return log.length > maxLen ? log.slice(0, maxLen) + '…' : log;
+}
+
+// ── Countdown Banner ───────────────────────────────────────
+
+function CountdownBanner({ info }: { info: NextRunInfo }) {
+  const [secondsLeft, setSecondsLeft] = useState<number>(() => {
+    const diff = Math.floor((new Date(info.nextRunAt).getTime() - Date.now()) / 1000);
+    return Math.max(0, diff);
+  });
+
+  useEffect(() => {
+    const diff = Math.floor((new Date(info.nextRunAt).getTime() - Date.now()) / 1000);
+    setSecondsLeft(Math.max(0, diff));
+
+    const timer = setInterval(() => {
+      setSecondsLeft((s) => Math.max(0, s - 1));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [info.nextRunAt]);
+
+  const formatCountdown = (s: number) => {
+    if (s <= 0) return 'any moment now';
+    const m = Math.floor(s / 60);
+    const secs = s % 60;
+    if (m === 0) return `${secs}s`;
+    return `${m}m ${String(secs).padStart(2, '0')}s`;
+  };
+
+  const nextRunDate = new Date(info.nextRunAt);
+  const timeStr = nextRunDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+
+  if (!info.enabled) {
+    return (
+      <div className="rounded-2xl px-4 py-3 mb-4 flex items-center gap-3" style={{ background: '#121A2B', border: '1px solid rgba(255,255,255,0.08)' }}>
+        <span className="w-2 h-2 rounded-full bg-text-muted flex-none" />
+        <span className="text-sm text-text-muted font-sans">Automation disabled — predictions must be triggered manually</span>
+      </div>
+    );
+  }
+
+  if (info.isRunning) {
+    return (
+      <div className="rounded-2xl px-4 py-3 mb-4 flex items-center gap-3" style={{ background: '#121A2B', border: '1px solid rgba(124,255,91,0.3)' }}>
+        <span className="w-2 h-2 rounded-full bg-success animate-pulse flex-none" />
+        <span className="text-sm text-success font-sans font-medium">Running now...</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-2xl px-4 py-3 mb-4 flex items-center gap-3" style={{ background: '#121A2B', border: '1px solid rgba(77,168,255,0.2)' }}>
+      <span className="w-2 h-2 rounded-full bg-blue-400 flex-none" />
+      <span className="text-sm text-text-secondary font-sans">Next run in:</span>
+      <span className="text-sm font-semibold text-blue-400 font-mono">{formatCountdown(secondsLeft)}</span>
+      <span className="text-xs text-text-muted font-sans ml-auto">at {timeStr} · every {info.periodMinutes}m</span>
+    </div>
+  );
 }
 
 // ── Log Modal ──────────────────────────────────────────────
@@ -110,6 +174,49 @@ function LogModal({ log, onClose }: { log: string; onClose: () => void }) {
   );
 }
 
+// ── Cancel Confirmation Modal ─────────────────────────
+
+function CancelModal({ jobType, jobId, onConfirm, onClose }: { jobType: string; jobId: string | number; onConfirm: () => void; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+      <div
+        className="rounded-2xl p-6 w-full max-w-sm"
+        style={{ background: '#121A2B', border: '1px solid rgba(255,255,255,0.12)' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 rounded-full bg-danger/15 flex items-center justify-center flex-none">
+            <svg className="w-5 h-5 text-danger" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-text-primary font-sans">Cancel Job</h3>
+            <p className="text-xs text-text-muted font-sans">This action cannot be undone</p>
+          </div>
+        </div>
+        <p className="text-sm text-text-secondary font-sans mb-6">
+          Are you sure you want to cancel {jobType} job <span className="font-mono text-text-primary">#{jobId}</span>?
+        </p>
+        <div className="flex gap-2 justify-end">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded-lg text-xs font-sans font-medium bg-surface-3 text-text-secondary hover:text-text-primary transition-colors"
+          >
+            Go Back
+          </button>
+          <button
+            onClick={onConfirm}
+            className="px-4 py-2 rounded-lg text-xs font-sans font-medium bg-danger text-white hover:bg-danger/90 transition-colors"
+          >
+            Cancel Job
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Tab Button ─────────────────────────────────────────────
 
 function TabButton({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
@@ -130,8 +237,20 @@ function TabButton({ active, label, onClick }: { active: boolean; label: string;
 // ── Main Page ──────────────────────────────────────────────
 
 export default function JobsPage() {
+  const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>('sync');
   const [selectedLog, setSelectedLog] = useState<string | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<{ type: 'sync' | 'prediction'; id: string | number } | null>(null);
+
+  const cancelSyncJob = useMutation({
+    mutationFn: (id: number) => api.post(`/admin/sync-jobs/${id}/cancel`, {}),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['sync-jobs'] }); setCancelTarget(null); },
+  });
+
+  const cancelPredictionJob = useMutation({
+    mutationFn: (id: string) => api.post(`/admin/jobs/${id}/cancel`, {}),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['jobs'] }); setCancelTarget(null); },
+  });
 
   const { data: predictionData, isLoading: predLoading } = useQuery<JobsResponse<PredictionJob>>({
     queryKey: ['jobs'],
@@ -143,6 +262,12 @@ export default function JobsPage() {
     queryKey: ['sync-jobs'],
     queryFn: () => api.get('/admin/sync-jobs'),
     refetchInterval: 10_000,
+  });
+
+  const { data: nextRunInfo } = useQuery<NextRunInfo>({
+    queryKey: ['next-run'],
+    queryFn: () => api.get('/admin/predictions/next-run'),
+    refetchInterval: 30_000,
   });
 
   // ── Prediction job columns ──
@@ -188,11 +313,26 @@ export default function JobsPage() {
       key: 'error',
       header: 'Error',
       render: (row) => {
-        const log = row.errorLog ? JSON.stringify(row.errorLog) : null;
+        const log = row.errorLog ? (Array.isArray(row.errorLog) ? (row.errorLog as string[]).join('\n') : JSON.stringify(row.errorLog)) : null;
         if (!log) return <span className="text-text-muted text-xs">—</span>;
         return (
           <button onClick={() => setSelectedLog(log)} className="text-danger text-xs truncate max-w-xs block text-left hover:underline cursor-pointer">
             {truncateLog(log)}
+          </button>
+        );
+      },
+    },
+    {
+      key: 'actions',
+      header: '',
+      render: (row) => {
+        if (row.status !== 'running' && row.status !== 'pending') return null;
+        return (
+          <button
+            onClick={() => setCancelTarget({ type: 'prediction', id: row.id })}
+            className="px-2.5 py-1 rounded-lg text-xs font-sans font-medium bg-danger/15 text-danger hover:bg-danger/25 transition-colors"
+          >
+            Cancel
           </button>
         );
       },
@@ -276,11 +416,28 @@ export default function JobsPage() {
         );
       },
     },
+    {
+      key: 'actions',
+      header: '',
+      render: (row) => {
+        if (row.status !== 'running') return null;
+        return (
+          <button
+            onClick={() => setCancelTarget({ type: 'sync', id: row.id })}
+            className="px-2.5 py-1 rounded-lg text-xs font-sans font-medium bg-danger/15 text-danger hover:bg-danger/25 transition-colors"
+          >
+            Cancel
+          </button>
+        );
+      },
+    },
   ];
 
   return (
     <div>
       <PageHeader title="Jobs" description="Scheduler job history — auto-refreshes every 10s" />
+
+      {nextRunInfo && <CountdownBanner info={nextRunInfo} />}
 
       <div className="flex gap-2 mb-4">
         <TabButton active={tab === 'sync'} label="Sync Jobs" onClick={() => setTab('sync')} />
@@ -308,6 +465,21 @@ export default function JobsPage() {
       )}
 
       {selectedLog && <LogModal log={selectedLog} onClose={() => setSelectedLog(null)} />}
+
+      {cancelTarget && (
+        <CancelModal
+          jobType={cancelTarget.type === 'sync' ? 'sync' : 'prediction'}
+          jobId={cancelTarget.id}
+          onConfirm={() => {
+            if (cancelTarget.type === 'sync') {
+              cancelSyncJob.mutate(cancelTarget.id as number);
+            } else {
+              cancelPredictionJob.mutate(cancelTarget.id as string);
+            }
+          }}
+          onClose={() => setCancelTarget(null)}
+        />
+      )}
     </div>
   );
 }

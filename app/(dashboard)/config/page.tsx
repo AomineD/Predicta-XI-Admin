@@ -236,7 +236,7 @@ export default function ConfigPage() {
     changePassword.mutate();
   };
 
-  // Danger zone
+  // Danger zone — delete all matches only
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteResult, setDeleteResult] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -250,6 +250,27 @@ export default function ConfigPage() {
     onError: (err: Error) => {
       setShowDeleteConfirm(false);
       setDeleteResult({ type: 'error', text: err.message });
+    },
+  });
+
+  // Danger zone — delete all sports data
+  const [showDeleteAllConfirm, setShowDeleteAllConfirm] = useState(false);
+  const [deleteAllResult, setDeleteAllResult] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const deleteAllSportsData = useMutation({
+    mutationFn: () => api.post('/admin/sports-data/delete-all', {}) as Promise<{ matchesDeleted: number; predictionsDeleted: number; teamsDeleted: number; competitionsDeleted: number }>,
+    onSuccess: (data) => {
+      setShowDeleteAllConfirm(false);
+      setDeleteAllResult({
+        type: 'success',
+        text: `Deleted: ${data.matchesDeleted} matches, ${data.predictionsDeleted} predictions, ${data.teamsDeleted} teams, ${data.competitionsDeleted} competitions`,
+      });
+      qc.invalidateQueries({ queryKey: ['matches'] });
+      qc.invalidateQueries({ queryKey: ['competitions'] });
+    },
+    onError: (err: Error) => {
+      setShowDeleteAllConfirm(false);
+      setDeleteAllResult({ type: 'error', text: err.message });
     },
   });
 
@@ -583,13 +604,13 @@ export default function ConfigPage() {
         <h2 className="text-xs font-semibold text-red-400 uppercase tracking-wider mb-1 font-sans">Danger Zone</h2>
         <p className="text-xs text-red-400/60 font-sans mb-4">Destructive actions that cannot be undone</p>
 
-        <div className="flex items-center justify-between py-3">
+        <div className="flex items-center justify-between py-3 border-b" style={{ borderColor: 'rgba(239,68,68,0.1)' }}>
           <div>
             <p className="text-sm text-text-primary font-sans">Delete all matches</p>
-            <p className="text-xs text-text-muted/60 font-sans mt-0.5">Remove all matches and associated predictions from the database</p>
+            <p className="text-xs text-text-muted/60 font-sans mt-0.5">Remove all matches and associated predictions. Teams and leagues are kept.</p>
           </div>
           <Button variant="danger" onClick={() => { setDeleteResult(null); setShowDeleteConfirm(true); }}>
-            Delete All Matches
+            Delete Matches
           </Button>
         </div>
 
@@ -598,9 +619,25 @@ export default function ConfigPage() {
             {deleteResult.text}
           </p>
         )}
+
+        <div className="flex items-center justify-between py-3 mt-1">
+          <div>
+            <p className="text-sm text-text-primary font-sans">Delete all sports data</p>
+            <p className="text-xs text-text-muted/60 font-sans mt-0.5">Remove matches, predictions, teams and leagues. Users and credits are NOT affected.</p>
+          </div>
+          <Button variant="danger" onClick={() => { setDeleteAllResult(null); setShowDeleteAllConfirm(true); }}>
+            Delete All Sports Data
+          </Button>
+        </div>
+
+        {deleteAllResult && (
+          <p className={`text-xs font-sans mt-2 ${deleteAllResult.type === 'success' ? 'text-success' : 'text-danger'}`}>
+            {deleteAllResult.text}
+          </p>
+        )}
       </div>
 
-      {/* Delete confirmation modal */}
+      {/* Delete matches confirmation modal */}
       {showDeleteConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
           <div className="rounded-2xl p-6 w-full max-w-md" style={{ background: '#121A2B', border: '1px solid rgba(239,68,68,0.3)' }}>
@@ -621,6 +658,42 @@ export default function ConfigPage() {
               </Button>
               <Button variant="danger" loading={deleteAllMatches.isPending} onClick={() => deleteAllMatches.mutate()}>
                 Yes, Delete All
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete all sports data confirmation modal */}
+      {showDeleteAllConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="rounded-2xl p-6 w-full max-w-md" style={{ background: '#121A2B', border: '1px solid rgba(239,68,68,0.5)' }}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center">
+                <svg className="w-5 h-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-text-primary font-sans">Delete ALL sports data?</h3>
+                <p className="text-xs text-red-400 font-sans">This cannot be undone</p>
+              </div>
+            </div>
+            <div className="rounded-xl p-3 mb-5" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
+              <p className="text-xs text-red-300 font-sans font-medium mb-1">Will be deleted:</p>
+              <ul className="text-xs text-red-300/80 font-sans space-y-0.5 ml-2">
+                <li>• All matches and predictions</li>
+                <li>• All teams</li>
+                <li>• All leagues / competitions</li>
+              </ul>
+              <p className="text-xs text-text-muted font-sans mt-2">Users, credits, purchases and API keys are NOT affected.</p>
+            </div>
+            <div className="flex justify-end gap-3">
+              <Button variant="secondary" onClick={() => setShowDeleteAllConfirm(false)}>
+                Cancel
+              </Button>
+              <Button variant="danger" loading={deleteAllSportsData.isPending} onClick={() => deleteAllSportsData.mutate()}>
+                Yes, Delete Everything
               </Button>
             </div>
           </div>

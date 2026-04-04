@@ -106,7 +106,6 @@ function getDateRange(range: DateRange): { from: string; to: string } | null {
 }
 
 function formatGroupDate(dateStr: string): string {
-  // dateStr is "YYYY-MM-DD" — parse as UTC to avoid timezone shift
   const [y, m, d] = dateStr.split('-').map(Number);
   const date = new Date(Date.UTC(y, m - 1, d));
   return date.toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' });
@@ -117,6 +116,75 @@ function getMatchDateKey(kickoff: string | null): string {
   return new Date(kickoff).toISOString().split('T')[0];
 }
 
+// ── Team Logo ──────────────────────────────────────────────
+
+function TeamLogo({ url, name }: { url?: string; name?: string }) {
+  const [error, setError] = useState(false);
+  const src = (!error && url) ? url : '/team-placeholder.svg';
+  return (
+    <img
+      src={src}
+      alt={name ?? 'Team'}
+      className="w-5 h-5 object-contain flex-none"
+      onError={() => setError(true)}
+    />
+  );
+}
+
+// ── Enrichment Modal ───────────────────────────────────────
+
+function EnrichmentModal({ matchId, onClose }: { matchId: number; onClose: () => void }) {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['enrichment', matchId],
+    queryFn: () => api.get(`/admin/matches/${matchId}/enrichment`),
+  });
+
+  const handleCopy = () => {
+    if (data) navigator.clipboard.writeText(JSON.stringify(data, null, 2));
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+      <div
+        className="rounded-2xl p-6 w-full max-w-3xl max-h-[85vh] flex flex-col"
+        style={{ background: '#121A2B', border: '1px solid rgba(255,255,255,0.12)' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-semibold text-text-primary font-sans">Enrichment Data — Match #{matchId}</h3>
+          <div className="flex gap-2">
+            {data && (
+              <button
+                onClick={handleCopy}
+                className="px-3 py-1.5 rounded-lg text-xs font-sans font-medium bg-surface-3 text-text-secondary hover:text-text-primary transition-colors"
+              >
+                Copy
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="px-3 py-1.5 rounded-lg text-xs font-sans font-medium bg-surface-3 text-text-secondary hover:text-text-primary transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+        <div className="flex-1 overflow-auto rounded-xl bg-surface-3 p-4">
+          {isLoading && <p className="text-text-muted text-xs font-sans">Loading enrichment data...</p>}
+          {error && <p className="text-danger text-xs font-sans">Failed to load enrichment data</p>}
+          {data && (
+            <pre className="text-xs text-text-muted font-mono whitespace-pre-wrap">
+              {JSON.stringify(data, null, 2)}
+            </pre>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Main Page ──────────────────────────────────────────────
+
 export default function MatchesPage() {
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
@@ -124,14 +192,13 @@ export default function MatchesPage() {
   const [competitionId, setCompetitionId] = useState('');
   const [dateRange, setDateRange] = useState<DateRange>('this_week');
   const [viewMode, setViewMode] = useState<ViewMode>('by_date_competition');
+  const [enrichmentMatchId, setEnrichmentMatchId] = useState<number | null>(null);
 
-  // Fetch competitions for filter
   const { data: competitions } = useQuery<Competition[]>({
     queryKey: ['competitions'],
     queryFn: () => api.get('/admin/competitions'),
   });
 
-  // Sync mutations
   const syncMatches = useMutation({
     mutationFn: () => api.post('/admin/matches/sync', {}),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['matches'] }),
@@ -147,7 +214,6 @@ export default function MatchesPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['matches'] }),
   });
 
-  // Fetch matches
   const { data, isLoading } = useQuery<MatchesResponse>({
     queryKey: ['matches', page, status, competitionId, dateRange],
     queryFn: () => {
@@ -165,7 +231,6 @@ export default function MatchesPage() {
 
   const items = data?.items ?? [];
 
-  // Match counts by status
   const matchCounts = useMemo(() => {
     let upcoming = 0, finished = 0;
     for (const m of items) {
@@ -175,7 +240,6 @@ export default function MatchesPage() {
     return { upcoming, finished, total: data?.total ?? 0 };
   }, [items, data?.total]);
 
-  // Group matches based on view mode
   const grouped = useMemo(() => {
     if (viewMode === 'all') return null;
 
@@ -217,8 +281,12 @@ export default function MatchesPage() {
       key: 'match',
       header: 'Match',
       render: (row) => (
-        <span className="font-medium text-text-primary">
-          {row.homeTeam?.name ?? '?'} vs {row.awayTeam?.name ?? '?'}
+        <span className="flex items-center gap-1.5 flex-wrap">
+          <TeamLogo url={row.homeTeam?.logo} name={row.homeTeam?.name} />
+          <span className="font-medium text-text-primary text-sm">{row.homeTeam?.name ?? '?'}</span>
+          <span className="text-text-muted text-xs">vs</span>
+          <TeamLogo url={row.awayTeam?.logo} name={row.awayTeam?.name} />
+          <span className="font-medium text-text-primary text-sm">{row.awayTeam?.name ?? '?'}</span>
         </span>
       ),
     },
@@ -261,11 +329,17 @@ export default function MatchesPage() {
     {
       key: 'enriched',
       header: 'Enriched',
-      render: (row) => (
-        <span className={row.enriched ? 'text-success text-xs' : 'text-text-muted text-xs'}>
-          {row.enriched ? 'Yes' : 'No'}
-        </span>
-      ),
+      render: (row) => {
+        if (!row.enriched) return <span className="text-text-muted text-xs">No</span>;
+        return (
+          <button
+            onClick={() => setEnrichmentMatchId(row.id)}
+            className="px-2 py-0.5 rounded-md text-xs font-medium font-sans bg-blue-500/15 text-blue-400 hover:bg-blue-500/25 transition-colors"
+          >
+            VIEW
+          </button>
+        );
+      },
     },
   ];
 
@@ -421,6 +495,10 @@ export default function MatchesPage() {
             <Button size="sm" onClick={() => setPage((p) => p + 1)} disabled={page * 50 >= data.total}>Next</Button>
           </div>
         </div>
+      )}
+
+      {enrichmentMatchId && (
+        <EnrichmentModal matchId={enrichmentMatchId} onClose={() => setEnrichmentMatchId(null)} />
       )}
     </div>
   );
