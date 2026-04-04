@@ -181,7 +181,7 @@ export default function ConfigPage() {
   const [keyCopied, setKeyCopied] = useState(false);
 
   const regenerateAppKey = useMutation({
-    mutationFn: () => api.post('/admin/app-key/regenerate', {}),
+    mutationFn: () => api.post('/admin/app-key/regenerate', {}) as Promise<{ key: string; prefix: string }>,
     onSuccess: (data: { key: string; prefix: string }) => {
       setGeneratedKey(data.key);
       setShowRegenerateConfirm(false);
