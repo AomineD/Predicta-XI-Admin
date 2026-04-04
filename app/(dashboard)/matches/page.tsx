@@ -153,7 +153,7 @@ function EnrichmentModal({ matchId, onClose }: { matchId: number; onClose: () =>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-sm font-semibold text-text-primary font-sans">Enrichment Data — Match #{matchId}</h3>
           <div className="flex gap-2">
-            {data && (
+            {!!data && (
               <button
                 onClick={handleCopy}
                 className="px-3 py-1.5 rounded-lg text-xs font-sans font-medium bg-surface-3 text-text-secondary hover:text-text-primary transition-colors"
@@ -172,7 +172,7 @@ function EnrichmentModal({ matchId, onClose }: { matchId: number; onClose: () =>
         <div className="flex-1 overflow-auto rounded-xl bg-surface-3 p-4">
           {isLoading && <p className="text-text-muted text-xs font-sans">Loading enrichment data...</p>}
           {error && <p className="text-danger text-xs font-sans">Failed to load enrichment data</p>}
-          {data && (
+          {!!data && (
             <pre className="text-xs text-text-muted font-mono whitespace-pre-wrap">
               {JSON.stringify(data, null, 2)}
             </pre>
