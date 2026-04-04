@@ -164,6 +164,45 @@ export default function ConfigPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['api-keys'] }),
   });
 
+  // App API Key
+  const { data: appKeyInfo } = useQuery<{ prefix: string; isActive: boolean; createdAt: string } | null>({
+    queryKey: ['app-key-info'],
+    queryFn: async () => {
+      try {
+        const res = await api.get('/admin/app-key/info');
+        return res;
+      } catch {
+        return null;
+      }
+    },
+  });
+
+  const [generatedKey, setGeneratedKey] = useState<string | null>(null);
+  const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false);
+  const [keyCopied, setKeyCopied] = useState(false);
+
+  const regenerateAppKey = useMutation({
+    mutationFn: () => api.post('/admin/app-key/regenerate', {}),
+    onSuccess: (data: { key: string; prefix: string }) => {
+      setGeneratedKey(data.key);
+      setShowRegenerateConfirm(false);
+      setKeyCopied(false);
+      qc.invalidateQueries({ queryKey: ['app-key-info'] });
+    },
+  });
+
+  const copyKey = async () => {
+    if (generatedKey) {
+      await navigator.clipboard.writeText(generatedKey);
+      setKeyCopied(true);
+    }
+  };
+
+  const dismissKey = () => {
+    setGeneratedKey(null);
+    setKeyCopied(false);
+  };
+
   // Change password
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -401,6 +440,93 @@ export default function ConfigPage() {
           </Button>
         </div>
       </SectionCard>
+
+      {/* App API Key */}
+      <SectionCard title="App API Key" subtitle="Authentication key for the Flutter app to communicate with the backend API">
+        {appKeyInfo ? (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between py-2">
+              <div>
+                <p className="text-sm text-text-primary font-sans">
+                  Current key: <span className="text-text-muted font-mono">{appKeyInfo.prefix}••••••••</span>
+                </p>
+                <p className="text-xs text-text-muted/60 font-sans mt-1">
+                  Generated on {new Date(appKeyInfo.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={`text-xs font-sans px-2 py-0.5 rounded-full ${appKeyInfo.isActive ? 'bg-green-500/15 text-green-400' : 'bg-red-500/15 text-red-400'}`}>
+                  {appKeyInfo.isActive ? 'Active' : 'Revoked'}
+                </span>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-text-muted font-sans py-2">No app API key has been generated yet.</p>
+        )}
+
+        {/* Generated key display — shown only once */}
+        {generatedKey && (
+          <div className="mt-3 p-3 rounded-xl" style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)' }}>
+            <p className="text-xs text-green-400 font-sans font-semibold mb-2">
+              New key generated — copy it now. It will not be shown again.
+            </p>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 text-sm font-mono text-text-primary bg-surface-3 px-3 py-2 rounded-lg break-all select-all">
+                {generatedKey}
+              </code>
+              <Button variant="secondary" size="sm" onClick={copyKey}>
+                {keyCopied ? 'Copied!' : 'Copy'}
+              </Button>
+            </div>
+            <div className="mt-2 flex justify-end">
+              <button type="button" onClick={dismissKey} className="text-xs text-text-muted hover:text-text-primary font-sans">
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="mt-4">
+          <Button
+            variant="danger"
+            loading={regenerateAppKey.isPending}
+            onClick={() => setShowRegenerateConfirm(true)}
+          >
+            Regenerate Key
+          </Button>
+          <p className="text-xs text-text-muted/50 font-sans mt-2">
+            This will revoke the current key and generate a new one. The Flutter app will need to be updated with the new key.
+          </p>
+        </div>
+      </SectionCard>
+
+      {/* Regenerate confirmation modal */}
+      {showRegenerateConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="rounded-2xl p-6 w-full max-w-md" style={{ background: '#121A2B', border: '1px solid rgba(239,68,68,0.3)' }}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-amber-500/15 flex items-center justify-center">
+                <svg className="w-5 h-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-text-primary font-sans">Regenerate App API Key?</h3>
+            </div>
+            <p className="text-sm text-text-muted font-sans mb-6">
+              The current key will be <strong className="text-text-primary">permanently revoked</strong>. The Flutter app will stop working until you update it with the new key.
+            </p>
+            <div className="flex justify-end gap-3">
+              <Button variant="secondary" onClick={() => setShowRegenerateConfirm(false)}>
+                Cancel
+              </Button>
+              <Button variant="danger" loading={regenerateAppKey.isPending} onClick={() => regenerateAppKey.mutate()}>
+                Yes, Regenerate
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <SectionCard title="Security" subtitle="Change your admin panel password">
         <Field label="Current password" subtitle="Enter your current password to verify identity">
