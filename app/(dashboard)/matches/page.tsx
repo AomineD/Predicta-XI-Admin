@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { DataTable, type Column } from '@/components/ui/DataTable';
@@ -116,6 +116,22 @@ function getMatchDateKey(kickoff: string | null): string {
   return new Date(kickoff).toISOString().split('T')[0];
 }
 
+// ── Chevron Icon ──────────────────────────────────────────
+
+function ChevronIcon({ expanded }: { expanded: boolean }) {
+  return (
+    <svg
+      className={`w-4 h-4 text-text-muted transition-transform ${expanded ? 'rotate-90' : ''}`}
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={2}
+    >
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+    </svg>
+  );
+}
+
 // ── Team Logo ──────────────────────────────────────────────
 
 function TeamLogo({ url, name }: { url?: string; name?: string }) {
@@ -193,6 +209,18 @@ export default function MatchesPage() {
   const [dateRange, setDateRange] = useState<DateRange>('this_week');
   const [viewMode, setViewMode] = useState<ViewMode>('by_date_competition');
   const [enrichmentMatchId, setEnrichmentMatchId] = useState<number | null>(null);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+
+  // Reset collapsed state when view mode changes
+  useEffect(() => { setCollapsedGroups(new Set()); }, [viewMode]);
+
+  const toggleGroup = (key: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  };
 
   const { data: competitions } = useQuery<Competition[]>({
     queryKey: ['competitions'],
@@ -452,33 +480,69 @@ export default function MatchesPage() {
 
       {!isLoading && viewMode === 'all' && renderMatchTable(items)}
 
-      {!isLoading && viewMode === 'by_competition' && grouped && (grouped as [string, Match[]][]).map(([comp, matchList]) => (
-        <div key={comp} className="mb-6">
-          <h3 className="text-sm font-semibold text-text-primary font-sans mb-2 px-1">{comp}</h3>
-          {renderMatchTable(matchList)}
-        </div>
-      ))}
+      {!isLoading && viewMode === 'by_competition' && grouped && (grouped as [string, Match[]][]).map(([comp, matchList]) => {
+        const key = `comp:${comp}`;
+        const expanded = !collapsedGroups.has(key);
+        return (
+          <div key={comp} className="mb-6">
+            <button type="button" onClick={() => toggleGroup(key)} className="flex items-center gap-1.5 mb-2 px-1 cursor-pointer select-none">
+              <ChevronIcon expanded={expanded} />
+              <h3 className="text-sm font-semibold text-text-primary font-sans">{comp}</h3>
+              <span className="text-xs text-text-muted font-sans">({matchList.length})</span>
+            </button>
+            {expanded && renderMatchTable(matchList)}
+          </div>
+        );
+      })}
 
-      {!isLoading && viewMode === 'by_date' && grouped && (grouped as [string, Match[]][]).map(([date, matchList]) => (
-        <div key={date} className="mb-6">
-          <h3 className="text-sm font-semibold text-text-primary font-sans mb-2 px-1">{formatGroupDate(date)}</h3>
-          {renderMatchTable(matchList)}
-        </div>
-      ))}
+      {!isLoading && viewMode === 'by_date' && grouped && (grouped as [string, Match[]][]).map(([date, matchList]) => {
+        const key = `date:${date}`;
+        const expanded = !collapsedGroups.has(key);
+        return (
+          <div key={date} className="mb-6">
+            <button type="button" onClick={() => toggleGroup(key)} className="flex items-center gap-1.5 mb-2 px-1 cursor-pointer select-none">
+              <ChevronIcon expanded={expanded} />
+              <h3 className="text-sm font-semibold text-text-primary font-sans">{formatGroupDate(date)}</h3>
+              <span className="text-xs text-text-muted font-sans">({matchList.length})</span>
+            </button>
+            {expanded && renderMatchTable(matchList)}
+          </div>
+        );
+      })}
 
-      {!isLoading && viewMode === 'by_date_competition' && grouped && (grouped as { date: string; competitions: [string, Match[]][] }[]).map(({ date, competitions: comps }) => (
-        <div key={date} className="mb-6">
-          <h3 className="text-sm font-semibold text-text-primary font-sans mb-3 px-1 border-b pb-2" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
-            {formatGroupDate(date)}
-          </h3>
-          {comps.map(([comp, matchList]) => (
-            <div key={comp} className="mb-4 ml-2">
-              <h4 className="text-xs font-medium text-text-secondary font-sans mb-1.5 px-1">{comp}</h4>
-              {renderMatchTable(matchList)}
-            </div>
-          ))}
-        </div>
-      ))}
+      {!isLoading && viewMode === 'by_date_competition' && grouped && (grouped as { date: string; competitions: [string, Match[]][] }[]).map(({ date, competitions: comps }) => {
+        const dateKey = `date:${date}`;
+        const dateExpanded = !collapsedGroups.has(dateKey);
+        const totalMatches = comps.reduce((sum, [, ml]) => sum + ml.length, 0);
+        return (
+          <div key={date} className="mb-6">
+            <button
+              type="button"
+              onClick={() => toggleGroup(dateKey)}
+              className="flex items-center gap-1.5 mb-3 px-1 border-b pb-2 w-full cursor-pointer select-none"
+              style={{ borderColor: 'rgba(255,255,255,0.08)' }}
+            >
+              <ChevronIcon expanded={dateExpanded} />
+              <h3 className="text-sm font-semibold text-text-primary font-sans">{formatGroupDate(date)}</h3>
+              <span className="text-xs text-text-muted font-sans">({totalMatches})</span>
+            </button>
+            {dateExpanded && comps.map(([comp, matchList]) => {
+              const compKey = `dc:${date}::${comp}`;
+              const compExpanded = !collapsedGroups.has(compKey);
+              return (
+                <div key={comp} className="mb-4 ml-2">
+                  <button type="button" onClick={() => toggleGroup(compKey)} className="flex items-center gap-1 mb-1.5 px-1 cursor-pointer select-none">
+                    <ChevronIcon expanded={compExpanded} />
+                    <h4 className="text-xs font-medium text-text-secondary font-sans">{comp}</h4>
+                    <span className="text-[10px] text-text-muted font-sans">({matchList.length})</span>
+                  </button>
+                  {compExpanded && renderMatchTable(matchList)}
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
 
       {!isLoading && items.length === 0 && (
         <div className="text-center py-12">

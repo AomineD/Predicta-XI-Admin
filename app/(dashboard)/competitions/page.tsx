@@ -159,20 +159,22 @@ export default function CompetitionsPage() {
               }}
             >
               {/* Active toggle — top-left corner, small, no label */}
-              <button
-                type="button"
-                onClick={() => updateCompetition.mutate({ id: comp.id, active: !comp.active })}
-                className={`absolute top-3 left-3 relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
-                  comp.active ? 'bg-primary' : 'bg-surface-3'
-                }`}
-                title={comp.active ? 'Active' : 'Inactive'}
-              >
-                <span
-                  className={`inline-block h-3 w-3 transform rounded-full bg-background transition-transform ${
-                    comp.active ? 'translate-x-5' : 'translate-x-1'
+              <div className="absolute top-3 left-3">
+                <button
+                  type="button"
+                  onClick={() => updateCompetition.mutate({ id: comp.id, active: !comp.active })}
+                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                    comp.active ? 'bg-primary' : 'bg-surface-3'
                   }`}
-                />
-              </button>
+                  title={comp.active ? 'Active' : 'Inactive'}
+                >
+                  <span
+                    className={`inline-block h-3 w-3 transform rounded-full bg-background transition-transform ${
+                      comp.active ? 'translate-x-5' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
 
               {/* Logo with edit trigger */}
               <div className="relative group mb-3 mt-2">
