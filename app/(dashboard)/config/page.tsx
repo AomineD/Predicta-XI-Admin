@@ -19,7 +19,8 @@ interface PredictionConfig {
   matchSyncEnabled: boolean;
   matchSyncIntervalHours: number;
   resultSyncEnabled: boolean;
-  resultSyncHourUtc: number;
+  resultSyncIntervalHours: number;
+  llmTimeoutSeconds: number;
   predictionWindowMinutes: number;
   featuredLeagueIds: number[];
 }
@@ -140,7 +141,8 @@ export default function ConfigPage() {
       matchSyncEnabled: cfg.matchSyncEnabled ?? false,
       matchSyncIntervalHours: cfg.matchSyncIntervalHours ?? 12,
       resultSyncEnabled: cfg.resultSyncEnabled ?? false,
-      resultSyncHourUtc: cfg.resultSyncHourUtc ?? 3,
+      resultSyncIntervalHours: cfg.resultSyncIntervalHours ?? 12,
+      llmTimeoutSeconds: cfg.llmTimeoutSeconds ?? 30,
       predictionWindowMinutes: cfg.predictionWindowMinutes ?? 0,
       featuredLeagueIds: cfg.featuredLeagueIds ?? [39, 140, 135],
     });
@@ -313,6 +315,17 @@ export default function ConfigPage() {
           </select>
         </Field>
 
+        <Field label="LLM Timeout (seconds)" subtitle="Max wait time per LLM call (increase for reasoning models like DeepSeek R1)">
+          <input
+            type="number"
+            min={15}
+            max={300}
+            value={form.llmTimeoutSeconds}
+            onChange={(e) => setField('llmTimeoutSeconds', Number(e.target.value))}
+            className="h-9 w-24 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
+          />
+        </Field>
+
         <Field label="Historical context" subtitle="Include past prediction outcomes to improve accuracy">
           <Toggle value={form.historicalContextEnabled} onChange={(v) => setField('historicalContextEnabled', v)} />
         </Field>
@@ -381,15 +394,13 @@ export default function ConfigPage() {
           <Toggle value={form.resultSyncEnabled} onChange={(v) => setField('resultSyncEnabled', v)} />
         </Field>
 
-        <Field label="Hour (UTC)" subtitle="UTC hour at which results are synced each day">
+        <Field label="Interval (hours)" subtitle="How often to sync match results">
           <select
-            value={form.resultSyncHourUtc}
-            onChange={(e) => setField('resultSyncHourUtc', Number(e.target.value))}
+            value={form.resultSyncIntervalHours}
+            onChange={(e) => setField('resultSyncIntervalHours', Number(e.target.value))}
             className="h-9 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
           >
-            {Array.from({ length: 24 }, (_, i) => (
-              <option key={i} value={i}>{String(i).padStart(2, '0')}:00 UTC</option>
-            ))}
+            {[6, 12, 24].map((h) => <option key={h} value={h}>{h}h</option>)}
           </select>
         </Field>
       </SectionCard>
