@@ -34,7 +34,7 @@ interface ApiKey {
 
 const MODELS = ['deepseek-r1', 'gpt-5.4-mini', 'gpt-5.4', 'gpt-5.4-think', 'gemini-3.1-pro', 'glm-5', 'kimi-k2.5'];
 const MARKETS = ['match_result', 'over_under_2_5', 'btts', 'double_chance', 'asian_handicap', 'correct_score', 'first_goal'];
-const DATA_FIELDS = ['fixture_info', 'standings', 'recent_form', 'season_stats', 'h2h', 'injuries', 'odds', 'top_scorers'];
+const DATA_FIELDS = ['fixture_info', 'standings', 'recent_form', 'season_stats', 'h2h', 'injuries', 'odds', 'top_scorers', 'match_preview', 'squads'];
 const REASONING_OPTIONS = ['', 'low', 'medium', 'high'];
 const PROVIDERS = ['deepseek', 'openai', 'google', 'zhipu', 'moonshot'];
 
