@@ -19,8 +19,8 @@ interface Prediction {
   settledMarkets: number | null;
   wonMarkets: number | null;
   createdAt: string | null;
-  homeTeam?: string;
-  awayTeam?: string;
+  homeTeam?: { id: number; name: string; short_name: string; logo: string } | string;
+  awayTeam?: { id: number; name: string; short_name: string; logo: string } | string;
 }
 
 interface PredictionsResponse {
@@ -49,13 +49,15 @@ export default function PredictionsPage() {
     {
       key: 'match',
       header: 'Match',
-      render: (row) => (
-        <span className="text-text-primary font-medium">
-          {row.homeTeam && row.awayTeam
-            ? `${row.homeTeam} vs ${row.awayTeam}`
-            : `Match #${row.matchId}`}
-        </span>
-      ),
+      render: (row) => {
+        const home = typeof row.homeTeam === 'object' ? row.homeTeam?.name : row.homeTeam;
+        const away = typeof row.awayTeam === 'object' ? row.awayTeam?.name : row.awayTeam;
+        return (
+          <span className="text-text-primary font-medium">
+            {home && away ? `${home} vs ${away}` : `Match #${row.matchId}`}
+          </span>
+        );
+      },
     },
     {
       key: 'model',
