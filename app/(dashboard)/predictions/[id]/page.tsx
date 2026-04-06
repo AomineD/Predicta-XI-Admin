@@ -7,6 +7,8 @@ import { api } from '@/lib/api';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { formatDateTime } from '@/lib/utils';
+import { ConfidenceIcon } from '@/components/ui/ConfidenceIcon';
+import { ConfidenceLevelBadge } from '@/components/ui/ConfidenceLevelBadge';
 import Link from 'next/link';
 import { ChevronLeft } from 'lucide-react';
 
@@ -115,20 +117,45 @@ export default function PredictionDetailPage() {
       )}
 
       {/* Picks */}
-      <div className="rounded-2xl overflow-hidden mb-4" style={{ background: '#121A2B', border: '1px solid rgba(255,255,255,0.08)' }}>
+      <div className="rounded-2xl overflow-hidden mb-4 space-y-0" style={{ background: '#121A2B', border: '1px solid rgba(255,255,255,0.08)' }}>
         <div className="px-5 py-3 border-b" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
           <h2 className="text-xs font-semibold text-text-secondary uppercase tracking-wider font-sans">Picks</h2>
         </div>
         <div className="divide-y" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
           {data.picks.map((pick, i) => (
-            <div key={i} className="px-5 py-4">
-              <div className="flex items-center gap-3 mb-1">
-                <span className="text-xs font-medium text-text-muted uppercase tracking-wide font-sans">{pick.market.replace(/_/g, ' ')}</span>
-                <span className="font-semibold text-text-primary font-sans">{pick.pick}</span>
-                <span className="text-xs text-secondary font-sans ml-1">{pick.confidence}%</span>
-                {pick.result && <StatusBadge status={pick.result} className="ml-auto" />}
+            <div
+              key={i}
+              className="px-5 py-4 md:py-6 flex flex-col md:flex-row items-start md:items-center gap-4 md:gap-8"
+            >
+              {/* Market */}
+              <div className="w-full md:w-1/5 shrink-0">
+                <div className="text-xs text-text-muted uppercase mb-1 tracking-wide font-sans">Market</div>
+                <div className="text-lg font-bold text-secondary font-sans">{pick.market.replace(/_/g, ' ')}</div>
               </div>
-              <p className="text-text-muted text-xs font-sans leading-relaxed">{pick.reasoning}</p>
+
+              {/* Pick */}
+              <div className="w-full md:w-1/6 shrink-0">
+                <div className="text-xs text-text-muted uppercase mb-1 tracking-wide font-sans">Selection</div>
+                <div className="text-lg font-bold text-text-primary font-sans">{pick.pick}</div>
+              </div>
+
+              {/* Confidence */}
+              <div className="w-full md:w-1/5 shrink-0 flex items-center gap-4">
+                <div>
+                  <div className="text-xs text-text-muted uppercase mb-1 tracking-wide font-sans">Confidence</div>
+                  <div className="text-lg font-bold text-text-primary font-sans">{pick.confidence}%</div>
+                </div>
+                <ConfidenceIcon confidence={pick.confidence} type="circle" />
+                <ConfidenceLevelBadge confidence={pick.confidence} />
+              </div>
+
+              {/* Reasoning */}
+              <div className="w-full text-sm text-text-muted leading-relaxed border-t md:border-t-0 md:border-l border-slate-700 pt-4 md:pt-0 md:pl-8 font-sans">
+                {pick.reasoning}
+              </div>
+
+              {/* Result (if settled) */}
+              {pick.result && <StatusBadge status={pick.result} className="md:ml-auto" />}
             </div>
           ))}
         </div>
