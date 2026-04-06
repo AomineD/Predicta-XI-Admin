@@ -41,6 +41,13 @@ interface PredictionDetail {
     awayScore: number | null;
     matchStatus: string;
   };
+  match?: {
+    id: number;
+    homeTeam: { name: string; short_name: string; logo: string };
+    awayTeam: { name: string; short_name: string; logo: string };
+    status: string;
+    kickoff: string;
+  };
 }
 
 function CollapsibleSection({ title, content }: { title: string; content: string }) {
@@ -93,6 +100,43 @@ export default function PredictionDetailPage() {
         <ChevronLeft size={14} /> Back to Predictions
       </Link>
 
+      {/* Header with Team Info */}
+      {data.match && (
+        <div className="mb-8 text-center">
+          <div className="flex items-center justify-center gap-6 mb-6 bg-surface/50 inline-flex px-8 py-4 rounded-2xl border border-surface-2 mx-auto">
+            <div className="flex items-center gap-3">
+              {data.match.awayTeam?.logo && (
+                <img
+                  alt={data.match.awayTeam.name}
+                  className="w-10 h-10 rounded-full bg-white"
+                  src={data.match.awayTeam.logo}
+                />
+              )}
+              <span className="text-2xl font-bold">{data.match.awayTeam?.short_name ?? data.match.awayTeam?.name}</span>
+            </div>
+            <span className="text-xl font-bold text-text-secondary">VS</span>
+            <div className="flex items-center gap-3">
+              <span className="text-2xl font-bold">{data.match.homeTeam?.short_name ?? data.match.homeTeam?.name}</span>
+              {data.match.homeTeam?.logo && (
+                <img
+                  alt={data.match.homeTeam.name}
+                  className="w-10 h-10 rounded-full bg-white"
+                  src={data.match.homeTeam.logo}
+                />
+              )}
+            </div>
+          </div>
+          <h2 className="text-2xl md:text-3xl font-bold mb-4">
+            TACTICAL PREDICTION TERMINAL: {data.match.awayTeam?.name?.toUpperCase()} VS {data.match.homeTeam?.name?.toUpperCase()}
+          </h2>
+          <div className="text-sm text-text-muted flex justify-center gap-4">
+            <span>Match #{data.matchId}</span>
+            <span className="border-l border-text-muted pl-4">Model: {data.model}</span>
+            <span className="border-l border-text-muted pl-4">Coverage: {data.coverageScore ?? '—'}%</span>
+          </div>
+        </div>
+      )}
+
       <PageHeader
         title={`Prediction — Match #${data.matchId}`}
         description={`${data.model} · Coverage ${data.coverageScore ?? '—'}%`}
@@ -111,7 +155,12 @@ export default function PredictionDetailPage() {
         <div className="rounded-2xl p-4 mb-4" style={{ background: '#121A2B', border: '1px solid rgba(255,255,255,0.08)' }}>
           <p className="text-text-secondary text-sm font-sans leading-relaxed">{data.summary}</p>
           {data.dataQualityNote && (
-            <p className="mt-2 text-text-muted text-xs font-sans italic">{data.dataQualityNote}</p>
+            <div className="mt-3 p-3 bg-warning/10 border border-warning/30 rounded-lg flex gap-2">
+              <svg className="w-5 h-5 text-warning shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"></path>
+              </svg>
+              <p className="text-xs text-warning font-sans">{data.dataQualityNote}</p>
+            </div>
           )}
         </div>
       )}
