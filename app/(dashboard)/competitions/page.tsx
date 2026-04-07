@@ -112,6 +112,11 @@ export default function CompetitionsPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['competitions'] }),
   });
 
+  const syncTeams = useMutation({
+    mutationFn: () => api.post('/admin/teams/sync', {}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['teams'] }),
+  });
+
   const updateCompetition = useMutation({
     mutationFn: ({ id, ...body }: { id: number; active?: boolean; logoCustom?: string | null }) =>
       api.patch(`/admin/competitions/${id}`, body),
@@ -136,9 +141,14 @@ export default function CompetitionsPage() {
         title="Competitions"
         description="Manage supported football leagues and competitions"
         action={
-          <Button variant="primary" loading={syncCompetitions.isPending} onClick={() => syncCompetitions.mutate()}>
-            Sync Competitions
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="ghost" loading={syncTeams.isPending} onClick={() => syncTeams.mutate()}>
+              Sync Teams
+            </Button>
+            <Button variant="primary" loading={syncCompetitions.isPending} onClick={() => syncCompetitions.mutate()}>
+              Sync Competitions
+            </Button>
+          </div>
         }
       />
 

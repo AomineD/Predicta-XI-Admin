@@ -60,6 +60,7 @@ interface SchedulerStatus {
   predictions: SchedulerInfo;
   matchSync: SchedulerInfo;
   resultSync: SchedulerInfo;
+  enrichmentSync: SchedulerInfo;
 }
 
 type Tab = 'predictions' | 'sync';
@@ -71,6 +72,8 @@ const SYNC_TYPE_LABELS: Record<string, string> = {
   result_sync: 'Result Sync',
   enrichment: 'Enrichment',
   full_sync: 'Full Sync',
+  competition_sync: 'Competition Sync',
+  team_sync: 'Team Sync',
 };
 
 function formatDuration(ms: number | null): string {
@@ -155,6 +158,7 @@ function SchedulerBanners({ status }: { status: SchedulerStatus }) {
     <div className="flex flex-col gap-2 mb-4">
       <SchedulerBanner label="Match Sync" info={status.matchSync} />
       <SchedulerBanner label="Result Sync" info={status.resultSync} />
+      <SchedulerBanner label="Enrichment Sync" info={status.enrichmentSync} />
       <SchedulerBanner label="Predictions" info={status.predictions} />
     </div>
   );

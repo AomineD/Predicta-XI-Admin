@@ -20,6 +20,8 @@ interface PredictionConfig {
   matchSyncIntervalHours: number;
   resultSyncEnabled: boolean;
   resultSyncIntervalHours: number;
+  enrichmentSyncEnabled: boolean;
+  enrichmentSyncIntervalMinutes: number;
   llmTimeoutSeconds: number;
   predictionWindowMinutes: number;
   featuredLeagueIds: number[];
@@ -142,6 +144,8 @@ export default function ConfigPage() {
       matchSyncIntervalHours: cfg.matchSyncIntervalHours ?? 12,
       resultSyncEnabled: cfg.resultSyncEnabled ?? false,
       resultSyncIntervalHours: cfg.resultSyncIntervalHours ?? 12,
+      enrichmentSyncEnabled: cfg.enrichmentSyncEnabled ?? false,
+      enrichmentSyncIntervalMinutes: cfg.enrichmentSyncIntervalMinutes ?? 15,
       llmTimeoutSeconds: cfg.llmTimeoutSeconds ?? 30,
       predictionWindowMinutes: cfg.predictionWindowMinutes ?? 0,
       featuredLeagueIds: cfg.featuredLeagueIds ?? [39, 140, 135],
@@ -401,6 +405,22 @@ export default function ConfigPage() {
             className="h-9 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
           >
             {[6, 12, 24].map((h) => <option key={h} value={h}>{h}h</option>)}
+          </select>
+        </Field>
+
+        <SubHeading>Enrichment Sync</SubHeading>
+
+        <Field label="Enabled" subtitle="Enrich matches starting within 40 min (odds, H2H, standings)">
+          <Toggle value={form.enrichmentSyncEnabled} onChange={(v) => setField('enrichmentSyncEnabled', v)} />
+        </Field>
+
+        <Field label="Interval (minutes)" subtitle="How often to check for matches to enrich">
+          <select
+            value={form.enrichmentSyncIntervalMinutes}
+            onChange={(e) => setField('enrichmentSyncIntervalMinutes', Number(e.target.value))}
+            className="h-9 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
+          >
+            {[5, 10, 15, 20, 25, 30].map((m) => <option key={m} value={m}>{m}m</option>)}
           </select>
         </Field>
       </SectionCard>
