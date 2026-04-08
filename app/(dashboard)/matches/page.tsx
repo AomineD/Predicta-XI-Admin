@@ -232,7 +232,7 @@ function DeleteEnrichmentConfirmModal({
           </div>
         </div>
         <p className="text-sm text-text-secondary font-sans mb-6">
-          ┬┐Seguro que quieres borrar el enrichment del partido <span className="font-mono text-text-primary">#{matchId}</span>?
+          Seguro que quieres borrar el enrichment del partido <span className="font-mono text-text-primary">#{matchId}</span>?
         </p>
         <div className="flex gap-2 justify-end">
           <Button variant="secondary" size="sm" onClick={onClose}>Cancelar</Button>
