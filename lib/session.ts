@@ -5,22 +5,24 @@ import { adminEnv } from '@/lib/env';
 import type { SessionPayload } from '@/lib/admin-session';
 import { validateSessionPayload } from '@/lib/admin-session';
 
-const encodedKey = new TextEncoder().encode(adminEnv.SESSION_SECRET);
-
 const COOKIE_NAME = 'admin_session';
 const EXPIRY_DAYS = 7;
+
+function getEncodedKey(): Uint8Array {
+  return new TextEncoder().encode(adminEnv.SESSION_SECRET);
+}
 
 export async function encrypt(payload: SessionPayload): Promise<string> {
   return new SignJWT(payload)
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
     .setExpirationTime(`${EXPIRY_DAYS}d`)
-    .sign(encodedKey);
+    .sign(getEncodedKey());
 }
 
 export async function decrypt(session: string): Promise<SessionPayload | null> {
   try {
-    const { payload } = await jwtVerify(session, encodedKey, {
+    const { payload } = await jwtVerify(session, getEncodedKey(), {
       algorithms: ['HS256'],
     });
     return payload as unknown as SessionPayload;

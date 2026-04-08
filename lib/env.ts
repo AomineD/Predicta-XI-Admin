@@ -26,7 +26,13 @@ function requireOptionalDevUrl(name: string, value: string | undefined): string 
 }
 
 export const adminEnv = {
-  BACKEND_URL: requireOptionalDevUrl('BACKEND_URL', process.env.BACKEND_URL),
-  ADMIN_TOKEN: requireString('ADMIN_TOKEN', process.env.ADMIN_TOKEN, 32),
-  SESSION_SECRET: requireString('SESSION_SECRET', process.env.SESSION_SECRET, 32),
+  get BACKEND_URL(): string {
+    return requireOptionalDevUrl('BACKEND_URL', process.env.BACKEND_URL);
+  },
+  get ADMIN_TOKEN(): string {
+    return requireString('ADMIN_TOKEN', process.env.ADMIN_TOKEN, 32);
+  },
+  get SESSION_SECRET(): string {
+    return requireString('SESSION_SECRET', process.env.SESSION_SECRET, 32);
+  },
 };

@@ -5,7 +5,9 @@ import { adminEnv } from '@/lib/env';
 import type { SessionPayload } from '@/lib/admin-session';
 import { validateSessionPayload } from '@/lib/admin-session';
 
-const encodedKey = new TextEncoder().encode(adminEnv.SESSION_SECRET);
+function getEncodedKey(): Uint8Array {
+  return new TextEncoder().encode(adminEnv.SESSION_SECRET);
+}
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -27,7 +29,7 @@ export async function proxy(request: NextRequest) {
   }
 
   try {
-    const { payload } = await jwtVerify(session, encodedKey, { algorithms: ['HS256'] });
+    const { payload } = await jwtVerify(session, getEncodedKey(), { algorithms: ['HS256'] });
     const valid = await validateSessionPayload(payload as unknown as SessionPayload);
     if (!valid) {
       throw new Error('Session revoked');
