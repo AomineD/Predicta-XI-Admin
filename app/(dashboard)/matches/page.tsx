@@ -215,6 +215,7 @@ function MatchActionsDropdown({
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [menuStyle, setMenuStyle] = useState<{ top: number; left: number } | null>(null);
 
@@ -243,7 +244,11 @@ function MatchActionsDropdown({
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      const clickedTrigger = ref.current?.contains(target);
+      const clickedMenu = menuRef.current?.contains(target);
+
+      if (!clickedTrigger && !clickedMenu) setOpen(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -264,6 +269,7 @@ function MatchActionsDropdown({
       </button>
       {open && menuStyle && createPortal(
         <div
+          ref={menuRef}
           className="fixed z-[100] rounded-xl py-1 min-w-[190px] shadow-lg"
           style={{ top: menuStyle.top, left: menuStyle.left, background: '#1A2538', border: '1px solid rgba(255,255,255,0.12)' }}
         >
