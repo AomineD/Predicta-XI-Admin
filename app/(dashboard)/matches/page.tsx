@@ -119,7 +119,7 @@ function getMatchDateKey(kickoff: string | null): string {
   return new Date(kickoff).toISOString().split('T')[0];
 }
 
-// ── Chevron Icon ──────────────────────────────────────────
+// ÔöÇÔöÇ Chevron Icon ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
 
 function ChevronIcon({ expanded }: { expanded: boolean }) {
   return (
@@ -135,7 +135,7 @@ function ChevronIcon({ expanded }: { expanded: boolean }) {
   );
 }
 
-// ── Team Logo ──────────────────────────────────────────────
+// ÔöÇÔöÇ Team Logo ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
 
 function TeamLogo({ url, name }: { url?: string; name?: string }) {
   const [error, setError] = useState(false);
@@ -150,7 +150,7 @@ function TeamLogo({ url, name }: { url?: string; name?: string }) {
   );
 }
 
-// ── Enrichment Modal ───────────────────────────────────────
+// ÔöÇÔöÇ Enrichment Modal ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
 
 function EnrichmentModal({ matchId, onClose }: { matchId: number; onClose: () => void }) {
   const { data, isLoading, error } = useQuery({
@@ -170,7 +170,7 @@ function EnrichmentModal({ matchId, onClose }: { matchId: number; onClose: () =>
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-semibold text-text-primary font-sans">Enrichment Data — Match #{matchId}</h3>
+          <h3 className="text-sm font-semibold text-text-primary font-sans">Enrichment Data ÔÇö Match #{matchId}</h3>
           <div className="flex gap-2">
             {!!data && (
               <button
@@ -202,16 +202,59 @@ function EnrichmentModal({ matchId, onClose }: { matchId: number; onClose: () =>
   );
 }
 
+function DeleteEnrichmentConfirmModal({
+  matchId,
+  loading,
+  onConfirm,
+  onClose,
+}: {
+  matchId: number;
+  loading: boolean;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+      <div
+        className="rounded-2xl p-6 w-full max-w-sm"
+        style={{ background: '#121A2B', border: '1px solid rgba(255,255,255,0.12)' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 rounded-full bg-danger/15 flex items-center justify-center flex-none">
+            <svg className="w-5 h-5 text-danger" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-text-primary font-sans">Borrar enrichment</h3>
+            <p className="text-xs text-text-muted font-sans">Esta accion no se puede deshacer</p>
+          </div>
+        </div>
+        <p className="text-sm text-text-secondary font-sans mb-6">
+          ┬┐Seguro que quieres borrar el enrichment del partido <span className="font-mono text-text-primary">#{matchId}</span>?
+        </p>
+        <div className="flex gap-2 justify-end">
+          <Button variant="secondary" size="sm" onClick={onClose}>Cancelar</Button>
+          <Button variant="danger" size="sm" onClick={onConfirm} loading={loading}>Borrar enrichment</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MatchActionsDropdown({
   row,
   busy,
   onRebuildEnrichment,
+  onDeleteEnrichment,
   onPredictTest,
   onDeleteTest,
 }: {
   row: Match;
   busy: boolean;
   onRebuildEnrichment: () => void;
+  onDeleteEnrichment: () => void;
   onPredictTest: () => void;
   onDeleteTest: () => void;
 }) {
@@ -257,6 +300,7 @@ function MatchActionsDropdown({
   }, [open]);
 
   const predictDisabled = busy || !row.enriched || row.hasTestPrediction;
+  const deleteEnrichmentDisabled = busy || !row.enriched;
   const deleteDisabled = busy || !row.hasTestPrediction;
 
   return (
@@ -283,6 +327,13 @@ function MatchActionsDropdown({
             Rehacer enrichment
           </button>
           <button
+            onClick={() => { onDeleteEnrichment(); setOpen(false); }}
+            disabled={deleteEnrichmentDisabled}
+            className={`w-full text-left px-3 py-2 text-xs font-sans transition-colors ${deleteEnrichmentDisabled ? 'text-text-muted/40 cursor-not-allowed' : 'text-danger hover:bg-surface-3'}`}
+          >
+            Borrar enrichment
+          </button>
+          <button
             onClick={() => { onPredictTest(); setOpen(false); }}
             disabled={predictDisabled}
             className={`w-full text-left px-3 py-2 text-xs font-sans transition-colors ${predictDisabled ? 'text-text-muted/40 cursor-not-allowed' : 'text-text-secondary hover:text-text-primary hover:bg-surface-3'}`}
@@ -303,7 +354,7 @@ function MatchActionsDropdown({
   );
 }
 
-// ── Main Page ──────────────────────────────────────────────
+// ÔöÇÔöÇ Main Page ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
 
 export default function MatchesPage() {
   const qc = useQueryClient();
@@ -315,6 +366,7 @@ export default function MatchesPage() {
   const [enrichmentMatchId, setEnrichmentMatchId] = useState<number | null>(null);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [actionMatchId, setActionMatchId] = useState<number | null>(null);
+  const [deleteEnrichmentMatchId, setDeleteEnrichmentMatchId] = useState<number | null>(null);
   const [actionResult, setActionResult] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Reset collapsed state when view mode changes
@@ -392,6 +444,29 @@ export default function MatchesPage() {
       setActionMatchId(null);
       qc.invalidateQueries({ queryKey: ['matches'] });
       qc.invalidateQueries({ queryKey: ['jobs'] });
+    },
+  });
+
+  const deleteEnrichment = useMutation({
+    mutationFn: (matchId: number) => api.delete<{ deleted: boolean; matchId: number }>(`/admin/matches/${matchId}/enrichment`),
+    onMutate: (matchId) => {
+      setActionMatchId(matchId);
+      setActionResult(null);
+    },
+    onSuccess: (_data, matchId) => {
+      if (enrichmentMatchId === matchId) setEnrichmentMatchId(null);
+      setDeleteEnrichmentMatchId(null);
+      setActionResult({ type: 'success', text: `Enrichment borrado para el partido #${matchId}.` });
+    },
+    onError: (error: Error, matchId) => {
+      setActionResult({ type: 'error', text: `No se pudo borrar el enrichment del partido #${matchId}: ${error.message}` });
+    },
+    onSettled: (_data, _error, matchId) => {
+      if (deleteEnrichmentMatchId === matchId) setDeleteEnrichmentMatchId(null);
+      setActionMatchId(null);
+      qc.invalidateQueries({ queryKey: ['matches'] });
+      qc.invalidateQueries({ queryKey: ['jobs'] });
+      qc.invalidateQueries({ queryKey: ['enrichment', matchId] });
     },
   });
 
@@ -560,6 +635,7 @@ export default function MatchesPage() {
           row={row}
           busy={actionMatchId === row.id}
           onRebuildEnrichment={() => rebuildEnrichment.mutate(row.id)}
+          onDeleteEnrichment={() => setDeleteEnrichmentMatchId(row.id)}
           onPredictTest={() => triggerTestPrediction.mutate(row.id)}
           onDeleteTest={() => removeTestPrediction.mutate(row.id)}
         />
@@ -755,7 +831,7 @@ export default function MatchesPage() {
       {/* Pagination */}
       {data && data.total > 50 && (
         <div className="flex items-center justify-between mt-4">
-          <span className="text-text-muted text-sm font-sans">Page {page} · {data.total} total</span>
+          <span className="text-text-muted text-sm font-sans">Page {page} ┬À {data.total} total</span>
           <div className="flex gap-2">
             <Button size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>Previous</Button>
             <Button size="sm" onClick={() => setPage((p) => p + 1)} disabled={page * 50 >= data.total}>Next</Button>
@@ -765,6 +841,14 @@ export default function MatchesPage() {
 
       {enrichmentMatchId && (
         <EnrichmentModal matchId={enrichmentMatchId} onClose={() => setEnrichmentMatchId(null)} />
+      )}
+      {deleteEnrichmentMatchId != null && (
+        <DeleteEnrichmentConfirmModal
+          matchId={deleteEnrichmentMatchId}
+          loading={deleteEnrichment.isPending}
+          onClose={() => !deleteEnrichment.isPending && setDeleteEnrichmentMatchId(null)}
+          onConfirm={() => deleteEnrichment.mutate(deleteEnrichmentMatchId)}
+        />
       )}
     </div>
   );
