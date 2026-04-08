@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { DataTable, type Column } from '@/components/ui/DataTable';
@@ -16,6 +17,7 @@ interface ConsumoRow {
   success: boolean;
   model: string;
   provider: string;
+  isTest: boolean;
   inputTokens: number | null;
   outputTokens: number | null;
   costUsd: string | null;
@@ -213,6 +215,35 @@ function ActionsDropdown({
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [menuStyle, setMenuStyle] = useState<{ top: number; left: number } | null>(null);
+
+  useEffect(() => {
+    if (!open || !buttonRef.current) return;
+
+    const updatePosition = () => {
+      if (!buttonRef.current) return;
+
+      const rect = buttonRef.current.getBoundingClientRect();
+      const menuWidth = 140;
+      const viewportPadding = 12;
+      const left = Math.max(viewportPadding, rect.right - menuWidth);
+
+      setMenuStyle({
+        top: rect.bottom + 4,
+        left,
+      });
+    };
+
+    updatePosition();
+    window.addEventListener('scroll', updatePosition, true);
+    window.addEventListener('resize', updatePosition);
+
+    return () => {
+      window.removeEventListener('scroll', updatePosition, true);
+      window.removeEventListener('resize', updatePosition);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -226,16 +257,22 @@ function ActionsDropdown({
   return (
     <div ref={ref} className="relative">
       <button
+        ref={buttonRef}
         onClick={() => setOpen(!open)}
         className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-sans font-medium bg-surface-3 text-text-secondary hover:text-text-primary transition-colors"
       >
         Opciones
         <ChevronDown size={13} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
-      {open && (
+      {open && menuStyle && createPortal(
         <div
-          className="absolute right-0 top-full mt-1 z-40 rounded-xl py-1 min-w-[140px] shadow-lg"
-          style={{ background: '#1A2538', border: '1px solid rgba(255,255,255,0.12)' }}
+          className="fixed z-[100] rounded-xl py-1 min-w-[140px] shadow-lg"
+          style={{
+            top: menuStyle.top,
+            left: menuStyle.left,
+            background: '#1A2538',
+            border: '1px solid rgba(255,255,255,0.12)',
+          }}
         >
           <button
             onClick={() => { onViewInfo(); setOpen(false); }}
@@ -254,7 +291,8 @@ function ActionsDropdown({
           >
             Ver error
           </button>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
@@ -376,7 +414,12 @@ export default function ConsumoPage() {
     {
       key: 'model',
       header: 'Model',
-      render: (row) => <span className="text-text-secondary text-xs">{row.model}</span>,
+      render: (row) => (
+        <div className="flex items-center gap-2">
+          <span className="text-text-secondary text-xs">{row.model}</span>
+          {row.isTest && <span className="px-1.5 py-0.5 rounded bg-amber-400/15 text-amber-300 text-[10px] font-semibold">TEST</span>}
+        </div>
+      ),
     },
     {
       key: 'inputTokens',
@@ -413,7 +456,7 @@ export default function ConsumoPage() {
 
   return (
     <div>
-      <PageHeader title="Consumo" description="LLM API usage — tokens, costs, and debugging" />
+      <PageHeader title="Consumo" description="LLM API usage — tokens, costs, and debugging. Test predictions are marked as TEST and do not count toward production KPIs/stats." />
 
       {summary && <SummaryCards summary={summary} />}
 

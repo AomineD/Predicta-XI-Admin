@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { jwtVerify } from 'jose';
+import { adminEnv } from '@/lib/env';
+import type { SessionPayload } from '@/lib/admin-session';
+import { validateSessionPayload } from '@/lib/admin-session';
 
-const secretKey = process.env.SESSION_SECRET;
-const encodedKey = new TextEncoder().encode(secretKey);
+const encodedKey = new TextEncoder().encode(adminEnv.SESSION_SECRET);
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -25,7 +27,11 @@ export async function proxy(request: NextRequest) {
   }
 
   try {
-    await jwtVerify(session, encodedKey, { algorithms: ['HS256'] });
+    const { payload } = await jwtVerify(session, encodedKey, { algorithms: ['HS256'] });
+    const valid = await validateSessionPayload(payload as unknown as SessionPayload);
+    if (!valid) {
+      throw new Error('Session revoked');
+    }
     return NextResponse.next();
   } catch {
     // Invalid or expired session

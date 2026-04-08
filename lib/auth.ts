@@ -1,7 +1,6 @@
 import 'server-only';
 
-const BACKEND_URL = process.env.BACKEND_URL ?? 'http://localhost:3000';
-const ADMIN_TOKEN = process.env.ADMIN_TOKEN ?? '';
+import { adminEnv } from '@/lib/env';
 
 // Rate limiting for login attempts (in-memory, resets on restart)
 const attempts = new Map<string, { count: number; resetAt: number }>();
@@ -28,33 +27,35 @@ export function clearRateLimit(ip: string): void {
   attempts.delete(ip);
 }
 
-export async function verifyCredentials(email: string, password: string): Promise<boolean> {
+export async function getSessionVersion(email: string, password: string): Promise<number | null> {
   try {
-    const res = await fetch(`${BACKEND_URL}/admin/verify-credentials`, {
+    const res = await fetch(`${adminEnv.BACKEND_URL}/admin/verify-credentials`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Admin-Token': ADMIN_TOKEN,
+        'X-Admin-Token': adminEnv.ADMIN_TOKEN,
       },
       body: JSON.stringify({ email, password }),
       signal: AbortSignal.timeout(10_000),
     });
 
-    if (!res.ok) return false;
-    const json = (await res.json()) as { data?: { valid?: boolean } };
-    return json.data?.valid === true;
+    if (!res.ok) return null;
+    const json = (await res.json()) as { data?: { valid?: boolean; sessionVersion?: number } };
+    return json.data?.valid === true && typeof json.data.sessionVersion === 'number'
+      ? json.data.sessionVersion
+      : null;
   } catch {
-    return false;
+    return null;
   }
 }
 
 /** Server-side fetch to the backend with admin token. Used by API proxy and Server Actions. */
 export async function backendFetch(path: string, init?: RequestInit): Promise<Response> {
-  return fetch(`${BACKEND_URL}${path}`, {
+  return fetch(`${adminEnv.BACKEND_URL}${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
-      'X-Admin-Token': ADMIN_TOKEN,
+      'X-Admin-Token': adminEnv.ADMIN_TOKEN,
       ...init?.headers,
     },
   });

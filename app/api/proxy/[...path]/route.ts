@@ -1,9 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { verifySession } from '@/lib/session';
-
-const BACKEND_URL = process.env.BACKEND_URL ?? 'http://localhost:3000';
-const ADMIN_TOKEN = process.env.ADMIN_TOKEN ?? '';
+import { adminEnv } from '@/lib/env';
 
 async function proxyRequest(request: NextRequest, method: string) {
   // Verify session (except for public auth endpoints)
@@ -25,7 +23,7 @@ async function proxyRequest(request: NextRequest, method: string) {
   // Build backend request
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    'X-Admin-Token': ADMIN_TOKEN,
+    'X-Admin-Token': adminEnv.ADMIN_TOKEN,
   };
 
   const init: RequestInit = { method, headers };
@@ -40,7 +38,7 @@ async function proxyRequest(request: NextRequest, method: string) {
   }
 
   // Forward query params
-  const backendUrl = `${BACKEND_URL}${backendPath}${url.search}`;
+  const backendUrl = `${adminEnv.BACKEND_URL}${backendPath}${url.search}`;
 
   try {
     const response = await fetch(backendUrl, init);

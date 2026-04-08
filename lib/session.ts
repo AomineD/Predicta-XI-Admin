@@ -1,18 +1,14 @@
 import 'server-only';
 import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
+import { adminEnv } from '@/lib/env';
+import type { SessionPayload } from '@/lib/admin-session';
+import { validateSessionPayload } from '@/lib/admin-session';
 
-const secretKey = process.env.SESSION_SECRET;
-const encodedKey = new TextEncoder().encode(secretKey);
+const encodedKey = new TextEncoder().encode(adminEnv.SESSION_SECRET);
 
 const COOKIE_NAME = 'admin_session';
 const EXPIRY_DAYS = 7;
-
-interface SessionPayload {
-  email: string;
-  expiresAt: string;
-  [key: string]: unknown;
-}
 
 export async function encrypt(payload: SessionPayload): Promise<string> {
   return new SignJWT(payload)
@@ -33,9 +29,9 @@ export async function decrypt(session: string): Promise<SessionPayload | null> {
   }
 }
 
-export async function createSession(email: string): Promise<void> {
+export async function createSession(email: string, sessionVersion: number): Promise<void> {
   const expiresAt = new Date(Date.now() + EXPIRY_DAYS * 24 * 60 * 60 * 1000);
-  const session = await encrypt({ email, expiresAt: expiresAt.toISOString() });
+  const session = await encrypt({ email, sessionVersion, expiresAt: expiresAt.toISOString() });
   const cookieStore = await cookies();
 
   cookieStore.set(COOKIE_NAME, session, {
@@ -51,7 +47,12 @@ export async function verifySession(): Promise<SessionPayload | null> {
   const cookieStore = await cookies();
   const session = cookieStore.get(COOKIE_NAME)?.value;
   if (!session) return null;
-  return decrypt(session);
+
+  const payload = await decrypt(session);
+  if (!payload) return null;
+
+  const valid = await validateSessionPayload(payload);
+  return valid ? payload : null;
 }
 
 export async function deleteSession(): Promise<void> {

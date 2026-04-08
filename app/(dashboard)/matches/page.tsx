@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { DataTable, type Column } from '@/components/ui/DataTable';
@@ -8,6 +9,7 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Button } from '@/components/ui/Button';
 import { formatDateTime } from '@/lib/utils';
+import { ChevronDown } from 'lucide-react';
 
 interface Match {
   id: number;
@@ -18,6 +20,7 @@ interface Match {
   score: { home: number; away: number } | null;
   predicted: boolean;
   enriched: boolean;
+  hasTestPrediction: boolean;
   competitionName?: string;
 }
 
@@ -199,6 +202,92 @@ function EnrichmentModal({ matchId, onClose }: { matchId: number; onClose: () =>
   );
 }
 
+function MatchActionsDropdown({
+  row,
+  busy,
+  onPredictTest,
+  onDeleteTest,
+}: {
+  row: Match;
+  busy: boolean;
+  onPredictTest: () => void;
+  onDeleteTest: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [menuStyle, setMenuStyle] = useState<{ top: number; left: number } | null>(null);
+
+  useEffect(() => {
+    if (!open || !buttonRef.current) return;
+
+    const updatePosition = () => {
+      if (!buttonRef.current) return;
+      const rect = buttonRef.current.getBoundingClientRect();
+      const menuWidth = 190;
+      const viewportPadding = 12;
+      const left = Math.max(viewportPadding, rect.right - menuWidth);
+      setMenuStyle({ top: rect.bottom + 4, left });
+    };
+
+    updatePosition();
+    window.addEventListener('scroll', updatePosition, true);
+    window.addEventListener('resize', updatePosition);
+
+    return () => {
+      window.removeEventListener('scroll', updatePosition, true);
+      window.removeEventListener('resize', updatePosition);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const predictDisabled = busy || !row.enriched || row.hasTestPrediction;
+  const deleteDisabled = busy || !row.hasTestPrediction;
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        ref={buttonRef}
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-sans font-medium bg-surface-3 text-text-secondary hover:text-text-primary transition-colors"
+      >
+        Opciones
+        <ChevronDown size={13} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && menuStyle && createPortal(
+        <div
+          className="fixed z-[100] rounded-xl py-1 min-w-[190px] shadow-lg"
+          style={{ top: menuStyle.top, left: menuStyle.left, background: '#1A2538', border: '1px solid rgba(255,255,255,0.12)' }}
+        >
+          <button
+            onClick={() => { onPredictTest(); setOpen(false); }}
+            disabled={predictDisabled}
+            className={`w-full text-left px-3 py-2 text-xs font-sans transition-colors ${predictDisabled ? 'text-text-muted/40 cursor-not-allowed' : 'text-text-secondary hover:text-text-primary hover:bg-surface-3'}`}
+          >
+            Predecir (test)
+          </button>
+          <button
+            onClick={() => { onDeleteTest(); setOpen(false); }}
+            disabled={deleteDisabled}
+            className={`w-full text-left px-3 py-2 text-xs font-sans transition-colors ${deleteDisabled ? 'text-text-muted/40 cursor-not-allowed' : 'text-danger hover:bg-surface-3'}`}
+          >
+            Borrar prediccion (test)
+          </button>
+        </div>,
+        document.body,
+      )}
+    </div>
+  );
+}
+
 // ── Main Page ──────────────────────────────────────────────
 
 export default function MatchesPage() {
@@ -210,14 +299,23 @@ export default function MatchesPage() {
   const [viewMode, setViewMode] = useState<ViewMode>('by_date_competition');
   const [enrichmentMatchId, setEnrichmentMatchId] = useState<number | null>(null);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const [actionMatchId, setActionMatchId] = useState<number | null>(null);
+  const [actionResult, setActionResult] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Reset collapsed state when view mode changes
   useEffect(() => { setCollapsedGroups(new Set()); }, [viewMode]);
 
+  useEffect(() => {
+    if (!actionResult) return;
+    const timer = window.setTimeout(() => setActionResult(null), 4000);
+    return () => window.clearTimeout(timer);
+  }, [actionResult]);
+
   const toggleGroup = (key: string) => {
     setCollapsedGroups((prev) => {
       const next = new Set(prev);
-      next.has(key) ? next.delete(key) : next.add(key);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
   };
@@ -242,6 +340,48 @@ export default function MatchesPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['matches'] }),
   });
 
+  const triggerTestPrediction = useMutation({
+    mutationFn: (matchId: number) => api.post(`/admin/matches/${matchId}/test-prediction`, {}),
+    onMutate: (matchId) => {
+      setActionMatchId(matchId);
+      setActionResult(null);
+    },
+    onSuccess: (_data, matchId) => {
+      setActionResult({ type: 'success', text: `Prediccion test lanzada para el partido #${matchId}.` });
+    },
+    onError: (error: Error, matchId) => {
+      setActionResult({ type: 'error', text: `No se pudo lanzar la prediccion test para el partido #${matchId}: ${error.message}` });
+    },
+    onSettled: () => {
+      setActionMatchId(null);
+      qc.invalidateQueries({ queryKey: ['matches'] });
+      qc.invalidateQueries({ queryKey: ['jobs'] });
+      qc.invalidateQueries({ queryKey: ['consumo'] });
+      qc.invalidateQueries({ queryKey: ['consumo-summary'] });
+    },
+  });
+
+  const removeTestPrediction = useMutation({
+    mutationFn: (matchId: number) => api.delete(`/admin/matches/${matchId}/test-prediction`),
+    onMutate: (matchId) => {
+      setActionMatchId(matchId);
+      setActionResult(null);
+    },
+    onSuccess: (_data, matchId) => {
+      setActionResult({ type: 'success', text: `Prediccion test borrada para el partido #${matchId}.` });
+    },
+    onError: (error: Error, matchId) => {
+      setActionResult({ type: 'error', text: `No se pudo borrar la prediccion test del partido #${matchId}: ${error.message}` });
+    },
+    onSettled: () => {
+      setActionMatchId(null);
+      qc.invalidateQueries({ queryKey: ['matches'] });
+      qc.invalidateQueries({ queryKey: ['jobs'] });
+      qc.invalidateQueries({ queryKey: ['consumo'] });
+      qc.invalidateQueries({ queryKey: ['consumo-summary'] });
+    },
+  });
+
   const { data, isLoading } = useQuery<MatchesResponse>({
     queryKey: ['matches', page, status, competitionId, dateRange],
     queryFn: () => {
@@ -257,7 +397,7 @@ export default function MatchesPage() {
     },
   });
 
-  const items = data?.items ?? [];
+  const items = useMemo(() => data?.items ?? [], [data?.items]);
 
   const matchCounts = useMemo(() => {
     let upcoming = 0, finished = 0;
@@ -355,6 +495,15 @@ export default function MatchesPage() {
       ),
     },
     {
+      key: 'testPrediction',
+      header: 'Test',
+      render: (row) => (
+        <span className={row.hasTestPrediction ? 'text-amber-300 text-xs' : 'text-text-muted text-xs'}>
+          {row.hasTestPrediction ? 'TEST' : 'No'}
+        </span>
+      ),
+    },
+    {
       key: 'enriched',
       header: 'Enriched',
       render: (row) => {
@@ -368,6 +517,18 @@ export default function MatchesPage() {
           </button>
         );
       },
+    },
+    {
+      key: 'actions',
+      header: 'Opciones',
+      render: (row) => (
+        <MatchActionsDropdown
+          row={row}
+          busy={actionMatchId === row.id}
+          onPredictTest={() => triggerTestPrediction.mutate(row.id)}
+          onDeleteTest={() => removeTestPrediction.mutate(row.id)}
+        />
+      ),
     },
   ];
 
@@ -392,7 +553,7 @@ export default function MatchesPage() {
     <div>
       <PageHeader
         title="Matches"
-        description="All matches in the database"
+        description="All matches in the database. Test predictions stay out of production KPIs and stats."
         action={
           <div className="flex gap-2">
             <Button variant="secondary" loading={syncResults.isPending} onClick={() => syncResults.mutate()}>
@@ -407,6 +568,12 @@ export default function MatchesPage() {
           </div>
         }
       />
+
+      {actionResult && (
+        <p className={`text-sm font-sans mb-4 ${actionResult.type === 'success' ? 'text-success' : 'text-danger'}`}>
+          {actionResult.text}
+        </p>
+      )}
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3 mb-4">

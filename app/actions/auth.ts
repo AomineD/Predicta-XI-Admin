@@ -3,7 +3,7 @@
 import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
 import { createSession, deleteSession } from '@/lib/session';
-import { verifyCredentials, checkRateLimit, clearRateLimit } from '@/lib/auth';
+import { checkRateLimit, clearRateLimit, getSessionVersion } from '@/lib/auth';
 
 export interface LoginState {
   error?: string;
@@ -12,6 +12,7 @@ export interface LoginState {
 export async function login(_prevState: LoginState | undefined, formData: FormData): Promise<LoginState> {
   const email = formData.get('email') as string;
   const password = formData.get('password') as string;
+  const normalizedEmail = email?.trim().toLowerCase();
 
   if (!email || !password) {
     return { error: 'Email and password are required' };
@@ -26,16 +27,15 @@ export async function login(_prevState: LoginState | undefined, formData: FormDa
     return { error: `Too many login attempts. Try again in ${rateCheck.retryAfterSeconds} seconds.` };
   }
 
-  const valid = await verifyCredentials(email, password);
-
-  if (!valid) {
+  const sessionVersion = await getSessionVersion(normalizedEmail, password);
+  if (sessionVersion == null) {
     return { error: 'Invalid email or password' };
   }
 
   // Clear rate limit on success
   clearRateLimit(ip);
 
-  await createSession(email);
+  await createSession(normalizedEmail, sessionVersion);
   redirect('/');
 }
 

@@ -17,6 +17,7 @@ interface PredictionJob {
   totalMatches: number;
   predicted: number;
   failed: number;
+  isTest: boolean;
   startedAt: string | null;
   finishedAt: string | null;
   errorLog: unknown;
@@ -310,7 +311,12 @@ export default function JobsPage() {
     {
       key: 'model',
       header: 'Model',
-      render: (row) => <span className="text-text-secondary text-xs">{row.model ?? '—'}</span>,
+      render: (row) => (
+        <div className="flex items-center gap-2">
+          <span className="text-text-secondary text-xs">{row.model ?? '—'}</span>
+          {row.isTest && <span className="px-1.5 py-0.5 rounded bg-amber-400/15 text-amber-300 text-[10px] font-semibold">TEST</span>}
+        </div>
+      ),
     },
     {
       key: 'processed',
@@ -464,7 +470,7 @@ export default function JobsPage() {
 
   return (
     <div>
-      <PageHeader title="Jobs" description="Scheduler job history — auto-refreshes every 10s" />
+      <PageHeader title="Jobs" description="Scheduler job history — auto-refreshes every 10s. Test prediction jobs are marked as TEST and excluded from KPIs/stats." />
 
       {schedulerStatus && <SchedulerBanners status={schedulerStatus} />}
 
