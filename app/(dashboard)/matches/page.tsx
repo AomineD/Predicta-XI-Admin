@@ -205,11 +205,13 @@ function EnrichmentModal({ matchId, onClose }: { matchId: number; onClose: () =>
 function MatchActionsDropdown({
   row,
   busy,
+  onRebuildEnrichment,
   onPredictTest,
   onDeleteTest,
 }: {
   row: Match;
   busy: boolean;
+  onRebuildEnrichment: () => void;
   onPredictTest: () => void;
   onDeleteTest: () => void;
 }) {
@@ -225,7 +227,7 @@ function MatchActionsDropdown({
     const updatePosition = () => {
       if (!buttonRef.current) return;
       const rect = buttonRef.current.getBoundingClientRect();
-      const menuWidth = 190;
+      const menuWidth = 210;
       const viewportPadding = 12;
       const left = Math.max(viewportPadding, rect.right - menuWidth);
       setMenuStyle({ top: rect.bottom + 4, left });
@@ -270,9 +272,16 @@ function MatchActionsDropdown({
       {open && menuStyle && createPortal(
         <div
           ref={menuRef}
-          className="fixed z-[100] rounded-xl py-1 min-w-[190px] shadow-lg"
+          className="fixed z-[100] rounded-xl py-1 min-w-[210px] shadow-lg"
           style={{ top: menuStyle.top, left: menuStyle.left, background: '#1A2538', border: '1px solid rgba(255,255,255,0.12)' }}
         >
+          <button
+            onClick={() => { onRebuildEnrichment(); setOpen(false); }}
+            disabled={busy}
+            className={`w-full text-left px-3 py-2 text-xs font-sans transition-colors ${busy ? 'text-text-muted/40 cursor-not-allowed' : 'text-text-secondary hover:text-text-primary hover:bg-surface-3'}`}
+          >
+            Rehacer enrichment
+          </button>
           <button
             onClick={() => { onPredictTest(); setOpen(false); }}
             disabled={predictDisabled}
@@ -347,13 +356,13 @@ export default function MatchesPage() {
   });
 
   const triggerTestPrediction = useMutation({
-    mutationFn: (matchId: number) => api.post(`/admin/matches/${matchId}/test-prediction`, {}),
+    mutationFn: (matchId: number) => api.post<{ jobId: number; status: string }>(`/admin/matches/${matchId}/test-prediction`, {}),
     onMutate: (matchId) => {
       setActionMatchId(matchId);
       setActionResult(null);
     },
-    onSuccess: (_data, matchId) => {
-      setActionResult({ type: 'success', text: `Prediccion test lanzada para el partido #${matchId}.` });
+    onSuccess: (data: { jobId: number; status: string }, matchId) => {
+      setActionResult({ type: 'success', text: `Prediccion test encolada para el partido #${matchId}. Job #${data.jobId}.` });
     },
     onError: (error: Error, matchId) => {
       setActionResult({ type: 'error', text: `No se pudo lanzar la prediccion test para el partido #${matchId}: ${error.message}` });
@@ -364,6 +373,25 @@ export default function MatchesPage() {
       qc.invalidateQueries({ queryKey: ['jobs'] });
       qc.invalidateQueries({ queryKey: ['consumo'] });
       qc.invalidateQueries({ queryKey: ['consumo-summary'] });
+    },
+  });
+
+  const rebuildEnrichment = useMutation({
+    mutationFn: (matchId: number) => api.post<{ jobId: number; status: string }>(`/admin/matches/${matchId}/re-enrichment`, {}),
+    onMutate: (matchId) => {
+      setActionMatchId(matchId);
+      setActionResult(null);
+    },
+    onSuccess: (data, matchId) => {
+      setActionResult({ type: 'success', text: `Re-enrichment encolado para el partido #${matchId}. Job #${data.jobId}.` });
+    },
+    onError: (error: Error, matchId) => {
+      setActionResult({ type: 'error', text: `No se pudo rehacer enrichment del partido #${matchId}: ${error.message}` });
+    },
+    onSettled: () => {
+      setActionMatchId(null);
+      qc.invalidateQueries({ queryKey: ['matches'] });
+      qc.invalidateQueries({ queryKey: ['jobs'] });
     },
   });
 
@@ -531,6 +559,7 @@ export default function MatchesPage() {
         <MatchActionsDropdown
           row={row}
           busy={actionMatchId === row.id}
+          onRebuildEnrichment={() => rebuildEnrichment.mutate(row.id)}
           onPredictTest={() => triggerTestPrediction.mutate(row.id)}
           onDeleteTest={() => removeTestPrediction.mutate(row.id)}
         />
