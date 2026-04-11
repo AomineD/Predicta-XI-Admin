@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
@@ -19,7 +19,9 @@ interface PredictionConfig {
   matchSyncEnabled: boolean;
   matchSyncIntervalHours: number;
   resultSyncEnabled: boolean;
-  resultSyncIntervalHours: number;
+  resultSyncInitialDelayMinutes: number;
+  resultSyncRetryIntervalMinutes: number;
+  resultSyncMaxRetryHours: number;
   enrichmentSyncEnabled: boolean;
   enrichmentSyncIntervalMinutes: number;
   llmTimeoutSeconds: number;
@@ -137,20 +139,24 @@ export default function ConfigPage() {
 
   const [form, setForm] = useState<PredictionConfig | null>(null);
 
-  useEffect(() => {
-    if (cfg && !form) setForm({
+  const initialForm = useMemo<PredictionConfig | null>(() => {
+    if (!cfg) return null;
+
+    return {
       ...cfg,
       matchSyncEnabled: cfg.matchSyncEnabled ?? false,
       matchSyncIntervalHours: cfg.matchSyncIntervalHours ?? 12,
       resultSyncEnabled: cfg.resultSyncEnabled ?? false,
-      resultSyncIntervalHours: cfg.resultSyncIntervalHours ?? 12,
+      resultSyncInitialDelayMinutes: cfg.resultSyncInitialDelayMinutes ?? 120,
+      resultSyncRetryIntervalMinutes: cfg.resultSyncRetryIntervalMinutes ?? 5,
+      resultSyncMaxRetryHours: cfg.resultSyncMaxRetryHours ?? 24,
       enrichmentSyncEnabled: cfg.enrichmentSyncEnabled ?? false,
       enrichmentSyncIntervalMinutes: cfg.enrichmentSyncIntervalMinutes ?? 15,
       llmTimeoutSeconds: cfg.llmTimeoutSeconds ?? 30,
       predictionWindowMinutes: cfg.predictionWindowMinutes ?? 0,
       featuredLeagueIds: cfg.featuredLeagueIds ?? [39, 140, 135],
-    });
-  }, [cfg, form]);
+    };
+  }, [cfg]);
 
   const saveConfig = useMutation({
     mutationFn: (body: PredictionConfig) => api.put('/admin/prediction-config', body),
@@ -280,10 +286,12 @@ export default function ConfigPage() {
     },
   });
 
-  if (!form) return <p className="text-text-muted text-sm">Loading config...</p>;
+  const activeForm = form ?? initialForm;
+
+  if (!activeForm) return <p className="text-text-muted text-sm">Loading config...</p>;
 
   const setField = <K extends keyof PredictionConfig>(key: K, value: PredictionConfig[K]) =>
-    setForm((f) => f ? { ...f, [key]: value } : f);
+    setForm((f) => ({ ...(f ?? activeForm), [key]: value }));
 
   return (
     <div>
@@ -291,7 +299,7 @@ export default function ConfigPage() {
         title="Config"
         description="Prediction engine settings and API keys"
         action={
-          <Button variant="primary" loading={saveConfig.isPending} onClick={() => saveConfig.mutate(form)}>
+          <Button variant="primary" loading={saveConfig.isPending} onClick={() => saveConfig.mutate(activeForm)}>
             Save Config
           </Button>
         }
@@ -301,7 +309,7 @@ export default function ConfigPage() {
       <SectionCard title="Model & Reasoning" subtitle="LLM model configuration for prediction generation">
         <Field label="Active model" subtitle="LLM model used for generating match predictions">
           <select
-            value={form.model}
+            value={activeForm.model}
             onChange={(e) => setField('model', e.target.value)}
             className="h-9 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
           >
@@ -311,7 +319,7 @@ export default function ConfigPage() {
 
         <Field label="Reasoning effort" subtitle="Depth of reasoning for supported models (DeepSeek R1, GPT Think)">
           <select
-            value={form.reasoningEffort ?? ''}
+            value={activeForm.reasoningEffort ?? ''}
             onChange={(e) => setField('reasoningEffort', e.target.value || null)}
             className="h-9 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
           >
@@ -324,14 +332,14 @@ export default function ConfigPage() {
             type="number"
             min={15}
             max={300}
-            value={form.llmTimeoutSeconds}
+            value={activeForm.llmTimeoutSeconds}
             onChange={(e) => setField('llmTimeoutSeconds', Number(e.target.value))}
             className="h-9 w-24 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
           />
         </Field>
 
         <Field label="Historical context" subtitle="Include past prediction outcomes to improve accuracy">
-          <Toggle value={form.historicalContextEnabled} onChange={(v) => setField('historicalContextEnabled', v)} />
+          <Toggle value={activeForm.historicalContextEnabled} onChange={(v) => setField('historicalContextEnabled', v)} />
         </Field>
       </SectionCard>
 
@@ -340,7 +348,7 @@ export default function ConfigPage() {
         <SubHeading>Predictions</SubHeading>
 
         <Field label="Enabled" subtitle="When off, predictions must be triggered manually">
-          <Toggle value={form.automationEnabled} onChange={(v) => setField('automationEnabled', v)} />
+          <Toggle value={activeForm.automationEnabled} onChange={(v) => setField('automationEnabled', v)} />
         </Field>
 
         <Field label="Interval (minutes)" subtitle="How often the prediction scheduler runs automatically">
@@ -348,7 +356,7 @@ export default function ConfigPage() {
             type="number"
             min={1}
             max={1440}
-            value={form.periodMinutes}
+            value={activeForm.periodMinutes}
             onChange={(e) => setField('periodMinutes', Number(e.target.value))}
             className="h-9 w-24 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
           />
@@ -359,7 +367,7 @@ export default function ConfigPage() {
             type="number"
             min={1}
             max={100}
-            value={form.batchSize}
+            value={activeForm.batchSize}
             onChange={(e) => setField('batchSize', Number(e.target.value))}
             className="h-9 w-24 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
           />
@@ -370,7 +378,7 @@ export default function ConfigPage() {
             type="number"
             min={0}
             max={1440}
-            value={form.predictionWindowMinutes}
+            value={activeForm.predictionWindowMinutes}
             onChange={(e) => setField('predictionWindowMinutes', Number(e.target.value))}
             className="h-9 w-24 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
           />
@@ -379,12 +387,12 @@ export default function ConfigPage() {
         <SubHeading>Match Sync</SubHeading>
 
         <Field label="Enabled" subtitle="Automatically sync upcoming matches from API-Football">
-          <Toggle value={form.matchSyncEnabled} onChange={(v) => setField('matchSyncEnabled', v)} />
+          <Toggle value={activeForm.matchSyncEnabled} onChange={(v) => setField('matchSyncEnabled', v)} />
         </Field>
 
         <Field label="Interval (hours)" subtitle="How often to sync upcoming week matches">
           <select
-            value={form.matchSyncIntervalHours}
+            value={activeForm.matchSyncIntervalHours}
             onChange={(e) => setField('matchSyncIntervalHours', Number(e.target.value))}
             className="h-9 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
           >
@@ -392,31 +400,54 @@ export default function ConfigPage() {
           </select>
         </Field>
 
-        <SubHeading>Result Sync</SubHeading>
+        <SubHeading>Result Queue</SubHeading>
 
-        <Field label="Enabled" subtitle="Automatically sync match results daily">
-          <Toggle value={form.resultSyncEnabled} onChange={(v) => setField('resultSyncEnabled', v)} />
+        <Field label="Enabled" subtitle="Create and process result-check jobs for predicted matches">
+          <Toggle value={activeForm.resultSyncEnabled} onChange={(v) => setField('resultSyncEnabled', v)} />
         </Field>
 
-        <Field label="Interval (hours)" subtitle="How often to sync match results">
-          <select
-            value={form.resultSyncIntervalHours}
-            onChange={(e) => setField('resultSyncIntervalHours', Number(e.target.value))}
-            className="h-9 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
-          >
-            {[6, 12, 24].map((h) => <option key={h} value={h}>{h}h</option>)}
-          </select>
+        <Field label="Initial delay (minutes)" subtitle="First result check runs this long after kickoff when a prediction creates the queue job">
+          <input
+            type="number"
+            min={30}
+            max={600}
+            value={activeForm.resultSyncInitialDelayMinutes}
+            onChange={(e) => setField('resultSyncInitialDelayMinutes', Number(e.target.value))}
+            className="h-9 w-24 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
+          />
+        </Field>
+
+        <Field label="Retry interval (minutes)" subtitle="If the match is not finished yet, retry the queue job after this delay">
+          <input
+            type="number"
+            min={1}
+            max={30}
+            value={activeForm.resultSyncRetryIntervalMinutes}
+            onChange={(e) => setField('resultSyncRetryIntervalMinutes', Number(e.target.value))}
+            className="h-9 w-24 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
+          />
+        </Field>
+
+        <Field label="Max retry window (hours)" subtitle="Stop retrying after this many hours if the match still is not finished">
+          <input
+            type="number"
+            min={1}
+            max={72}
+            value={activeForm.resultSyncMaxRetryHours}
+            onChange={(e) => setField('resultSyncMaxRetryHours', Number(e.target.value))}
+            className="h-9 w-24 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
+          />
         </Field>
 
         <SubHeading>Enrichment Sync</SubHeading>
 
         <Field label="Enabled" subtitle="Enrich matches starting within 40 min (odds, H2H, standings)">
-          <Toggle value={form.enrichmentSyncEnabled} onChange={(v) => setField('enrichmentSyncEnabled', v)} />
+          <Toggle value={activeForm.enrichmentSyncEnabled} onChange={(v) => setField('enrichmentSyncEnabled', v)} />
         </Field>
 
         <Field label="Interval (minutes)" subtitle="How often to check for matches to enrich">
           <select
-            value={form.enrichmentSyncIntervalMinutes}
+            value={activeForm.enrichmentSyncIntervalMinutes}
             onChange={(e) => setField('enrichmentSyncIntervalMinutes', Number(e.target.value))}
             className="h-9 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
           >
@@ -426,11 +457,11 @@ export default function ConfigPage() {
       </SectionCard>
 
       <SectionCard title="Output Markets" subtitle="Betting markets included in each generated prediction">
-        <MultiCheckbox options={MARKETS} value={form.outputMarkets} onChange={(v) => setField('outputMarkets', v)} />
+        <MultiCheckbox options={MARKETS} value={activeForm.outputMarkets} onChange={(v) => setField('outputMarkets', v)} />
       </SectionCard>
 
       <SectionCard title="Input Data Fields" subtitle="Data sources the model receives to generate predictions">
-        <MultiCheckbox options={DATA_FIELDS} value={form.inputDataFields} onChange={(v) => setField('inputDataFields', v)} />
+        <MultiCheckbox options={DATA_FIELDS} value={activeForm.inputDataFields} onChange={(v) => setField('inputDataFields', v)} />
       </SectionCard>
 
       <SectionCard title="API Keys" subtitle="Encrypted LLM provider keys for prediction generation">

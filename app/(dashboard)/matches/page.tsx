@@ -364,13 +364,13 @@ export default function MatchesPage() {
   const [dateRange, setDateRange] = useState<DateRange>('this_week');
   const [viewMode, setViewMode] = useState<ViewMode>('by_date_competition');
   const [enrichmentMatchId, setEnrichmentMatchId] = useState<number | null>(null);
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [actionMatchId, setActionMatchId] = useState<number | null>(null);
   const [deleteEnrichmentMatchId, setDeleteEnrichmentMatchId] = useState<number | null>(null);
   const [actionResult, setActionResult] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // Reset collapsed state when view mode changes
-  useEffect(() => { setCollapsedGroups(new Set()); }, [viewMode]);
+  // Reset expanded state when view mode changes (all collapsed by default)
+  useEffect(() => { setExpandedGroups(new Set()); }, [viewMode]);
 
   useEffect(() => {
     if (!actionResult) return;
@@ -379,7 +379,7 @@ export default function MatchesPage() {
   }, [actionResult]);
 
   const toggleGroup = (key: string) => {
-    setCollapsedGroups((prev) => {
+    setExpandedGroups((prev) => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key);
       else next.add(key);
@@ -664,18 +664,28 @@ export default function MatchesPage() {
     <div>
       <PageHeader
         title="Matches"
-        description="All matches in the database. Test predictions stay out of production KPIs and stats."
+        description="All matches in the database. Test predictions stay out of production KPIs and stats. Result Queue runs automatically; Result Sweep is a one-time manual check."
         action={
-          <div className="flex gap-2">
-            <Button variant="secondary" loading={syncResults.isPending} onClick={() => syncResults.mutate()}>
-              Sync Results
-            </Button>
-            <Button variant="secondary" loading={syncMatches.isPending} onClick={() => syncMatches.mutate()}>
-              Sync Matches
-            </Button>
-            <Button variant="primary" loading={fullSync.isPending} onClick={() => fullSync.mutate()}>
-              Full Sync
-            </Button>
+          <div className="flex flex-col items-end gap-2">
+            <div className="flex gap-2">
+              <Button
+                variant="secondary"
+                loading={syncResults.isPending}
+                onClick={() => syncResults.mutate()}
+                title="Runs a one-time manual result check for eligible matches. It does not replace the automatic Result Queue."
+              >
+                Run Result Sweep
+              </Button>
+              <Button variant="secondary" loading={syncMatches.isPending} onClick={() => syncMatches.mutate()}>
+                Sync Matches
+              </Button>
+              <Button variant="primary" loading={fullSync.isPending} onClick={() => fullSync.mutate()}>
+                Full Sync
+              </Button>
+            </div>
+            <p className="text-[11px] font-sans text-text-muted text-right max-w-[420px]">
+              Result Sweep is a one-time manual run for eligible matches. The automatic Result Queue keeps running separately.
+            </p>
           </div>
         }
       />
@@ -760,7 +770,7 @@ export default function MatchesPage() {
 
       {!isLoading && viewMode === 'by_competition' && grouped && (grouped as [string, Match[]][]).map(([comp, matchList]) => {
         const key = `comp:${comp}`;
-        const expanded = !collapsedGroups.has(key);
+        const expanded = expandedGroups.has(key);
         return (
           <div key={comp} className="mb-6">
             <button type="button" onClick={() => toggleGroup(key)} className="flex items-center gap-1.5 mb-2 px-1 cursor-pointer select-none">
@@ -775,7 +785,7 @@ export default function MatchesPage() {
 
       {!isLoading && viewMode === 'by_date' && grouped && (grouped as [string, Match[]][]).map(([date, matchList]) => {
         const key = `date:${date}`;
-        const expanded = !collapsedGroups.has(key);
+        const expanded = expandedGroups.has(key);
         return (
           <div key={date} className="mb-6">
             <button type="button" onClick={() => toggleGroup(key)} className="flex items-center gap-1.5 mb-2 px-1 cursor-pointer select-none">
@@ -790,7 +800,7 @@ export default function MatchesPage() {
 
       {!isLoading && viewMode === 'by_date_competition' && grouped && (grouped as { date: string; competitions: [string, Match[]][] }[]).map(({ date, competitions: comps }) => {
         const dateKey = `date:${date}`;
-        const dateExpanded = !collapsedGroups.has(dateKey);
+        const dateExpanded = expandedGroups.has(dateKey);
         const totalMatches = comps.reduce((sum, [, ml]) => sum + ml.length, 0);
         return (
           <div key={date} className="mb-6">
@@ -806,7 +816,7 @@ export default function MatchesPage() {
             </button>
             {dateExpanded && comps.map(([comp, matchList]) => {
               const compKey = `dc:${date}::${comp}`;
-              const compExpanded = !collapsedGroups.has(compKey);
+              const compExpanded = expandedGroups.has(compKey);
               return (
                 <div key={comp} className="mb-4 ml-2">
                   <button type="button" onClick={() => toggleGroup(compKey)} className="flex items-center gap-1 mb-1.5 px-1 cursor-pointer select-none">

@@ -51,7 +51,7 @@ interface DashboardStats {
 
 const SYNC_TYPE_LABELS: Record<string, string> = {
   match_sync: 'Match Sync',
-  result_sync: 'Result Sync',
+  result_sync: 'Manual Result Sweep',
   enrichment: 'Enrichment',
   full_sync: 'Full Sync',
 };

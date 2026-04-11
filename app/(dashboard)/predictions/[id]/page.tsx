@@ -105,18 +105,6 @@ export default function PredictionDetailPage() {
         <div className="mb-8 text-center">
           <div className="flex items-center justify-center gap-6 mb-6 bg-surface/50 inline-flex px-8 py-4 rounded-2xl border border-surface-2 mx-auto">
             <div className="flex items-center gap-3">
-              {data.match.awayTeam?.logo && (
-                <img
-                  alt={data.match.awayTeam.name}
-                  className="w-10 h-10 rounded-full bg-white"
-                  src={data.match.awayTeam.logo}
-                />
-              )}
-              <span className="text-2xl font-bold">{data.match.awayTeam?.short_name ?? data.match.awayTeam?.name}</span>
-            </div>
-            <span className="text-xl font-bold text-text-secondary">VS</span>
-            <div className="flex items-center gap-3">
-              <span className="text-2xl font-bold">{data.match.homeTeam?.short_name ?? data.match.homeTeam?.name}</span>
               {data.match.homeTeam?.logo && (
                 <img
                   alt={data.match.homeTeam.name}
@@ -124,10 +112,22 @@ export default function PredictionDetailPage() {
                   src={data.match.homeTeam.logo}
                 />
               )}
+              <span className="text-2xl font-bold">{data.match.homeTeam?.short_name ?? data.match.homeTeam?.name}</span>
+            </div>
+            <span className="text-xl font-bold text-text-secondary">VS</span>
+            <div className="flex items-center gap-3">
+              <span className="text-2xl font-bold">{data.match.awayTeam?.short_name ?? data.match.awayTeam?.name}</span>
+              {data.match.awayTeam?.logo && (
+                <img
+                  alt={data.match.awayTeam.name}
+                  className="w-10 h-10 rounded-full bg-white"
+                  src={data.match.awayTeam.logo}
+                />
+              )}
             </div>
           </div>
           <h2 className="text-2xl md:text-3xl font-bold mb-4">
-            TACTICAL PREDICTION TERMINAL: {data.match.awayTeam?.name?.toUpperCase()} VS {data.match.homeTeam?.name?.toUpperCase()}
+            TACTICAL PREDICTION TERMINAL: {data.match.homeTeam?.name?.toUpperCase()} VS {data.match.awayTeam?.name?.toUpperCase()}
           </h2>
           <div className="text-sm text-text-muted flex justify-center gap-4">
             <span>Match #{data.matchId}</span>

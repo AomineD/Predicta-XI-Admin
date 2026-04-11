@@ -30,7 +30,9 @@ interface PredictionConfig {
   matchSyncEnabled: boolean;
   matchSyncIntervalHours: number;
   resultSyncEnabled: boolean;
-  resultSyncIntervalHours: number;
+  resultSyncInitialDelayMinutes: number;
+  resultSyncRetryIntervalMinutes: number;
+  resultSyncMaxRetryHours: number;
   llmTimeoutSeconds: number;
   predictionWindowMinutes: number;
   featuredLeagueIds: number[];

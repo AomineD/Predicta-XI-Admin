@@ -17,35 +17,48 @@ export function ConfidenceCircle({ confidence }: { confidence: number }) {
     low: '#EF4444',     // danger red
   };
 
-  const rotations = {
-    high: '-45deg',
-    medium: '45deg',
-    low: '135deg',
-  };
+  const color = colors[level];
+  const size = 40;
+  const strokeWidth = 3.5;
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (confidence / 100) * circumference;
 
   return (
-    <div
-      style={{
-        width: '32px',
-        height: '32px',
-        borderRadius: '50%',
-        border: `3px solid ${colors[level]}`,
-        borderTopColor: 'transparent',
-        borderRightColor: 'transparent',
-        transform: `rotate(${rotations[level]})`,
-        display: 'inline-block',
-        flexShrink: 0,
-      }}
-    />
+    <svg
+      width={size}
+      height={size}
+      style={{ transform: 'rotate(-90deg)', flexShrink: 0 }}
+    >
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={radius}
+        fill="none"
+        stroke="#1E293B"
+        strokeWidth={strokeWidth}
+      />
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={radius}
+        fill="none"
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeDasharray={circumference}
+        strokeDashoffset={offset}
+        strokeLinecap="round"
+      />
+    </svg>
   );
 }
 
 export function ConfidenceBars({ confidence }: { confidence: number }) {
   const level = getConfidenceLevel(confidence);
   const colors = {
-    high: '#EF4444',    // danger red
+    high: '#22C55E',    // success green
     medium: '#F59E0B',  // warning amber
-    low: '#22C55E',     // success green
+    low: '#EF4444',     // danger red
   };
 
   const filledBars = Math.round(confidence / 20);
