@@ -24,6 +24,9 @@ interface PredictionConfig {
   resultSyncMaxRetryHours: number;
   enrichmentSyncEnabled: boolean;
   enrichmentSyncIntervalMinutes: number;
+  enrichmentQueueMinutesBefore: number;
+  enrichmentQueueMaxRetries: number;
+  enrichmentQueueRetryMinutes: number;
   llmTimeoutSeconds: number;
   predictionWindowMinutes: number;
   featuredLeagueIds: number[];
@@ -37,8 +40,8 @@ interface ApiKey {
 }
 
 const MODELS = ['deepseek-r1', 'gpt-5.4-mini', 'gpt-5.4', 'gpt-5.4-think', 'gemini-3.1-pro', 'glm-5', 'kimi-k2.5'];
-const MARKETS = ['match_result', 'over_under_2_5', 'btts', 'double_chance', 'asian_handicap', 'correct_score', 'first_goal'];
-const DATA_FIELDS = ['fixture_info', 'standings', 'recent_form', 'season_stats', 'h2h', 'injuries', 'odds', 'match_preview', 'squads'];
+const MARKETS = ['match_result', 'over_under_2_5', 'over_under_1_5', 'btts', 'double_chance', 'asian_handicap', 'correct_score', 'first_goal', 'corners', 'handicap', 'cards_over_under', 'penalty', 'red_card'];
+const DATA_FIELDS = ['fixture_info', 'standings', 'recent_form', 'season_stats', 'h2h', 'injuries', 'odds', 'match_preview', 'squads', 'lineups', 'squad_insights', 'key_player_form', 'deep_stats'];
 const REASONING_OPTIONS = ['', 'low', 'medium', 'high'];
 const PROVIDERS = ['deepseek', 'openai', 'google', 'zhipu', 'moonshot'];
 
@@ -439,20 +442,43 @@ export default function ConfigPage() {
           />
         </Field>
 
-        <SubHeading>Enrichment Sync</SubHeading>
+        <SubHeading>Enrichment Queue</SubHeading>
 
-        <Field label="Enabled" subtitle="Enrich matches starting within 40 min (odds, H2H, standings)">
+        <Field label="Enabled" subtitle="Enqueue matches for enrichment when approaching kickoff">
           <Toggle value={activeForm.enrichmentSyncEnabled} onChange={(v) => setField('enrichmentSyncEnabled', v)} />
         </Field>
 
-        <Field label="Interval (minutes)" subtitle="How often to check for matches to enrich">
-          <select
-            value={activeForm.enrichmentSyncIntervalMinutes}
-            onChange={(e) => setField('enrichmentSyncIntervalMinutes', Number(e.target.value))}
-            className="h-9 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
-          >
-            {[5, 10, 15, 20, 25, 30].map((m) => <option key={m} value={m}>{m}m</option>)}
-          </select>
+        <Field label="Minutes before kickoff" subtitle="How early before kickoff to trigger enrichment">
+          <input
+            type="number"
+            min={15}
+            max={180}
+            value={activeForm.enrichmentQueueMinutesBefore ?? 60}
+            onChange={(e) => setField('enrichmentQueueMinutesBefore', Number(e.target.value))}
+            className="h-9 w-24 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
+          />
+        </Field>
+
+        <Field label="Max retries" subtitle="How many times to retry if enrichment fails">
+          <input
+            type="number"
+            min={1}
+            max={10}
+            value={activeForm.enrichmentQueueMaxRetries ?? 5}
+            onChange={(e) => setField('enrichmentQueueMaxRetries', Number(e.target.value))}
+            className="h-9 w-24 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
+          />
+        </Field>
+
+        <Field label="Retry interval (minutes)" subtitle="Wait time between retry attempts">
+          <input
+            type="number"
+            min={1}
+            max={10}
+            value={activeForm.enrichmentQueueRetryMinutes ?? 2}
+            onChange={(e) => setField('enrichmentQueueRetryMinutes', Number(e.target.value))}
+            className="h-9 w-24 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
+          />
         </Field>
       </SectionCard>
 

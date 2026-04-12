@@ -42,15 +42,21 @@ interface TierInput {
   isActive: boolean;
 }
 
-const MARKETS = ['match_result', 'over_under_2_5', 'btts', 'double_chance', 'asian_handicap', 'correct_score', 'first_goal'];
+const MARKETS = ['match_result', 'over_under_2_5', 'over_under_1_5', 'btts', 'double_chance', 'asian_handicap', 'correct_score', 'first_goal', 'corners', 'handicap', 'cards_over_under', 'penalty', 'red_card'];
 const MARKET_LABELS: Record<string, string> = {
   match_result: '1X2',
   over_under_2_5: 'O/U 2.5',
+  over_under_1_5: 'O/U 1.5',
   btts: 'BTTS',
   double_chance: 'DC',
   asian_handicap: 'AH',
   correct_score: 'CS',
   first_goal: '1st Goal',
+  corners: 'Corners',
+  handicap: 'Handicap',
+  cards_over_under: 'Cards O/U',
+  penalty: 'Penalty',
+  red_card: 'Red Card',
 };
 
 const EMPTY_TIER: TierInput = {
