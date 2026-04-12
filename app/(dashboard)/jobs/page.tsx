@@ -50,11 +50,20 @@ interface JobsResponse<T> {
   items: T[];
 }
 
+interface JobActivity {
+  jobId: number | string;
+  description: string;
+  current: number;
+  total: number;
+  itemLabel: string;
+}
+
 interface SchedulerInfo {
   enabled: boolean;
   isRunning: boolean;
   nextRunAt: string;
   interval: string;
+  activity?: JobActivity | null;
 }
 
 interface ResultQueueInfo {
@@ -65,13 +74,26 @@ interface ResultQueueInfo {
   queuedJobs: number;
   dueJobs: number;
   initialDelay: string;
+  activity?: JobActivity | null;
+}
+
+interface EnrichmentQueueInfo {
+  enabled: boolean;
+  isRunning: boolean;
+  queuedJobs: number;
+  dueJobs: number;
+  nextDueAt: string;
+  maxRetries: number;
+  retryInterval: string;
+  activity?: JobActivity | null;
 }
 
 interface SchedulerStatus {
   predictions: SchedulerInfo;
   matchSync: SchedulerInfo;
   resultSync: ResultQueueInfo;
-  enrichmentSync: SchedulerInfo;
+  enrichmentQueue: EnrichmentQueueInfo;
+  settlement: SchedulerInfo;
 }
 
 type Tab = 'predictions' | 'sync';
@@ -85,6 +107,7 @@ const SYNC_TYPE_LABELS: Record<string, string> = {
   full_sync: 'Full Sync',
   competition_sync: 'Competition Sync',
   team_sync: 'Team Sync',
+  settlement: 'Settlement',
 };
 
 function formatDuration(ms: number | null): string {
@@ -131,6 +154,19 @@ function formatCountdown(s: number): string {
   return `${secs}s`;
 }
 
+function ActivityLine({ activity }: { activity: JobActivity }) {
+  return (
+    <div className="flex items-center gap-2 min-w-0">
+      <span className="text-sm text-success font-sans font-medium truncate">{activity.description}</span>
+      {activity.total > 0 && (
+        <span className="text-xs text-text-muted font-mono whitespace-nowrap">
+          [{activity.current}/{activity.total} {activity.itemLabel}{activity.total !== 1 ? 's' : ''}]
+        </span>
+      )}
+    </div>
+  );
+}
+
 function SchedulerBanner({ label, info }: { label: string; info: SchedulerInfo }) {
   const secondsLeft = useCountdown(info.nextRunAt);
   const nextRunDate = new Date(info.nextRunAt);
@@ -148,10 +184,14 @@ function SchedulerBanner({ label, info }: { label: string; info: SchedulerInfo }
 
   if (info.isRunning) {
     return (
-      <div className="rounded-2xl px-4 py-3 flex items-center gap-3" style={{ background: '#121A2B', border: '1px solid rgba(124,255,91,0.3)' }}>
+      <div className="rounded-2xl px-4 py-3 flex items-center gap-3 min-w-0" style={{ background: '#121A2B', border: '1px solid rgba(124,255,91,0.3)' }}>
         <span className="w-2 h-2 rounded-full bg-success animate-pulse flex-none" />
-        <span className="text-sm text-text-secondary font-sans">{label}</span>
-        <span className="text-sm text-success font-sans font-medium ml-auto">Running now...</span>
+        <span className="text-sm text-text-secondary font-sans flex-none">{label}</span>
+        {info.activity ? (
+          <ActivityLine activity={info.activity} />
+        ) : (
+          <span className="text-sm text-success font-sans font-medium">Running now...</span>
+        )}
       </div>
     );
   }
@@ -185,12 +225,16 @@ function ResultQueueBanner({ info }: { info: ResultQueueInfo }) {
 
   if (info.isRunning) {
     return (
-      <div className="rounded-2xl px-4 py-3 flex items-center gap-3" style={{ background: '#121A2B', border: '1px solid rgba(124,255,91,0.3)' }}>
+      <div className="rounded-2xl px-4 py-3 flex items-center gap-3 min-w-0" style={{ background: '#121A2B', border: '1px solid rgba(124,255,91,0.3)' }}>
         <span className="w-2 h-2 rounded-full bg-success animate-pulse flex-none" />
-        <span className="text-sm text-text-secondary font-sans">Result Queue</span>
-        <span className="text-sm text-success font-sans font-medium">processing queue</span>
-        <span className="text-xs text-text-muted font-sans ml-auto">
-          retry every {info.retryInterval} · queued {info.queuedJobs} · due {info.dueJobs}
+        <span className="text-sm text-text-secondary font-sans flex-none">Result Queue</span>
+        {info.activity ? (
+          <ActivityLine activity={info.activity} />
+        ) : (
+          <span className="text-sm text-success font-sans font-medium">processing queue</span>
+        )}
+        <span className="text-xs text-text-muted font-sans ml-auto whitespace-nowrap">
+          queued {info.queuedJobs} · due {info.dueJobs}
         </span>
       </div>
     );
@@ -223,13 +267,72 @@ function ResultQueueBanner({ info }: { info: ResultQueueInfo }) {
   );
 }
 
+function EnrichmentQueueBanner({ info }: { info: EnrichmentQueueInfo }) {
+  const hasQueuedJobs = info.queuedJobs > 0;
+  const hasDueJobs = info.dueJobs > 0;
+
+  if (!info.enabled) {
+    return (
+      <div className="rounded-2xl px-4 py-3 flex items-center gap-3" style={{ background: '#121A2B', border: '1px solid rgba(255,255,255,0.08)' }}>
+        <span className="w-2 h-2 rounded-full bg-text-muted flex-none" />
+        <span className="text-sm text-text-muted font-sans">Enrichment Queue</span>
+        <span className="text-xs text-text-muted font-sans ml-auto">disabled</span>
+      </div>
+    );
+  }
+
+  if (info.isRunning) {
+    return (
+      <div className="rounded-2xl px-4 py-3 flex items-center gap-3 min-w-0" style={{ background: '#121A2B', border: '1px solid rgba(124,255,91,0.3)' }}>
+        <span className="w-2 h-2 rounded-full bg-success animate-pulse flex-none" />
+        <span className="text-sm text-text-secondary font-sans flex-none">Enrichment Queue</span>
+        {info.activity ? (
+          <ActivityLine activity={info.activity} />
+        ) : (
+          <span className="text-sm text-success font-sans font-medium">enriching matches...</span>
+        )}
+        <span className="text-xs text-text-muted font-sans ml-auto whitespace-nowrap">
+          queued {info.queuedJobs} · due {info.dueJobs}
+        </span>
+      </div>
+    );
+  }
+
+  if (!hasQueuedJobs) {
+    return (
+      <div className="rounded-2xl px-4 py-3 flex items-center gap-3" style={{ background: '#121A2B', border: '1px solid rgba(77,168,255,0.2)' }}>
+        <span className="w-2 h-2 rounded-full bg-blue-400 flex-none" />
+        <span className="text-sm text-text-secondary font-sans">Enrichment Queue</span>
+        <span className="text-sm font-semibold text-blue-400 font-sans">queue idle</span>
+        <span className="text-xs text-text-muted font-sans ml-auto">
+          triggers at T-60min · max {info.maxRetries} retries · retry every {info.retryInterval}
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-2xl px-4 py-3 flex items-center gap-3" style={{ background: '#121A2B', border: '1px solid rgba(77,168,255,0.2)' }}>
+      <span className={`w-2 h-2 rounded-full flex-none ${hasDueJobs ? 'bg-amber-300' : 'bg-blue-400'}`} />
+      <span className="text-sm text-text-secondary font-sans">Enrichment Queue</span>
+      <span className={`text-sm font-semibold font-sans ${hasDueJobs ? 'text-amber-300' : 'text-blue-400'}`}>
+        {hasDueJobs ? `${info.dueJobs} due now` : `${info.queuedJobs} queued`}
+      </span>
+      <span className="text-xs text-text-muted font-sans ml-auto">
+        max {info.maxRetries} retries · retry every {info.retryInterval} · queued {info.queuedJobs} · due {info.dueJobs}
+      </span>
+    </div>
+  );
+}
+
 function SchedulerBanners({ status }: { status: SchedulerStatus }) {
   return (
     <div className="flex flex-col gap-2 mb-4">
       <SchedulerBanner label="Match Sync" info={status.matchSync} />
       <ResultQueueBanner info={status.resultSync} />
-      <SchedulerBanner label="Enrichment Sync" info={status.enrichmentSync} />
+      <EnrichmentQueueBanner info={status.enrichmentQueue} />
       <SchedulerBanner label="Predictions" info={status.predictions} />
+      <SchedulerBanner label="Settlement" info={status.settlement} />
     </div>
   );
 }
@@ -366,7 +469,7 @@ export default function JobsPage() {
   const { data: schedulerStatus } = useQuery<SchedulerStatus>({
     queryKey: ['scheduler-status'],
     queryFn: () => api.get('/admin/scheduler-status'),
-    refetchInterval: 30_000,
+    refetchInterval: 10_000,
   });
 
   // ── Prediction job columns ──
