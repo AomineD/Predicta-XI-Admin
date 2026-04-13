@@ -93,7 +93,7 @@ interface SchedulerStatus {
   matchSync: SchedulerInfo;
   resultSync: ResultQueueInfo;
   enrichmentQueue: EnrichmentQueueInfo;
-  settlement: SchedulerInfo;
+  settlement: EnrichmentQueueInfo;
 }
 
 type Tab = 'predictions' | 'sync';
@@ -383,6 +383,64 @@ function PredictionQueueBanner({ info }: { info: EnrichmentQueueInfo }) {
   );
 }
 
+function SettlementQueueBanner({ info }: { info: EnrichmentQueueInfo }) {
+  const hasQueuedJobs = info.queuedJobs > 0;
+  const hasDueJobs = info.dueJobs > 0;
+
+  if (!info.enabled) {
+    return (
+      <div className="rounded-2xl px-4 py-3 flex items-center gap-3" style={{ background: '#121A2B', border: '1px solid rgba(255,255,255,0.08)' }}>
+        <span className="w-2 h-2 rounded-full bg-text-muted flex-none" />
+        <span className="text-sm text-text-muted font-sans">Settlement</span>
+        <span className="text-xs text-text-muted font-sans ml-auto">disabled</span>
+      </div>
+    );
+  }
+
+  if (info.isRunning) {
+    return (
+      <div className="rounded-2xl px-4 py-3 flex items-center gap-3 min-w-0" style={{ background: '#121A2B', border: '1px solid rgba(124,255,91,0.3)' }}>
+        <span className="w-2 h-2 rounded-full bg-success animate-pulse flex-none" />
+        <span className="text-sm text-text-secondary font-sans flex-none">Settlement</span>
+        {info.activity ? (
+          <ActivityLine activity={info.activity} />
+        ) : (
+          <span className="text-sm text-success font-sans font-medium">settling predictions...</span>
+        )}
+        <span className="text-xs text-text-muted font-sans ml-auto whitespace-nowrap">
+          queued {info.queuedJobs} · due {info.dueJobs}
+        </span>
+      </div>
+    );
+  }
+
+  if (!hasQueuedJobs) {
+    return (
+      <div className="rounded-2xl px-4 py-3 flex items-center gap-3" style={{ background: '#121A2B', border: '1px solid rgba(77,168,255,0.2)' }}>
+        <span className="w-2 h-2 rounded-full bg-blue-400 flex-none" />
+        <span className="text-sm text-text-secondary font-sans">Settlement</span>
+        <span className="text-sm font-semibold text-blue-400 font-sans">queue idle</span>
+        <span className="text-xs text-text-muted font-sans ml-auto">
+          waiting for finished matches · max {info.maxRetries} retries · retry every {info.retryInterval}
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-2xl px-4 py-3 flex items-center gap-3" style={{ background: '#121A2B', border: '1px solid rgba(77,168,255,0.2)' }}>
+      <span className={`w-2 h-2 rounded-full flex-none ${hasDueJobs ? 'bg-amber-300' : 'bg-blue-400'}`} />
+      <span className="text-sm text-text-secondary font-sans">Settlement</span>
+      <span className={`text-sm font-semibold font-sans ${hasDueJobs ? 'text-amber-300' : 'text-blue-400'}`}>
+        {hasDueJobs ? `${info.dueJobs} due now` : `${info.queuedJobs} queued`}
+      </span>
+      <span className="text-xs text-text-muted font-sans ml-auto">
+        max {info.maxRetries} retries · retry every {info.retryInterval} · queued {info.queuedJobs} · due {info.dueJobs}
+      </span>
+    </div>
+  );
+}
+
 function SchedulerBanners({ status }: { status: SchedulerStatus }) {
   return (
     <div className="flex flex-col gap-2 mb-4">
@@ -390,7 +448,7 @@ function SchedulerBanners({ status }: { status: SchedulerStatus }) {
       <ResultQueueBanner info={status.resultSync} />
       <EnrichmentQueueBanner info={status.enrichmentQueue} />
       <PredictionQueueBanner info={status.predictions} />
-      <SchedulerBanner label="Settlement" info={status.settlement} />
+      <SettlementQueueBanner info={status.settlement} />
     </div>
   );
 }
