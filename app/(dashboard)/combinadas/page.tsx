@@ -102,22 +102,22 @@ export default function CombinadasPage() {
   const combinadaColumns: Column<Combinada>[] = [
     {
       key: 'settlement',
-      label: 'Status',
+      header: 'Status',
       render: (c) => <StatusBadge status={c.settlement} />,
     },
     {
       key: 'type',
-      label: 'Type',
+      header: 'Type',
       render: (c) => (
         <span className={`px-2 py-0.5 rounded text-xs font-medium ${c.type === 'premium' ? 'bg-amber-500/20 text-amber-400' : 'bg-blue-500/20 text-blue-400'}`}>
           {c.type}
         </span>
       ),
     },
-    { key: 'legs', label: 'Legs' },
+    { key: 'legs', header: 'Legs', render: (c) => <span>{c.legs}</span> },
     {
       key: 'picks',
-      label: 'Matches',
+      header: 'Matches',
       render: (c) => (
         <span className="text-xs text-text-secondary truncate max-w-[250px] inline-block">
           {c.picks.map((p) => `${p.homeTeam} v ${p.awayTeam}`).join(' / ')}
@@ -126,21 +126,22 @@ export default function CombinadasPage() {
     },
     {
       key: 'combinedConfidence',
-      label: 'Confidence',
+      header: 'Confidence',
       render: (c) => <span className="font-mono">{c.combinedConfidence}%</span>,
     },
     {
       key: 'combinedOdds',
-      label: 'Odds',
+      header: 'Odds',
       render: (c) => <span className="font-mono">{c.combinedOdds ?? '-'}</span>,
     },
     {
       key: 'date',
-      label: 'Date',
+      header: 'Date',
+      render: (c) => <span>{c.date}</span>,
     },
     {
       key: 'actions',
-      label: '',
+      header: '',
       render: (c) => (
         <button
           className="text-xs text-primary hover:underline"
@@ -155,29 +156,31 @@ export default function CombinadasPage() {
   const jobColumns: Column<CombinadaJob>[] = [
     {
       key: 'status',
-      label: 'Status',
+      header: 'Status',
       render: (j) => <StatusBadge status={j.status} />,
     },
-    { key: 'date', label: 'Date' },
-    { key: 'model', label: 'Model' },
+    { key: 'date', header: 'Date', render: (j) => <span>{j.date}</span> },
+    { key: 'model', header: 'Model', render: (j) => <span>{j.model ?? '-'}</span> },
     {
       key: 'basePredictionsGenerated',
-      label: 'Base Preds',
+      header: 'Base Preds',
+      render: (j) => <span>{j.basePredictionsGenerated}</span>,
     },
     {
       key: 'combinadasGenerated',
-      label: 'Combinadas',
+      header: 'Combinadas',
+      render: (j) => <span>{j.combinadasGenerated}</span>,
     },
-    { key: 'failed', label: 'Failed' },
+    { key: 'failed', header: 'Failed', render: (j) => <span>{j.failed}</span> },
     {
       key: 'startedAt',
-      label: 'Started',
-      render: (j) => j.startedAt ? formatDateTime(j.startedAt) : '-',
+      header: 'Started',
+      render: (j) => <span>{j.startedAt ? formatDateTime(j.startedAt) : '-'}</span>,
     },
     {
       key: 'finishedAt',
-      label: 'Completed',
-      render: (j) => j.finishedAt ? formatDateTime(j.finishedAt) : '-',
+      header: 'Completed',
+      render: (j) => <span>{j.finishedAt ? formatDateTime(j.finishedAt) : '-'}</span>,
     },
   ];
 
