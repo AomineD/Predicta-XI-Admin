@@ -17,6 +17,8 @@ interface CreditsConfig {
   iapCredits10: number;
   iapCredits25: number;
   iapCredits50: number;
+  weeklyActivityBonus: number;
+  weeklyActivityMinDays: number;
 }
 
 interface Tier {
@@ -359,6 +361,16 @@ export default function CreditsPage() {
         </Field>
         <Field label="Ad reward" subtitle="Credits earned per rewarded ad view">
           <NumInput value={f.adRewardCredits} onChange={(v) => set('adRewardCredits', v)} />
+        </Field>
+      </SectionCard>
+
+      {/* ── Section A2: Weekly Activity Bonus ── */}
+      <SectionCard title="Weekly Activity Bonus" subtitle="Reward users for daily engagement — runs every Monday. Set amount to 0 to disable.">
+        <Field label="Bonus credits" subtitle="Credits awarded to qualifying users each week">
+          <NumInput value={f.weeklyActivityBonus} onChange={(v) => set('weeklyActivityBonus', v)} />
+        </Field>
+        <Field label="Minimum active days" subtitle="Distinct days per week user must open the app (1–7)">
+          <NumInput value={f.weeklyActivityMinDays} onChange={(v) => set('weeklyActivityMinDays', v)} min={1} />
         </Field>
       </SectionCard>
 

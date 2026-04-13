@@ -47,6 +47,8 @@ interface PredictionDetail {
     awayTeam: { name: string; short_name: string; logo: string };
     status: string;
     kickoff: string;
+    score?: { home: number; away: number } | null;
+    flashscoreId?: string | null;
   };
 }
 
@@ -103,29 +105,51 @@ export default function PredictionDetailPage() {
       {/* Header with Team Info */}
       {data.match && (
         <div className="mb-8 text-center">
-          <div className="flex items-center justify-center gap-6 mb-6 bg-surface/50 inline-flex px-8 py-4 rounded-2xl border border-surface-2 mx-auto">
-            <div className="flex items-center gap-3">
-              {data.match.homeTeam?.logo && (
-                <img
-                  alt={data.match.homeTeam.name}
-                  className="w-10 h-10 rounded-full bg-white"
-                  src={data.match.homeTeam.logo}
-                />
-              )}
-              <span className="text-2xl font-bold">{data.match.homeTeam?.short_name ?? data.match.homeTeam?.name}</span>
-            </div>
-            <span className="text-xl font-bold text-text-secondary">VS</span>
-            <div className="flex items-center gap-3">
-              <span className="text-2xl font-bold">{data.match.awayTeam?.short_name ?? data.match.awayTeam?.name}</span>
-              {data.match.awayTeam?.logo && (
-                <img
-                  alt={data.match.awayTeam.name}
-                  className="w-10 h-10 rounded-full bg-white"
-                  src={data.match.awayTeam.logo}
-                />
-              )}
-            </div>
-          </div>
+          {(() => {
+            const cardContent = (
+              <div className="flex items-center justify-center gap-6 bg-surface/50 inline-flex px-8 py-4 rounded-2xl border border-surface-2 mx-auto transition-transform duration-200 hover:scale-[1.03]">
+                <div className="flex items-center gap-3">
+                  {data.match.homeTeam?.logo && (
+                    <img
+                      alt={data.match.homeTeam.name}
+                      className="w-10 h-10 rounded-full bg-white"
+                      src={data.match.homeTeam.logo}
+                    />
+                  )}
+                  <span className="text-2xl font-bold">{data.match.homeTeam?.short_name ?? data.match.homeTeam?.name}</span>
+                </div>
+                {data.match.score != null ? (
+                  <span className="text-2xl font-bold text-text-primary tabular-nums">
+                    {data.match.score.home}-{data.match.score.away}
+                  </span>
+                ) : (
+                  <span className="text-xl font-bold text-text-secondary">VS</span>
+                )}
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl font-bold">{data.match.awayTeam?.short_name ?? data.match.awayTeam?.name}</span>
+                  {data.match.awayTeam?.logo && (
+                    <img
+                      alt={data.match.awayTeam.name}
+                      className="w-10 h-10 rounded-full bg-white"
+                      src={data.match.awayTeam.logo}
+                    />
+                  )}
+                </div>
+              </div>
+            );
+            return data.match.flashscoreId ? (
+              <a
+                href={`https://www.flashscore.com/match/${data.match.flashscoreId}/`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-block mb-6 cursor-pointer"
+              >
+                {cardContent}
+              </a>
+            ) : (
+              <div className="mb-6">{cardContent}</div>
+            );
+          })()}
           <h2 className="text-2xl md:text-3xl font-bold mb-4">
             TACTICAL PREDICTION TERMINAL: {data.match.homeTeam?.name?.toUpperCase()} VS {data.match.awayTeam?.name?.toUpperCase()}
           </h2>

@@ -74,7 +74,33 @@ export default function PredictionsPage() {
     {
       key: 'settlement',
       header: 'Settlement',
-      render: (row) => <StatusBadge status={row.settlement} />,
+      render: (row) => {
+        if (row.settlement === 'pending' || row.settlement === 'void') {
+          return <StatusBadge status={row.settlement} />;
+        }
+        if (row.wonMarkets != null && row.settledMarkets != null && row.settledMarkets > 0) {
+          const pct = Math.round((row.wonMarkets / row.settledMarkets) * 100);
+          let label: string;
+          let colorClass: string;
+          if (pct === 100) {
+            label = 'WON'; colorClass = 'bg-success/15 text-success';
+          } else if (pct >= 76) {
+            label = 'HIGH'; colorClass = 'bg-success/15 text-success';
+          } else if (pct >= 51) {
+            label = 'GREAT'; colorClass = 'bg-secondary/15 text-secondary';
+          } else if (pct >= 20) {
+            label = 'MEDIUM'; colorClass = 'bg-warning/15 text-warning';
+          } else {
+            label = 'LOW'; colorClass = 'bg-danger/15 text-danger';
+          }
+          return (
+            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium font-sans uppercase tracking-wide w-fit ${colorClass}`}>
+              {label} ({pct}%)
+            </span>
+          );
+        }
+        return <StatusBadge status={row.settlement} />;
+      },
     },
     {
       key: 'markets',

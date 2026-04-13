@@ -10,6 +10,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Button } from '@/components/ui/Button';
 import { formatDateTime } from '@/lib/utils';
 import { ChevronDown } from 'lucide-react';
+import Link from 'next/link';
 
 interface Match {
   id: number;
@@ -21,6 +22,7 @@ interface Match {
   predicted: boolean;
   enriched: boolean;
   hasTestPrediction: boolean;
+  predictionId?: string | null;
   competitionName?: string;
 }
 
@@ -347,6 +349,15 @@ function MatchActionsDropdown({
           >
             Borrar prediccion (test)
           </button>
+          {row.predicted && row.predictionId && (
+            <Link
+              href={`/predictions/${row.predictionId}`}
+              onClick={() => setOpen(false)}
+              className="block w-full text-left px-3 py-2 text-xs font-sans transition-colors text-secondary hover:text-text-primary hover:bg-surface-3"
+            >
+              Ver prediccion
+            </Link>
+          )}
         </div>,
         document.body,
       )}
@@ -589,7 +600,7 @@ export default function MatchesPage() {
       header: 'Score',
       render: (row) =>
         row.score != null ? (
-          <span className="font-semibold text-text-primary">{row.score.home} -- {row.score.away}</span>
+          <span className="font-semibold text-text-primary">{row.score.home}-{row.score.away}</span>
         ) : (
           <span className="text-text-muted">--</span>
         ),
