@@ -29,6 +29,10 @@ interface PredictionConfig {
   llmTimeoutSeconds: number;
   predictionWindowMinutes: number;
   featuredLeagueIds: number[];
+  combinadasEnabled?: boolean;
+  combinadasBasePredictionHourUtc?: number;
+  combinadasMaxLegs?: number;
+  combinadasMinConfidence?: number;
 }
 
 interface ApiKey {
@@ -484,6 +488,42 @@ export default function ConfigPage() {
             max={10}
             value={activeForm.enrichmentQueueRetryMinutes ?? 2}
             onChange={(e) => setField('enrichmentQueueRetryMinutes', Number(e.target.value))}
+            className="h-9 w-24 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
+          />
+        </Field>
+      </SectionCard>
+
+      <SectionCard title="Combinadas" subtitle="Multi-match parlay predictions generated daily">
+        <Field label="Enabled" subtitle="Generate combinadas automatically each morning">
+          <Toggle value={activeForm.combinadasEnabled ?? false} onChange={(v) => setField('combinadasEnabled', v)} />
+        </Field>
+        <Field label="Base prediction hour (UTC)" subtitle="When to run early predictions for all matches (0-23)">
+          <input
+            type="number"
+            min={0}
+            max={23}
+            value={activeForm.combinadasBasePredictionHourUtc ?? 8}
+            onChange={(e) => setField('combinadasBasePredictionHourUtc', Number(e.target.value))}
+            className="h-9 w-24 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
+          />
+        </Field>
+        <Field label="Max legs" subtitle="Maximum matches per combinada (2-5)">
+          <input
+            type="number"
+            min={2}
+            max={5}
+            value={activeForm.combinadasMaxLegs ?? 5}
+            onChange={(e) => setField('combinadasMaxLegs', Number(e.target.value))}
+            className="h-9 w-24 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
+          />
+        </Field>
+        <Field label="Min confidence" subtitle="Minimum pick confidence to include in combinada (1-95)">
+          <input
+            type="number"
+            min={1}
+            max={95}
+            value={activeForm.combinadasMinConfidence ?? 55}
+            onChange={(e) => setField('combinadasMinConfidence', Number(e.target.value))}
             className="h-9 w-24 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
           />
         </Field>

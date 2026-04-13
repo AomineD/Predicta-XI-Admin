@@ -14,6 +14,7 @@ import {
   ClockIcon,
   Activity,
   Coins,
+  Layers,
   LogOut,
 } from 'lucide-react';
 
@@ -25,6 +26,7 @@ const NAV_ITEMS = [
   { href: '/teams',        label: 'Teams',         icon: Shield },
   { href: '/config',      label: 'Config',        icon: Settings },
   { href: '/credits',    label: 'Credits',       icon: Coins },
+  { href: '/combinadas', label: 'Combinadas',    icon: Layers },
   { href: '/jobs',        label: 'Jobs',          icon: ClockIcon },
   { href: '/consumo',    label: 'Consumo',       icon: Activity },
 ];

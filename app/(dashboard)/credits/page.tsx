@@ -19,6 +19,8 @@ interface CreditsConfig {
   iapCredits50: number;
   weeklyActivityBonus: number;
   weeklyActivityMinDays: number;
+  combinadaRegularCost: number;
+  combinadaPremiumCost: number;
 }
 
 interface Tier {
@@ -371,6 +373,16 @@ export default function CreditsPage() {
         </Field>
         <Field label="Minimum active days" subtitle="Distinct days per week user must open the app (1–7)">
           <NumInput value={f.weeklyActivityMinDays} onChange={(v) => set('weeklyActivityMinDays', v)} min={1} />
+        </Field>
+      </SectionCard>
+
+      {/* ── Section A3: Combinada Costs ── */}
+      <SectionCard title="Combinada Costs" subtitle="Credit costs for viewing multi-match parlay predictions">
+        <Field label="Regular combinada cost" subtitle="Credits deducted for non-premium combinadas">
+          <NumInput value={f.combinadaRegularCost} onChange={(v) => set('combinadaRegularCost', v)} />
+        </Field>
+        <Field label="Premium combinada cost" subtitle="Credits deducted for premium combinadas (0 = free for subscribers)">
+          <NumInput value={f.combinadaPremiumCost} onChange={(v) => set('combinadaPremiumCost', v)} />
         </Field>
       </SectionCard>
 

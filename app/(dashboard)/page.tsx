@@ -124,7 +124,7 @@ export default function DashboardPage() {
 
       {/* Prediction metrics */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <MetricCard label="Global Accuracy" value={formatPct(data?.globalAccuracy)} sub="All settled predictions" accent />
+        <MetricCard label="Global Accuracy" value={formatPct(data?.globalAccuracy)} sub="Per-market accuracy" accent />
         <MetricCard label="Weekly Accuracy" value={formatPct(data?.weeklyAccuracy)} sub="This week" />
         <MetricCard label="Pending" value={isLoading ? '…' : data?.pendingPredictions} sub="Awaiting settlement" />
         <MetricCard label="Active Users" value={isLoading ? '…' : data?.activeUsers} sub="Last 7 days" />
