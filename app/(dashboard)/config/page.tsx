@@ -8,7 +8,6 @@ import { PageHeader } from '@/components/ui/PageHeader';
 
 interface PredictionConfig {
   model: string;
-  periodMinutes: number;
   batchSize: number;
   automationEnabled: boolean;
   outputMarkets: string[];
@@ -352,17 +351,6 @@ export default function ConfigPage() {
 
         <Field label="Enabled" subtitle="When off, predictions must be triggered manually">
           <Toggle value={activeForm.automationEnabled} onChange={(v) => setField('automationEnabled', v)} />
-        </Field>
-
-        <Field label="Interval (minutes)" subtitle="How often the prediction scheduler runs automatically">
-          <input
-            type="number"
-            min={1}
-            max={1440}
-            value={activeForm.periodMinutes}
-            onChange={(e) => setField('periodMinutes', Number(e.target.value))}
-            className="h-9 w-24 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
-          />
         </Field>
 
         <Field label="Batch size" subtitle="Maximum matches processed per scheduler run">

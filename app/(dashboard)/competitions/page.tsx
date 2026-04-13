@@ -20,7 +20,6 @@ interface Competition {
 interface PredictionConfig {
   automationEnabled: boolean;
   model: string;
-  periodMinutes: number;
   batchSize: number;
   reasoningEffort: string | null;
   inputDataFields: string[];
