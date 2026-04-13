@@ -250,6 +250,25 @@ export default function ConfigPage() {
     changePassword.mutate();
   };
 
+  // Stats backfill — one-time action
+  const [backfillDone, setBackfillDone] = useState(() => {
+    if (typeof window !== 'undefined') return localStorage.getItem('predicta:stats-backfill-done') === '1';
+    return false;
+  });
+  const [backfillMessage, setBackfillMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const backfillStats = useMutation({
+    mutationFn: () => api.post('/admin/results/backfill-stats', {}) as Promise<{ jobId: number }>,
+    onSuccess: (data: { jobId: number }) => {
+      localStorage.setItem('predicta:stats-backfill-done', '1');
+      setBackfillDone(true);
+      setBackfillMessage({ type: 'success', text: `Backfill job #${data.jobId} started. Check Jobs page for progress.` });
+    },
+    onError: (err: Error) => {
+      setBackfillMessage({ type: 'error', text: err.message });
+    },
+  });
+
   // Danger zone — delete all matches only
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteResult, setDeleteResult] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -673,6 +692,32 @@ export default function ConfigPage() {
             Change Password
           </Button>
         </div>
+      </SectionCard>
+
+      {/* Data Maintenance */}
+      <SectionCard title="Data Maintenance" subtitle="One-time actions for data pipeline health">
+        <div className="flex items-center justify-between py-3">
+          <div>
+            <p className="text-sm text-text-primary font-sans">Backfill match stats</p>
+            <p className="text-xs text-text-muted/60 font-sans mt-0.5 max-w-md">
+              Scrape corners, cards, fouls and penalty data for completed matches from the last 60 days.
+              Required for deep stats (new markets). This only needs to run once.
+            </p>
+          </div>
+          <Button
+            variant="secondary"
+            loading={backfillStats.isPending}
+            disabled={backfillDone}
+            onClick={() => backfillStats.mutate()}
+          >
+            {backfillDone ? 'Already Run' : 'Run Backfill'}
+          </Button>
+        </div>
+        {backfillMessage && (
+          <p className={`text-xs font-sans mt-1 ${backfillMessage.type === 'success' ? 'text-success' : 'text-danger'}`}>
+            {backfillMessage.text}
+          </p>
+        )}
       </SectionCard>
 
       {/* Danger Zone */}
