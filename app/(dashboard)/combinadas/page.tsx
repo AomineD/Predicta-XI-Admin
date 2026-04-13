@@ -230,20 +230,20 @@ export default function CombinadasPage() {
       </div>
 
       {tab === 'list' && (
-        <DataTable
+        <DataTable<Combinada>
           columns={combinadaColumns}
           data={combinadas?.data ?? []}
-          isLoading={isLoading}
-          rowKey="id"
+          loading={isLoading}
+          keyExtractor={(c) => c.id}
         />
       )}
 
       {tab === 'jobs' && (
-        <DataTable
+        <DataTable<CombinadaJob>
           columns={jobColumns}
           data={jobs?.data ?? []}
-          isLoading={!jobs}
-          rowKey="id"
+          loading={!jobs}
+          keyExtractor={(j) => j.id}
         />
       )}
 
