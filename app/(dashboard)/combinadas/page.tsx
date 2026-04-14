@@ -92,7 +92,7 @@ export default function CombinadasPage() {
   });
 
   const generateMut = useMutation({
-    mutationFn: () => api.post<{ message: string; jobId: number }>('/admin/combinadas/generate'),
+    mutationFn: () => api.post<{ message: string }>('/admin/combinadas/generate'),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['combinada-jobs'] });
       queryClient.invalidateQueries({ queryKey: ['combinadas'] });
