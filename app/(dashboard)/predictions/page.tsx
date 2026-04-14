@@ -30,20 +30,79 @@ interface PredictionsResponse {
   pageSize: number;
 }
 
+interface FilterOptions {
+  models: string[];
+  competitions: { id: number; name: string; logoUrl: string | null }[];
+}
+
 const SETTLEMENT_OPTIONS = ['', 'won', 'lost', 'partial', 'pending', 'void'];
+
+type AccuracyBucket = '' | 'high' | 'mid' | 'low';
+type SortKey =
+  | 'createdAt:desc'
+  | 'createdAt:asc'
+  | 'accuracy:desc'
+  | 'accuracy:asc'
+  | 'coverage:desc'
+  | 'coverage:asc';
+
+const SORT_OPTIONS: { value: SortKey; label: string }[] = [
+  { value: 'createdAt:desc', label: 'Newest first' },
+  { value: 'createdAt:asc', label: 'Oldest first' },
+  { value: 'accuracy:desc', label: 'Accuracy (high → low)' },
+  { value: 'accuracy:asc', label: 'Accuracy (low → high)' },
+  { value: 'coverage:desc', label: 'Coverage (high → low)' },
+  { value: 'coverage:asc', label: 'Coverage (low → high)' },
+];
 
 export default function PredictionsPage() {
   const [page, setPage] = useState(1);
   const [settlement, setSettlement] = useState('');
+  const [model, setModel] = useState('');
+  const [competitionId, setCompetitionId] = useState('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const [accuracyBucket, setAccuracyBucket] = useState<AccuracyBucket>('');
+  const [sort, setSort] = useState<SortKey>('createdAt:desc');
+
+  const { data: options } = useQuery<FilterOptions>({
+    queryKey: ['predictions-filter-options'],
+    queryFn: () => api.get('/admin/predictions/filter-options'),
+    staleTime: 5 * 60_000,
+  });
 
   const { data, isLoading } = useQuery<PredictionsResponse>({
-    queryKey: ['predictions', page, settlement],
+    queryKey: ['predictions', page, settlement, model, competitionId, from, to, accuracyBucket, sort],
     queryFn: () => {
-      const params = new URLSearchParams({ page: String(page), pageSize: '20' });
+      const [sortBy, sortOrder] = sort.split(':');
+      const params = new URLSearchParams({ page: String(page), pageSize: '20', sortBy, sortOrder });
       if (settlement) params.set('settlement', settlement);
+      if (model) params.set('model', model);
+      if (competitionId) params.set('competitionId', competitionId);
+      if (from) params.set('from', new Date(from).toISOString());
+      if (to) {
+        // Include the entire "to" day by pushing to 23:59:59.999 local time
+        const d = new Date(to);
+        d.setHours(23, 59, 59, 999);
+        params.set('to', d.toISOString());
+      }
+      if (accuracyBucket) params.set('accuracyBucket', accuracyBucket);
       return api.get(`/admin/predictions?${params}`);
     },
   });
+
+  const resetToFirstPage = () => setPage(1);
+
+  const clearFilters = () => {
+    setSettlement('');
+    setModel('');
+    setCompetitionId('');
+    setFrom('');
+    setTo('');
+    setAccuracyBucket('');
+    setSort('createdAt:desc');
+    setPage(1);
+  };
 
   const columns: Column<Prediction>[] = [
     {
@@ -129,22 +188,92 @@ export default function PredictionsPage() {
     },
   ];
 
+  const selectClass =
+    'h-9 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-2 border border-border outline-none';
+
   return (
     <div>
       <PageHeader title="Predictions" description="All generated predictions" />
 
       {/* Filters */}
-      <div className="flex items-center gap-3 mb-4">
+      <div className="flex items-center gap-3 mb-4 flex-wrap">
         <select
           value={settlement}
-          onChange={(e) => { setSettlement(e.target.value); setPage(1); }}
-          className="h-9 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-2 border border-border outline-none"
+          onChange={(e) => { setSettlement(e.target.value); resetToFirstPage(); }}
+          className={selectClass}
+          aria-label="Settlement"
         >
           <option value="">All settlements</option>
           {SETTLEMENT_OPTIONS.filter(Boolean).map((s) => (
             <option key={s} value={s}>{s}</option>
           ))}
         </select>
+
+        <select
+          value={model}
+          onChange={(e) => { setModel(e.target.value); resetToFirstPage(); }}
+          className={selectClass}
+          aria-label="Model"
+        >
+          <option value="">All models</option>
+          {(options?.models ?? []).map((m) => (
+            <option key={m} value={m}>{m}</option>
+          ))}
+        </select>
+
+        <select
+          value={competitionId}
+          onChange={(e) => { setCompetitionId(e.target.value); resetToFirstPage(); }}
+          className={selectClass}
+          aria-label="League"
+        >
+          <option value="">All leagues</option>
+          {(options?.competitions ?? []).map((c) => (
+            <option key={c.id} value={String(c.id)}>{c.name}</option>
+          ))}
+        </select>
+
+        <select
+          value={accuracyBucket}
+          onChange={(e) => { setAccuracyBucket(e.target.value as AccuracyBucket); resetToFirstPage(); }}
+          className={selectClass}
+          aria-label="Accuracy range"
+        >
+          <option value="">Any accuracy</option>
+          <option value="high">&gt; 70%</option>
+          <option value="mid">45% – 70%</option>
+          <option value="low">&lt; 45%</option>
+        </select>
+
+        <input
+          type="date"
+          value={from}
+          onChange={(e) => { setFrom(e.target.value); resetToFirstPage(); }}
+          className={selectClass}
+          aria-label="From"
+        />
+        <input
+          type="date"
+          value={to}
+          onChange={(e) => { setTo(e.target.value); resetToFirstPage(); }}
+          className={selectClass}
+          aria-label="To"
+        />
+
+        <select
+          value={sort}
+          onChange={(e) => { setSort(e.target.value as SortKey); resetToFirstPage(); }}
+          className={selectClass}
+          aria-label="Sort"
+        >
+          {SORT_OPTIONS.map((s) => (
+            <option key={s.value} value={s.value}>{s.label}</option>
+          ))}
+        </select>
+
+        <Button size="sm" variant="secondary" onClick={clearFilters}>
+          Reset
+        </Button>
       </div>
 
       <DataTable

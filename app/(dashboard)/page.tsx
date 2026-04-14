@@ -49,6 +49,28 @@ interface DashboardStats {
   registeredUsers: number;
 }
 
+interface TopEntity {
+  id: number;
+  name: string;
+  logo: string | null;
+  accuracyPct: number;
+  sampleSize: number;
+  won: number;
+}
+
+interface CombinadasStat {
+  pct: number | null;
+  won: number;
+  settled: number;
+}
+
+interface DashboardAdvancedKpis {
+  topTeam: { allTime: TopEntity | null; last30Days: TopEntity | null };
+  topLeague: { allTime: TopEntity | null; last30Days: TopEntity | null };
+  combinadasAccuracyGlobal: CombinadasStat;
+  combinadasAccuracyWeekly: CombinadasStat;
+}
+
 const SYNC_TYPE_LABELS: Record<string, string> = {
   match_sync: 'Match Sync',
   result_sync: 'Manual Result Sweep',
@@ -69,6 +91,13 @@ export default function DashboardPage() {
     queryKey: ['dashboard-stats'],
     queryFn: () => api.get('/admin/dashboard/stats'),
     refetchInterval: 60_000,
+  });
+
+  const { data: kpis } = useQuery<DashboardAdvancedKpis>({
+    queryKey: ['dashboard-kpis'],
+    queryFn: () => api.get('/admin/dashboard/kpis'),
+    // Heavier queries; refresh less often
+    refetchInterval: 5 * 60_000,
   });
 
   const runJob = useMutation({
@@ -139,6 +168,51 @@ export default function DashboardPage() {
         )}
       </div>
 
+      {/* Advanced KPIs: top team, top league, combinadas accuracy */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+        <TopEntityDualCard
+          label="Top Team Accuracy"
+          allTime={kpis?.topTeam.allTime}
+          last30Days={kpis?.topTeam.last30Days}
+        />
+        <TopEntityDualCard
+          label="Top League Accuracy"
+          allTime={kpis?.topLeague.allTime}
+          last30Days={kpis?.topLeague.last30Days}
+        />
+        <MetricCard
+          label="Combinadas Accuracy (all-time)"
+          value={
+            kpis?.combinadasAccuracyGlobal.pct != null
+              ? `${kpis.combinadasAccuracyGlobal.pct}%`
+              : kpis
+                ? '—'
+                : '…'
+          }
+          sub={
+            kpis
+              ? `${kpis.combinadasAccuracyGlobal.won}/${kpis.combinadasAccuracyGlobal.settled} settled combinadas`
+              : undefined
+          }
+          accent
+        />
+        <MetricCard
+          label="Combinadas Accuracy (weekly)"
+          value={
+            kpis?.combinadasAccuracyWeekly.pct != null
+              ? `${kpis.combinadasAccuracyWeekly.pct}%`
+              : kpis
+                ? '—'
+                : '…'
+          }
+          sub={
+            kpis
+              ? `${kpis.combinadasAccuracyWeekly.won}/${kpis.combinadasAccuracyWeekly.settled} · last 7 days`
+              : undefined
+          }
+        />
+      </div>
+
       <div className="rounded-2xl p-5 mb-6" style={{ background: '#121A2B', border: '1px solid rgba(255,255,255,0.08)' }}>
         <h2 className="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-4 font-sans">
           Accuracy Overview
@@ -202,6 +276,62 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function TopEntityDualCard({
+  label,
+  allTime,
+  last30Days,
+}: {
+  label: string;
+  allTime: TopEntity | null | undefined;
+  last30Days: TopEntity | null | undefined;
+}) {
+  return (
+    <div
+      className="rounded-2xl p-5 flex flex-col gap-4"
+      style={{ background: '#121A2B', border: '1px solid rgba(255,255,255,0.08)' }}
+    >
+      <span className="text-xs font-medium text-text-muted uppercase tracking-wider font-sans">{label}</span>
+      <div className="grid grid-cols-2 gap-4">
+        <TopEntityRow title="All-time" entity={allTime} />
+        <TopEntityRow title="Last 30 days" entity={last30Days} />
+      </div>
+    </div>
+  );
+}
+
+function TopEntityRow({ title, entity }: { title: string; entity: TopEntity | null | undefined }) {
+  return (
+    <div className="flex flex-col gap-2">
+      <span className="text-[10px] font-semibold text-text-muted uppercase tracking-wider font-sans">{title}</span>
+      {entity === undefined ? (
+        <span className="text-text-muted text-sm font-sans">…</span>
+      ) : entity === null ? (
+        <span className="text-text-muted text-sm font-sans">Not enough data</span>
+      ) : (
+        <div className="flex items-center gap-3">
+          {entity.logo ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={entity.logo}
+              alt={entity.name}
+              className="w-10 h-10 rounded-md object-contain bg-surface-2 p-1 flex-shrink-0"
+            />
+          ) : (
+            <div className="w-10 h-10 rounded-md bg-surface-2 flex-shrink-0" />
+          )}
+          <div className="flex flex-col min-w-0">
+            <span className="text-text-primary text-sm font-medium font-sans truncate">{entity.name}</span>
+            <span className="text-xs font-sans">
+              <span className="text-primary font-semibold">{entity.accuracyPct}%</span>
+              <span className="text-text-muted"> · {entity.sampleSize} markets</span>
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
