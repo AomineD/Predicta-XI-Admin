@@ -33,6 +33,8 @@ interface PredictionConfig {
   combinadasBasePredictionHourUtc?: number;
   combinadasMaxLegs?: number;
   combinadasMinConfidence?: number;
+  enrichmentMode?: string;
+  earlyEnrichmentHourUtc?: number;
 }
 
 interface ApiKey {
@@ -458,6 +460,31 @@ export default function ConfigPage() {
         <Field label="Enabled" subtitle="Enqueue matches for enrichment when approaching kickoff">
           <Toggle value={activeForm.enrichmentSyncEnabled} onChange={(v) => setField('enrichmentSyncEnabled', v)} />
         </Field>
+
+        <Field label="Enrichment mode" subtitle="Early: enrich all today's matches at configured hour. Pre-match: enrich 60 min before kickoff. Both: early + pre-match (V1 + V2 predictions)">
+          <select
+            value={activeForm.enrichmentMode ?? 'pre_match'}
+            onChange={(e) => setField('enrichmentMode', e.target.value)}
+            className="h-9 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
+          >
+            <option value="pre_match">Pre-match only</option>
+            <option value="early">Early only</option>
+            <option value="both">Both (early + pre-match)</option>
+          </select>
+        </Field>
+
+        {(activeForm.enrichmentMode === 'early' || activeForm.enrichmentMode === 'both') && (
+          <Field label="Early enrichment hour (UTC)" subtitle="When to enrich all today's matches (0-23). Generates V1 predictions without lineups.">
+            <input
+              type="number"
+              min={0}
+              max={23}
+              value={activeForm.earlyEnrichmentHourUtc ?? 7}
+              onChange={(e) => setField('earlyEnrichmentHourUtc', Number(e.target.value))}
+              className="h-9 w-24 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
+            />
+          </Field>
+        )}
 
         <Field label="Minutes before kickoff" subtitle="How early before kickoff to trigger enrichment">
           <input
