@@ -252,6 +252,7 @@ function MatchActionsDropdown({
   onDeleteEnrichment,
   onPredictTest,
   onDeleteTest,
+  onReSettle,
 }: {
   row: Match;
   busy: boolean;
@@ -259,6 +260,7 @@ function MatchActionsDropdown({
   onDeleteEnrichment: () => void;
   onPredictTest: () => void;
   onDeleteTest: () => void;
+  onReSettle: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -357,6 +359,18 @@ function MatchActionsDropdown({
             >
               Ver prediccion
             </Link>
+          )}
+          {row.predicted && ['FT', 'AET', 'PEN'].includes(row.status) && (
+            <>
+              <div className="my-1 border-t border-white/10" />
+              <button
+                onClick={() => { onReSettle(); setOpen(false); }}
+                disabled={busy}
+                className={`w-full text-left px-3 py-2 text-xs font-sans transition-colors ${busy ? 'text-text-muted/40 cursor-not-allowed' : 'text-warning hover:bg-surface-3'}`}
+              >
+                Re-settle
+              </button>
+            </>
           )}
         </div>,
         document.body,
@@ -478,6 +492,25 @@ export default function MatchesPage() {
       qc.invalidateQueries({ queryKey: ['matches'] });
       qc.invalidateQueries({ queryKey: ['jobs'] });
       qc.invalidateQueries({ queryKey: ['enrichment', matchId] });
+    },
+  });
+
+  const reSettle = useMutation({
+    mutationFn: (matchId: number) => api.post<{ matchId: number; status: string; predictionsReset: number; combinadasReset: number }>(`/admin/matches/${matchId}/re-settle`, {}),
+    onMutate: (matchId) => {
+      setActionMatchId(matchId);
+      setActionResult(null);
+    },
+    onSuccess: (data, matchId) => {
+      setActionResult({ type: 'success', text: `Re-settle encolado para el partido #${matchId}. ${data.predictionsReset} predicciones reseteadas.` });
+    },
+    onError: (error: Error, matchId) => {
+      setActionResult({ type: 'error', text: `No se pudo re-settle el partido #${matchId}: ${error.message}` });
+    },
+    onSettled: () => {
+      setActionMatchId(null);
+      qc.invalidateQueries({ queryKey: ['matches'] });
+      qc.invalidateQueries({ queryKey: ['jobs'] });
     },
   });
 
@@ -649,6 +682,7 @@ export default function MatchesPage() {
           onDeleteEnrichment={() => setDeleteEnrichmentMatchId(row.id)}
           onPredictTest={() => triggerTestPrediction.mutate(row.id)}
           onDeleteTest={() => removeTestPrediction.mutate(row.id)}
+          onReSettle={() => reSettle.mutate(row.id)}
         />
       ),
     },
