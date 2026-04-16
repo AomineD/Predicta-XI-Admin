@@ -9,6 +9,38 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { MetricCard } from '@/components/ui/MetricCard';
 import { formatDateTime } from '@/lib/utils';
 
+/** Parse bilingual text — handles both plain strings and JSON-serialized {en, es} objects */
+function parseBilingual(value: string | null | undefined): { en: string; es: string } | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value);
+    if (typeof parsed === 'object' && parsed !== null && 'en' in parsed && 'es' in parsed) {
+      return parsed as { en: string; es: string };
+    }
+  } catch { /* not JSON, treat as plain string */ }
+  return null;
+}
+
+function BilingualBlock({ value, className }: { value: string | null | undefined; className?: string }) {
+  if (!value) return null;
+  const bilingual = parseBilingual(value);
+  if (bilingual) {
+    return (
+      <div className={className}>
+        <div className="mb-2">
+          <span className="text-xs font-medium text-text-muted uppercase">EN</span>
+          <p className="text-sm text-text-secondary">{bilingual.en}</p>
+        </div>
+        <div>
+          <span className="text-xs font-medium text-text-muted uppercase">ES</span>
+          <p className="text-sm text-text-secondary">{bilingual.es}</p>
+        </div>
+      </div>
+    );
+  }
+  return <div className={className}><p className="text-sm text-text-secondary">{value}</p></div>;
+}
+
 interface CombinadaPick {
   matchId: number;
   homeTeam: string;
@@ -191,7 +223,7 @@ export default function CombinadasPage() {
         description="Multi-match parlay predictions"
         action={
           <button
-            className="px-4 py-2 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary/90 disabled:opacity-50"
+            className="px-4 py-2 bg-primary text-black text-sm font-medium rounded-lg hover:bg-primary/90 disabled:opacity-50"
             onClick={() => generateMut.mutate()}
             disabled={generateMut.isPending}
           >
@@ -216,13 +248,13 @@ export default function CombinadasPage() {
       {/* Tabs */}
       <div className="flex gap-2">
         <button
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tab === 'list' ? 'bg-primary text-white' : 'bg-surface-2 text-text-secondary hover:text-text-primary'}`}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tab === 'list' ? 'bg-primary text-black' : 'bg-surface-2 text-text-secondary hover:text-text-primary'}`}
           onClick={() => setTab('list')}
         >
           Combinadas
         </button>
         <button
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tab === 'jobs' ? 'bg-primary text-white' : 'bg-surface-2 text-text-secondary hover:text-text-primary'}`}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tab === 'jobs' ? 'bg-primary text-black' : 'bg-surface-2 text-text-secondary hover:text-text-primary'}`}
           onClick={() => setTab('jobs')}
         >
           Generation Jobs
@@ -251,7 +283,7 @@ export default function CombinadasPage() {
       {detailId && detail && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setDetailId(null)}>
           <div
-            className="bg-surface-1 rounded-2xl border max-w-2xl w-full max-h-[80vh] overflow-y-auto p-6"
+            className="bg-surface rounded-2xl border max-w-2xl w-full max-h-[80vh] overflow-y-auto p-6"
             style={{ borderColor: 'rgba(255,255,255,0.08)' }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -283,7 +315,9 @@ export default function CombinadasPage() {
             </div>
 
             {detail.summary && (
-              <div className="mb-4 p-3 rounded-lg bg-surface-2 text-sm text-text-secondary">{detail.summary}</div>
+              <div className="mb-4 p-3 rounded-lg bg-surface-2">
+                <BilingualBlock value={detail.summary} />
+              </div>
             )}
 
             <h3 className="text-sm font-medium text-text-primary mb-2">Picks ({detail.legs} legs)</h3>
@@ -300,7 +334,7 @@ export default function CombinadasPage() {
                     <span className="font-mono">{pick.confidence}%</span>
                     {pick.odds && <span className="font-mono">@{pick.odds}</span>}
                   </div>
-                  <p className="text-text-secondary text-xs mt-1">{pick.reasoning}</p>
+                  <BilingualBlock value={typeof pick.reasoning === 'object' ? JSON.stringify(pick.reasoning) : pick.reasoning} className="mt-1 text-xs" />
                 </div>
               ))}
             </div>
@@ -308,7 +342,9 @@ export default function CombinadasPage() {
             {detail.reasoning && (
               <div className="mt-4">
                 <h3 className="text-sm font-medium text-text-primary mb-2">LLM Reasoning</h3>
-                <div className="p-3 rounded-lg bg-surface-2 text-sm text-text-secondary whitespace-pre-wrap">{detail.reasoning}</div>
+                <div className="p-3 rounded-lg bg-surface-2 whitespace-pre-wrap">
+                  <BilingualBlock value={detail.reasoning} />
+                </div>
               </div>
             )}
           </div>

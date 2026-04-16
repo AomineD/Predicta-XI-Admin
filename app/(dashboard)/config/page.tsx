@@ -33,6 +33,11 @@ interface PredictionConfig {
   combinadasBasePredictionHourUtc?: number;
   combinadasMaxLegs?: number;
   combinadasMinConfidence?: number;
+  combinadasCountRegular?: number;
+  combinadasCountPremium?: number;
+  combinadasMinConfidenceRegular?: number;
+  combinadasMinConfidencePremium?: number;
+  combinadasRiskMode?: string;
   enrichmentMode?: string;
   earlyEnrichmentHourUtc?: number;
 }
@@ -544,13 +549,57 @@ export default function ConfigPage() {
             className="h-9 w-24 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
           />
         </Field>
-        <Field label="Min confidence" subtitle="Minimum pick confidence to include in combinada (1-95)">
+        <Field label="Risk mode" subtitle="Precise = conservative picks, Bold = avoids ultra-safe odds (<1.30)">
+          <select
+            value={activeForm.combinadasRiskMode ?? 'precise'}
+            onChange={(e) => setField('combinadasRiskMode', e.target.value)}
+            className="h-9 w-32 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
+          >
+            <option value="precise">Precise</option>
+            <option value="bold">Bold</option>
+          </select>
+        </Field>
+
+        <div className="pt-2 pb-1 text-xs font-medium text-text-muted uppercase tracking-wider">Regular combinadas</div>
+        <Field label="Count" subtitle="Total regular combinadas to generate (0-10)">
+          <input
+            type="number"
+            min={0}
+            max={10}
+            value={activeForm.combinadasCountRegular ?? 3}
+            onChange={(e) => setField('combinadasCountRegular', Number(e.target.value))}
+            className="h-9 w-24 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
+          />
+        </Field>
+        <Field label="Min confidence (regular)" subtitle="Minimum pick confidence for regular combinadas (1-95)">
           <input
             type="number"
             min={1}
             max={95}
-            value={activeForm.combinadasMinConfidence ?? 55}
-            onChange={(e) => setField('combinadasMinConfidence', Number(e.target.value))}
+            value={activeForm.combinadasMinConfidenceRegular ?? 55}
+            onChange={(e) => setField('combinadasMinConfidenceRegular', Number(e.target.value))}
+            className="h-9 w-24 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
+          />
+        </Field>
+
+        <div className="pt-2 pb-1 text-xs font-medium text-text-muted uppercase tracking-wider">Premium combinadas</div>
+        <Field label="Count" subtitle="Total premium combinadas to generate (0-10)">
+          <input
+            type="number"
+            min={0}
+            max={10}
+            value={activeForm.combinadasCountPremium ?? 2}
+            onChange={(e) => setField('combinadasCountPremium', Number(e.target.value))}
+            className="h-9 w-24 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
+          />
+        </Field>
+        <Field label="Min confidence (premium)" subtitle="Minimum pick confidence for premium combinadas (1-95)">
+          <input
+            type="number"
+            min={1}
+            max={95}
+            value={activeForm.combinadasMinConfidencePremium ?? 45}
+            onChange={(e) => setField('combinadasMinConfidencePremium', Number(e.target.value))}
             className="h-9 w-24 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
           />
         </Field>
@@ -774,10 +823,13 @@ export default function ConfigPage() {
           <Button
             variant="secondary"
             loading={backfillStats.isPending}
-            disabled={backfillDone}
-            onClick={() => backfillStats.mutate()}
+            onClick={() => {
+              if (window.confirm('This will scrape match stats for all completed matches from the last 60 days. It may take several minutes. Continue?')) {
+                backfillStats.mutate();
+              }
+            }}
           >
-            {backfillDone ? 'Already Run' : 'Run Backfill'}
+            Run Backfill
           </Button>
         </div>
         {backfillMessage && (
