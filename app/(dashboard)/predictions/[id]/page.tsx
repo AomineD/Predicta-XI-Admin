@@ -6,17 +6,19 @@ import { useParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { PageHeader } from '@/components/ui/PageHeader';
-import { formatDateTime } from '@/lib/utils';
+import { formatDateTime, bilingualToString } from '@/lib/utils';
 import { ConfidenceIcon } from '@/components/ui/ConfidenceIcon';
 import { ConfidenceLevelBadge } from '@/components/ui/ConfidenceLevelBadge';
 import Link from 'next/link';
 import { ChevronLeft } from 'lucide-react';
 
+type Bilingual = string | { en?: string; es?: string } | null | undefined;
+
 interface Pick {
   market: string;
   pick: string;
   confidence: number;
-  reasoning: string;
+  reasoning: Bilingual;
   result?: string;
 }
 
@@ -26,8 +28,8 @@ interface PredictionDetail {
   model: string;
   coverageScore: number | null;
   picks: Pick[];
-  summary: string | null;
-  dataQualityNote: string | null;
+  summary: Bilingual;
+  dataQualityNote: Bilingual;
   settlement: string;
   settledAt: string | null;
   settledMarkets: number | null;
@@ -175,15 +177,15 @@ export default function PredictionDetailPage() {
       </div>
 
       {/* Summary */}
-      {data.summary && (
+      {bilingualToString(data.summary) && (
         <div className="rounded-2xl p-4 mb-4" style={{ background: '#121A2B', border: '1px solid rgba(255,255,255,0.08)' }}>
-          <p className="text-text-secondary text-sm font-sans leading-relaxed">{data.summary}</p>
-          {data.dataQualityNote && (
+          <p className="text-text-secondary text-sm font-sans leading-relaxed">{bilingualToString(data.summary)}</p>
+          {bilingualToString(data.dataQualityNote) && (
             <div className="mt-3 p-3 bg-warning/10 border border-warning/30 rounded-lg flex gap-2">
               <svg className="w-5 h-5 text-warning shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"></path>
               </svg>
-              <p className="text-xs text-warning font-sans">{data.dataQualityNote}</p>
+              <p className="text-xs text-warning font-sans">{bilingualToString(data.dataQualityNote)}</p>
             </div>
           )}
         </div>
@@ -224,7 +226,7 @@ export default function PredictionDetailPage() {
 
               {/* Reasoning */}
               <div className="w-full text-sm text-text-muted leading-relaxed border-t md:border-t-0 md:border-l border-slate-700 pt-4 md:pt-0 md:pl-8 font-sans">
-                {pick.reasoning}
+                {bilingualToString(pick.reasoning)}
               </div>
 
               {/* Result (if settled) */}

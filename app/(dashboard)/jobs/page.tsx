@@ -121,6 +121,32 @@ function truncateLog(log: string | null, maxLen = 80): string {
   return log.length > maxLen ? log.slice(0, maxLen) + '…' : log;
 }
 
+function formatPredictionErrorLog(raw: unknown): string | null {
+  if (!raw) return null;
+  if (typeof raw === 'string') return raw;
+  if (Array.isArray(raw)) {
+    const lines = raw
+      .map((entry) => {
+        if (typeof entry === 'string') return entry;
+        if (entry && typeof entry === 'object') {
+          const e = entry as { matchId?: number | string; error?: string; finalAttempt?: boolean };
+          const prefix = e.matchId !== undefined ? `#${e.matchId}` : '•';
+          const msg = e.error ?? JSON.stringify(entry);
+          const suffix = e.finalAttempt ? ' [final]' : '';
+          return `${prefix}: ${msg}${suffix}`;
+        }
+        return String(entry);
+      })
+      .filter(Boolean);
+    return lines.length > 0 ? lines.join('\n') : null;
+  }
+  try {
+    return JSON.stringify(raw, null, 2);
+  } catch {
+    return String(raw);
+  }
+}
+
 // ── Scheduler Countdown Banners ───────────────────────────
 
 function useCountdown(nextRunAt: string): number {
@@ -636,7 +662,7 @@ export default function JobsPage() {
       key: 'error',
       header: 'Error',
       render: (row) => {
-        const log = row.errorLog ? (Array.isArray(row.errorLog) ? (row.errorLog as string[]).join('\n') : JSON.stringify(row.errorLog)) : null;
+        const log = formatPredictionErrorLog(row.errorLog);
         if (!log) return <span className="text-text-muted text-xs">—</span>;
         return (
           <button onClick={() => setSelectedLog(log)} className="text-danger text-xs truncate max-w-xs block text-left hover:underline cursor-pointer">
