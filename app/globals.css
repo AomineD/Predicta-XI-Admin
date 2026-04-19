@@ -19,8 +19,9 @@
   --color-live:          #FF5A5F;
   --color-border:        rgba(255, 255, 255, 0.08);
 
-  --font-sans: 'Inter', system-ui, sans-serif;
-  --font-display: 'Sora', system-ui, sans-serif;
+  --font-sans: var(--font-inter), 'Inter', system-ui, sans-serif;
+  --font-display: var(--font-sora), 'Sora', system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), 'JetBrains Mono', ui-monospace, monospace;
 
   --radius-card: 16px;
   --radius-btn:  14px;

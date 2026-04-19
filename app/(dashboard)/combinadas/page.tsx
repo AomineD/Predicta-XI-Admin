@@ -8,38 +8,7 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { MetricCard } from '@/components/ui/MetricCard';
 import { formatDateTime } from '@/lib/utils';
-
-/** Parse bilingual text — handles both plain strings and JSON-serialized {en, es} objects */
-function parseBilingual(value: string | null | undefined): { en: string; es: string } | null {
-  if (!value) return null;
-  try {
-    const parsed = JSON.parse(value);
-    if (typeof parsed === 'object' && parsed !== null && 'en' in parsed && 'es' in parsed) {
-      return parsed as { en: string; es: string };
-    }
-  } catch { /* not JSON, treat as plain string */ }
-  return null;
-}
-
-function BilingualBlock({ value, className }: { value: string | null | undefined; className?: string }) {
-  if (!value) return null;
-  const bilingual = parseBilingual(value);
-  if (bilingual) {
-    return (
-      <div className={className}>
-        <div className="mb-2">
-          <span className="text-xs font-medium text-text-muted uppercase">EN</span>
-          <p className="text-sm text-text-secondary">{bilingual.en}</p>
-        </div>
-        <div>
-          <span className="text-xs font-medium text-text-muted uppercase">ES</span>
-          <p className="text-sm text-text-secondary">{bilingual.es}</p>
-        </div>
-      </div>
-    );
-  }
-  return <div className={className}><p className="text-sm text-text-secondary">{value}</p></div>;
-}
+import { CombinadaDetailModal, type CombinadaModalData } from '@/components/combinadas/CombinadaDetailModal';
 
 interface CombinadaPick {
   matchId: number;
@@ -122,6 +91,15 @@ export default function CombinadasPage() {
     queryFn: () => api.get<Combinada>(`/admin/combinadas/${detailId}`),
     enabled: !!detailId,
   });
+
+  // Fetch current risk mode so the modal can display a ModeBadge. Combinadas
+  // don't persist their own risk_mode yet (see followup), so historical rows
+  // will show whatever is configured right now.
+  const { data: predictionConfig } = useQuery({
+    queryKey: ['prediction-config'],
+    queryFn: () => api.get<{ combinadasRiskMode?: string }>('/admin/prediction-config'),
+  });
+  const currentRiskMode = predictionConfig?.combinadasRiskMode;
 
   const generateMut = useMutation({
     mutationFn: () => api.post<{ message: string }>('/admin/combinadas/generate'),
@@ -280,76 +258,11 @@ export default function CombinadasPage() {
       )}
 
       {/* Detail modal */}
-      {detailId && detail && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setDetailId(null)}>
-          <div
-            className="bg-surface rounded-2xl border max-w-2xl w-full max-h-[80vh] overflow-y-auto p-6"
-            style={{ borderColor: 'rgba(255,255,255,0.08)' }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-text-primary">
-                Combinada Detail
-                <span className={`ml-2 px-2 py-0.5 rounded text-xs font-medium ${detail.type === 'premium' ? 'bg-amber-500/20 text-amber-400' : 'bg-blue-500/20 text-blue-400'}`}>
-                  {detail.type}
-                </span>
-              </h2>
-              <button className="text-text-muted hover:text-text-primary" onClick={() => setDetailId(null)}>
-                &times;
-              </button>
-            </div>
-
-            <div className="grid grid-cols-3 gap-4 mb-4 text-sm">
-              <div>
-                <span className="text-text-muted">Confidence</span>
-                <p className="font-mono text-text-primary">{detail.combinedConfidence}%</p>
-              </div>
-              <div>
-                <span className="text-text-muted">Odds</span>
-                <p className="font-mono text-text-primary">{detail.combinedOdds ?? '-'}</p>
-              </div>
-              <div>
-                <span className="text-text-muted">Settlement</span>
-                <p><StatusBadge status={detail.settlement} /></p>
-              </div>
-            </div>
-
-            {detail.summary && (
-              <div className="mb-4 p-3 rounded-lg bg-surface-2">
-                <BilingualBlock value={detail.summary} />
-              </div>
-            )}
-
-            <h3 className="text-sm font-medium text-text-primary mb-2">Picks ({detail.legs} legs)</h3>
-            <div className="space-y-2">
-              {detail.picks.map((pick, i) => (
-                <div key={i} className="p-3 rounded-lg bg-surface-2 text-sm">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-text-primary font-medium">{pick.homeTeam} vs {pick.awayTeam}</span>
-                    <StatusBadge status={pick.result} />
-                  </div>
-                  <div className="flex gap-4 text-text-muted text-xs">
-                    <span>{pick.competitionName}</span>
-                    <span className="font-mono">{pick.market}: {pick.pick}</span>
-                    <span className="font-mono">{pick.confidence}%</span>
-                    {pick.odds && <span className="font-mono">@{pick.odds}</span>}
-                  </div>
-                  <BilingualBlock value={typeof pick.reasoning === 'object' ? JSON.stringify(pick.reasoning) : pick.reasoning} className="mt-1 text-xs" />
-                </div>
-              ))}
-            </div>
-
-            {detail.reasoning && (
-              <div className="mt-4">
-                <h3 className="text-sm font-medium text-text-primary mb-2">LLM Reasoning</h3>
-                <div className="p-3 rounded-lg bg-surface-2 whitespace-pre-wrap">
-                  <BilingualBlock value={detail.reasoning} />
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      <CombinadaDetailModal
+        data={detailId && detail ? (detail as unknown as CombinadaModalData) : null}
+        onClose={() => setDetailId(null)}
+        currentRiskMode={currentRiskMode}
+      />
     </div>
   );
 }
