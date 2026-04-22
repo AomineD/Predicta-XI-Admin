@@ -1,11 +1,22 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { Tabs } from '@/components/ui/Tabs';
 import { Trash2, Pencil, Plus, Infinity } from 'lucide-react';
+
+const CREDITS_TABS = [
+  { id: 'general', label: 'General' },
+  { id: 'combinadas', label: 'Combinadas' },
+  { id: 'iap', label: 'IAP Packs' },
+  { id: 'tiers', label: 'Market Tiers' },
+] as const;
+type CreditsTabId = typeof CREDITS_TABS[number]['id'];
+const DEFAULT_CREDITS_TAB: CreditsTabId = 'general';
 
 /* ── types ────────────────────────────────────────────────────────────────── */
 
@@ -276,6 +287,24 @@ function ConfirmModal({ title, description, onConfirm, onCancel, loading }: {
 
 export default function CreditsPage() {
   const qc = useQueryClient();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const tabParam = searchParams.get('tab');
+  const initialTab: CreditsTabId =
+    CREDITS_TABS.some((t) => t.id === tabParam) ? (tabParam as CreditsTabId) : DEFAULT_CREDITS_TAB;
+  const [tab, setTab] = useState<CreditsTabId>(initialTab);
+
+  useEffect(() => {
+    const current = searchParams.get('tab');
+    if (current === tab) return;
+    const params = new URLSearchParams(searchParams.toString());
+    if (tab === DEFAULT_CREDITS_TAB) params.delete('tab');
+    else params.set('tab', tab);
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }, [tab, pathname, router, searchParams]);
 
   /* ── credits config query ── */
   const configQ = useQuery({
@@ -353,6 +382,10 @@ export default function CreditsPage() {
         }
       />
 
+      <Tabs value={tab} onChange={(v) => setTab(v as CreditsTabId)} items={CREDITS_TABS as unknown as { id: string; label: string }[]} />
+
+      {/* GENERAL TAB */}
+      <div hidden={tab !== 'general'} role="tabpanel" id="tabpanel-general" aria-labelledby="tab-general">
       {/* ── Section A: Prediction Credits ── */}
       <SectionCard title="Prediction Credits" subtitle="Base credit configuration for the app">
         <Field label="Flat prediction cost" subtitle="Credits per prediction when no tiers are configured">
@@ -375,7 +408,10 @@ export default function CreditsPage() {
           <NumInput value={f.weeklyActivityMinDays} onChange={(v) => set('weeklyActivityMinDays', v)} min={1} />
         </Field>
       </SectionCard>
+      </div>
 
+      {/* COMBINADAS TAB */}
+      <div hidden={tab !== 'combinadas'} role="tabpanel" id="tabpanel-combinadas" aria-labelledby="tab-combinadas">
       {/* ── Section A3: Combinada Costs ── */}
       <SectionCard title="Combinada Costs" subtitle="Credit costs for viewing multi-match parlay predictions">
         <Field label="Regular combinada cost" subtitle="Credits deducted for non-premium combinadas">
@@ -385,7 +421,10 @@ export default function CreditsPage() {
           <NumInput value={f.combinadaPremiumCost} onChange={(v) => set('combinadaPremiumCost', v)} />
         </Field>
       </SectionCard>
+      </div>
 
+      {/* IAP PACKS TAB */}
+      <div hidden={tab !== 'iap'} role="tabpanel" id="tabpanel-iap" aria-labelledby="tab-iap">
       {/* ── Section B: IAP Pack Credits ── */}
       <SectionCard title="IAP Pack Credits" subtitle="Credits granted per in-app purchase pack">
         <Field label="Pack 5">
@@ -412,7 +451,10 @@ export default function CreditsPage() {
         </div>
         <p className="text-xs text-text-muted/50 font-sans">Monthly subscribers have unlimited prediction access regardless of credits.</p>
       </SectionCard>
+      </div>
 
+      {/* TIERS TAB */}
+      <div hidden={tab !== 'tiers'} role="tabpanel" id="tabpanel-tiers" aria-labelledby="tab-tiers">
       {/* ── Section D: Market Tiers ── */}
       <SectionCard title="Market Tiers" subtitle="Configure prediction access tiers with different markets and costs">
         <div className="flex justify-end mb-3">
@@ -492,6 +534,7 @@ export default function CreditsPage() {
           ))}
         </div>
       </SectionCard>
+      </div>
 
       {/* ── Tier Modal ── */}
       {tierModal && (

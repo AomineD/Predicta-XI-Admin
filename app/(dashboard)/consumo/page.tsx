@@ -215,6 +215,7 @@ function ActionsDropdown({
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [menuStyle, setMenuStyle] = useState<{ top: number; left: number } | null>(null);
 
@@ -248,7 +249,10 @@ function ActionsDropdown({
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (ref.current?.contains(target)) return;
+      if (menuRef.current?.contains(target)) return;
+      setOpen(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -266,6 +270,7 @@ function ActionsDropdown({
       </button>
       {open && menuStyle && createPortal(
         <div
+          ref={menuRef}
           className="fixed z-[100] rounded-xl py-1 min-w-[140px] shadow-lg"
           style={{
             top: menuStyle.top,

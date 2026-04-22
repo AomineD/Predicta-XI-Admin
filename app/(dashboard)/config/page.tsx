@@ -1,10 +1,23 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { Tabs } from '@/components/ui/Tabs';
+
+const CONFIG_TABS = [
+  { id: 'general', label: 'General' },
+  { id: 'automations', label: 'Automations' },
+  { id: 'combinadas', label: 'Combinadas' },
+  { id: 'apiKeys', label: 'API Keys' },
+  { id: 'security', label: 'Security' },
+  { id: 'maintenance', label: 'Maintenance' },
+] as const;
+type ConfigTabId = typeof CONFIG_TABS[number]['id'];
+const DEFAULT_CONFIG_TAB: ConfigTabId = 'general';
 
 interface PredictionConfig {
   model: string;
@@ -280,6 +293,24 @@ function TeamBlacklistPicker({
 
 export default function ConfigPage() {
   const qc = useQueryClient();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const tabParam = searchParams.get('tab');
+  const initialTab: ConfigTabId =
+    CONFIG_TABS.some((t) => t.id === tabParam) ? (tabParam as ConfigTabId) : DEFAULT_CONFIG_TAB;
+  const [tab, setTab] = useState<ConfigTabId>(initialTab);
+
+  useEffect(() => {
+    const current = searchParams.get('tab');
+    if (current === tab) return;
+    const params = new URLSearchParams(searchParams.toString());
+    if (tab === DEFAULT_CONFIG_TAB) params.delete('tab');
+    else params.set('tab', tab);
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }, [tab, pathname, router, searchParams]);
 
   const { data: cfg } = useQuery<PredictionConfig>({
     queryKey: ['prediction-config'],
@@ -484,6 +515,10 @@ export default function ConfigPage() {
         }
       />
 
+      <Tabs value={tab} onChange={(v) => setTab(v as ConfigTabId)} items={CONFIG_TABS as unknown as { id: string; label: string }[]} />
+
+      {/* GENERAL TAB */}
+      <div hidden={tab !== 'general'} role="tabpanel" id="tabpanel-general" aria-labelledby="tab-general">
       {/* Model & Reasoning */}
       <SectionCard title="Model & Reasoning" subtitle="LLM model configuration for prediction generation">
         <Field label="Active model" subtitle="LLM model used for generating match predictions">
@@ -522,6 +557,17 @@ export default function ConfigPage() {
         </Field>
       </SectionCard>
 
+      <SectionCard title="Output Markets" subtitle="Betting markets included in each generated prediction">
+        <MultiCheckbox options={MARKETS} value={activeForm.outputMarkets} onChange={(v) => setField('outputMarkets', v)} />
+      </SectionCard>
+
+      <SectionCard title="Input Data Fields" subtitle="Data sources the model receives to generate predictions">
+        <MultiCheckbox options={DATA_FIELDS} value={activeForm.inputDataFields} onChange={(v) => setField('inputDataFields', v)} />
+      </SectionCard>
+      </div>
+
+      {/* AUTOMATIONS TAB */}
+      <div hidden={tab !== 'automations'} role="tabpanel" id="tabpanel-automations" aria-labelledby="tab-automations">
       {/* Automations */}
       <SectionCard title="Automations" subtitle="Scheduled tasks for predictions, match syncing, and result syncing">
         <SubHeading>Predictions</SubHeading>
@@ -671,7 +717,10 @@ export default function ConfigPage() {
           />
         </Field>
       </SectionCard>
+      </div>
 
+      {/* COMBINADAS TAB */}
+      <div hidden={tab !== 'combinadas'} role="tabpanel" id="tabpanel-combinadas" aria-labelledby="tab-combinadas">
       <SectionCard title="Combinadas" subtitle="Multi-match parlay predictions generated daily">
         <Field label="Enabled" subtitle="Generate combinadas automatically each morning">
           <Toggle value={activeForm.combinadasEnabled ?? false} onChange={(v) => setField('combinadasEnabled', v)} />
@@ -795,15 +844,10 @@ export default function ConfigPage() {
           />
         </Field>
       </SectionCard>
+      </div>
 
-      <SectionCard title="Output Markets" subtitle="Betting markets included in each generated prediction">
-        <MultiCheckbox options={MARKETS} value={activeForm.outputMarkets} onChange={(v) => setField('outputMarkets', v)} />
-      </SectionCard>
-
-      <SectionCard title="Input Data Fields" subtitle="Data sources the model receives to generate predictions">
-        <MultiCheckbox options={DATA_FIELDS} value={activeForm.inputDataFields} onChange={(v) => setField('inputDataFields', v)} />
-      </SectionCard>
-
+      {/* API KEYS TAB */}
+      <div hidden={tab !== 'apiKeys'} role="tabpanel" id="tabpanel-apiKeys" aria-labelledby="tab-apiKeys">
       <SectionCard title="API Keys" subtitle="Encrypted LLM provider keys for prediction generation">
         {/* Existing keys */}
         {(apiKeys ?? []).length > 0 && (
@@ -925,6 +969,10 @@ export default function ConfigPage() {
         </div>
       </SectionCard>
 
+      </div>
+
+      {/* SECURITY TAB — moved below; Regenerate modal stays at root */}
+
       {/* Regenerate confirmation modal */}
       {showRegenerateConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
@@ -952,6 +1000,7 @@ export default function ConfigPage() {
         </div>
       )}
 
+      <div hidden={tab !== 'security'} role="tabpanel" id="tabpanel-security" aria-labelledby="tab-security">
       <SectionCard title="Security" subtitle="Change your admin panel password">
         <Field label="Current password" subtitle="Enter your current password to verify identity">
           <input
@@ -1000,7 +1049,10 @@ export default function ConfigPage() {
           </Button>
         </div>
       </SectionCard>
+      </div>
 
+      {/* MAINTENANCE TAB */}
+      <div hidden={tab !== 'maintenance'} role="tabpanel" id="tabpanel-maintenance" aria-labelledby="tab-maintenance">
       {/* Data Maintenance */}
       <SectionCard title="Data Maintenance" subtitle="One-time actions for data pipeline health">
         <div className="flex items-center justify-between py-3">
@@ -1066,6 +1118,7 @@ export default function ConfigPage() {
             {deleteAllResult.text}
           </p>
         )}
+      </div>
       </div>
 
       {/* Delete matches confirmation modal */}
