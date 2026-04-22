@@ -14,6 +14,8 @@ export interface CombinadaModalPick {
   matchId: number;
   homeTeam: string;
   awayTeam: string;
+  homeTeamLogo?: string | null;
+  awayTeamLogo?: string | null;
   competitionName: string;
   market: string;
   pick: string;
@@ -282,10 +284,10 @@ export function CombinadaDetailModal({ data, onClose, currentRiskMode }: Combina
                       className="w-full grid grid-cols-[auto_1fr_auto] items-center gap-3.5 px-3.5 py-3.5 bg-transparent border-0 cursor-pointer text-left text-inherit font-inherit"
                     >
                       <div className="flex items-center">
-                        <Crest team={leg.homeTeam} size={24} variant={i} />
+                        <Crest team={leg.homeTeam} size={24} variant={i} logo={leg.homeTeamLogo} />
                         <div style={{ width: 20 }}>
                           <div style={{ marginLeft: -8 }}>
-                            <Crest team={leg.awayTeam} size={24} variant={i + 3} />
+                            <Crest team={leg.awayTeam} size={24} variant={i + 3} logo={leg.awayTeamLogo} />
                           </div>
                         </div>
                       </div>

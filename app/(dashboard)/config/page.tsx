@@ -38,8 +38,19 @@ interface PredictionConfig {
   combinadasMinConfidenceRegular?: number;
   combinadasMinConfidencePremium?: number;
   combinadasRiskMode?: string;
+  combinadasRegularLeagues?: number[];
+  combinadasPremiumLeagues?: number[];
+  combinadasRegularExcludedTeams?: number[];
+  combinadasRegularMaxOdds?: number;
+  combinadasPremiumMaxOdds?: number;
   enrichmentMode?: string;
   earlyEnrichmentHourUtc?: number;
+}
+
+interface TeamLite {
+  id: number;
+  name: string;
+  logo: string | null;
 }
 
 interface ApiKey {
@@ -137,6 +148,136 @@ function MultiCheckbox({
   );
 }
 
+function LeagueMultiSelect({
+  leagues,
+  value,
+  onChange,
+  emptyLabel,
+}: {
+  leagues: Array<{ apiFootballId: number; name: string }>;
+  value: number[];
+  onChange: (v: number[]) => void;
+  emptyLabel: string;
+}) {
+  const toggle = (id: number) => {
+    if (value.includes(id)) onChange(value.filter((x) => x !== id));
+    else onChange([...value, id]);
+  };
+  return (
+    <div>
+      <p className="text-xs text-text-muted/60 font-sans mb-2">
+        {value.length === 0 ? emptyLabel : `${value.length} selected`}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {leagues.map((l) => (
+          <button
+            key={l.apiFootballId}
+            type="button"
+            onClick={() => toggle(l.apiFootballId)}
+            className={`px-3 py-1 rounded-lg text-xs font-sans font-medium transition-colors ${
+              value.includes(l.apiFootballId)
+                ? 'bg-primary text-background'
+                : 'bg-surface-3 text-text-secondary hover:text-text-primary'
+            }`}
+          >
+            {l.name}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TeamBlacklistPicker({
+  value,
+  onChange,
+}: {
+  value: number[];
+  onChange: (v: number[]) => void;
+}) {
+  const [q, setQ] = useState('');
+  const { data: searchResult } = useQuery<{ items: TeamLite[] }>({
+    queryKey: ['admin-teams-search', q],
+    queryFn: () => api.get(`/admin/teams?search=${encodeURIComponent(q)}&pageSize=20`),
+    enabled: q.trim().length >= 2,
+    staleTime: 30_000,
+  });
+  const { data: selectedTeams } = useQuery<TeamLite[]>({
+    queryKey: ['admin-teams-by-ids', value],
+    queryFn: async () => {
+      if (value.length === 0) return [];
+      const all = (await api.get<{ items: TeamLite[] }>(`/admin/teams?pageSize=100`))?.items ?? [];
+      const byId = new Map(all.map((t) => [t.id, t]));
+      return value.map((id) => byId.get(id)).filter((t): t is TeamLite => !!t);
+    },
+    enabled: value.length > 0,
+  });
+
+  const add = (team: TeamLite) => {
+    if (!value.includes(team.id)) onChange([...value, team.id]);
+    setQ('');
+  };
+  const remove = (id: number) => onChange(value.filter((x) => x !== id));
+
+  return (
+    <div>
+      <div className="flex flex-wrap gap-2 mb-2">
+        {(selectedTeams ?? []).map((t) => (
+          <span
+            key={t.id}
+            className="inline-flex items-center gap-2 px-2 py-1 rounded-lg bg-surface-3 text-xs text-text-primary"
+          >
+            {t.logo && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={t.logo} alt="" className="w-4 h-4 rounded-sm" />
+            )}
+            {t.name}
+            <button
+              type="button"
+              onClick={() => remove(t.id)}
+              className="text-text-muted hover:text-text-primary"
+              aria-label={`Remove ${t.name}`}
+            >
+              ×
+            </button>
+          </span>
+        ))}
+        {value.length === 0 && (
+          <span className="text-xs text-text-muted/60 font-sans">No teams excluded</span>
+        )}
+      </div>
+      <input
+        type="text"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="Search team by name..."
+        className="h-9 w-full max-w-sm px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
+      />
+      {q.trim().length >= 2 && (searchResult?.items ?? []).length > 0 && (
+        <div className="mt-2 max-h-48 overflow-y-auto rounded-xl border border-border bg-surface-2">
+          {(searchResult?.items ?? [])
+            .filter((t) => !value.includes(t.id))
+            .slice(0, 10)
+            .map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => add(t)}
+                className="flex items-center gap-2 w-full px-3 py-2 text-left text-sm hover:bg-surface-3"
+              >
+                {t.logo && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={t.logo} alt="" className="w-5 h-5 rounded-sm" />
+                )}
+                <span className="text-text-primary">{t.name}</span>
+              </button>
+            ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ConfigPage() {
   const qc = useQueryClient();
 
@@ -148,6 +289,12 @@ export default function ConfigPage() {
   const { data: apiKeys } = useQuery<ApiKey[]>({
     queryKey: ['api-keys'],
     queryFn: () => api.get('/admin/api-keys'),
+  });
+
+  const { data: competitions } = useQuery<Array<{ apiFootballId: number; name: string }>>({
+    queryKey: ['competitions'],
+    queryFn: () => api.get('/admin/competitions'),
+    staleTime: 60_000,
   });
 
   const [form, setForm] = useState<PredictionConfig | null>(null);
@@ -581,6 +728,31 @@ export default function ConfigPage() {
             className="h-9 w-24 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
           />
         </Field>
+        <Field label="Leagues (regular)" subtitle="Which leagues regular combinadas can cover. Empty = all V1 leagues.">
+          <LeagueMultiSelect
+            leagues={competitions ?? []}
+            value={activeForm.combinadasRegularLeagues ?? []}
+            onChange={(v) => setField('combinadasRegularLeagues', v)}
+            emptyLabel="All V1 leagues allowed"
+          />
+        </Field>
+        <Field label="Max combined odds (regular)" subtitle="Reject regular combinadas whose product of odds exceeds this (1.5–20)">
+          <input
+            type="number"
+            min={1.5}
+            max={20}
+            step={0.1}
+            value={activeForm.combinadasRegularMaxOdds ?? 6.0}
+            onChange={(e) => setField('combinadasRegularMaxOdds', Number(e.target.value))}
+            className="h-9 w-24 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
+          />
+        </Field>
+        <Field label="Excluded teams (regular)" subtitle="Skip any regular combinada involving these teams">
+          <TeamBlacklistPicker
+            value={activeForm.combinadasRegularExcludedTeams ?? []}
+            onChange={(v) => setField('combinadasRegularExcludedTeams', v)}
+          />
+        </Field>
 
         <div className="pt-2 pb-1 text-xs font-medium text-text-muted uppercase tracking-wider">Premium combinadas</div>
         <Field label="Count" subtitle="Total premium combinadas to generate (0-10)">
@@ -600,6 +772,25 @@ export default function ConfigPage() {
             max={95}
             value={activeForm.combinadasMinConfidencePremium ?? 45}
             onChange={(e) => setField('combinadasMinConfidencePremium', Number(e.target.value))}
+            className="h-9 w-24 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
+          />
+        </Field>
+        <Field label="Leagues (premium)" subtitle="Which leagues premium combinadas can cover. Empty = all V1 leagues.">
+          <LeagueMultiSelect
+            leagues={competitions ?? []}
+            value={activeForm.combinadasPremiumLeagues ?? []}
+            onChange={(v) => setField('combinadasPremiumLeagues', v)}
+            emptyLabel="All V1 leagues allowed"
+          />
+        </Field>
+        <Field label="Max combined odds (premium)" subtitle="Reject premium combinadas whose product of odds exceeds this (1.5–20)">
+          <input
+            type="number"
+            min={1.5}
+            max={20}
+            step={0.1}
+            value={activeForm.combinadasPremiumMaxOdds ?? 6.0}
+            onChange={(e) => setField('combinadasPremiumMaxOdds', Number(e.target.value))}
             className="h-9 w-24 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
           />
         </Field>

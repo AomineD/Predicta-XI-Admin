@@ -1,7 +1,12 @@
+'use client';
+
+import { useState } from 'react';
+
 interface CrestProps {
   team: string;
   size?: number;
   variant?: number;
+  logo?: string | null;
 }
 
 const PALETTES: Array<[string, string]> = [
@@ -25,8 +30,26 @@ function initials(team: string): string {
     .toUpperCase();
 }
 
-export function Crest({ team, size = 28, variant = 0 }: CrestProps) {
+export function Crest({ team, size = 28, variant = 0, logo }: CrestProps) {
+  const [imgFailed, setImgFailed] = useState(false);
   const [bg, fg] = PALETTES[Math.abs(variant) % PALETTES.length];
+
+  if (logo && !imgFailed) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={logo}
+        alt={team}
+        title={team}
+        width={size}
+        height={size}
+        onError={() => setImgFailed(true)}
+        className="shrink-0 object-contain bg-white/[0.04] border border-[rgba(255,255,255,0.08)]"
+        style={{ width: size, height: size, borderRadius: size / 2 }}
+      />
+    );
+  }
+
   return (
     <div
       className="flex items-center justify-center font-display font-bold border border-[rgba(255,255,255,0.08)] shrink-0"
