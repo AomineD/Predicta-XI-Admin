@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
@@ -286,6 +286,14 @@ function ConfirmModal({ title, description, onConfirm, onCancel, loading }: {
 /* ── main page ────────────────────────────────────────────────────────────── */
 
 export default function CreditsPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-sm text-text-muted font-sans">Loading...</div>}>
+      <CreditsPageInner />
+    </Suspense>
+  );
+}
+
+function CreditsPageInner() {
   const qc = useQueryClient();
   const router = useRouter();
   const pathname = usePathname();

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
@@ -292,6 +292,14 @@ function TeamBlacklistPicker({
 }
 
 export default function ConfigPage() {
+  return (
+    <Suspense fallback={<p className="text-text-muted text-sm">Loading config...</p>}>
+      <ConfigPageInner />
+    </Suspense>
+  );
+}
+
+function ConfigPageInner() {
   const qc = useQueryClient();
   const router = useRouter();
   const pathname = usePathname();
