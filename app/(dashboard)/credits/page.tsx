@@ -327,9 +327,10 @@ function CreditsPageInner() {
 
   const configMut = useMutation({
     mutationFn: (data: CreditsConfig) => api.put('/admin/credits-config', data),
-    onSuccess: () => {
+    onSuccess: (_res, variables) => {
+      qc.setQueryData(['credits-config'], variables);
+      setForm(null);
       qc.invalidateQueries({ queryKey: ['credits-config'] });
-      setForm(null); // reload from server
     },
   });
 
