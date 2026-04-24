@@ -73,7 +73,7 @@ interface ApiKey {
   updatedAt: string;
 }
 
-const MODELS = ['deepseek-r1', 'gpt-5.4-mini', 'gpt-5.4', 'gpt-5.4-think', 'gemini-3.1-pro', 'glm-5', 'kimi-k2.5'];
+const MODELS = ['deepseek-v4-flash', 'deepseek-v4-pro', 'gpt-5.4-mini', 'gpt-5.4', 'gpt-5.4-think', 'gemini-3.1-pro', 'glm-5', 'kimi-k2.5'];
 const MARKETS = ['match_result', 'over_under_2_5', 'over_under_1_5', 'btts', 'double_chance', 'asian_handicap', 'correct_score', 'first_goal', 'corners', 'handicap', 'cards_over_under', 'penalty', 'red_card'];
 const DATA_FIELDS = ['fixture_info', 'standings', 'recent_form', 'season_stats', 'h2h', 'injuries', 'odds', 'match_preview', 'squads', 'lineups', 'squad_insights', 'key_player_form', 'deep_stats'];
 const REASONING_OPTIONS = ['', 'low', 'medium', 'high'];
