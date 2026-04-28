@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { MetricCard } from '@/components/ui/MetricCard';
+import { Button } from '@/components/ui/Button';
 import { formatDateTime } from '@/lib/utils';
 import { CombinadaDetailModal, type CombinadaModalData } from '@/components/combinadas/CombinadaDetailModal';
 
@@ -65,7 +66,14 @@ interface CombinadaJob {
 export default function CombinadasPage() {
   const [tab, setTab] = useState<'list' | 'jobs'>('list');
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const queryClient = useQueryClient();
+
+  // Bulk delete is restricted to today's combinadas (backend enforces this).
+  // Compute today's date in UTC to match the backend's date storage format.
+  const todayUtc = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const isToday = (combinada: Combinada) => combinada.date.slice(0, 10) === todayUtc;
 
   const { data: stats } = useQuery({
     queryKey: ['combinada-stats'],
@@ -109,7 +117,69 @@ export default function CombinadasPage() {
     },
   });
 
+  const bulkDeleteMut = useMutation({
+    mutationFn: (ids: string[]) =>
+      api.post<{ deletedCount: number; accessRowsDeleted: number; skippedIds: string[]; message: string }>(
+        '/admin/combinadas/bulk-delete',
+        { ids },
+      ),
+    onSuccess: () => {
+      // Invalidate stats too — `today` count drops after deletion.
+      queryClient.invalidateQueries({ queryKey: ['combinadas'] });
+      queryClient.invalidateQueries({ queryKey: ['combinada-stats'] });
+      setSelectedIds(new Set());
+      setShowDeleteConfirm(false);
+    },
+  });
+
+  const todaysCombinadas = useMemo(
+    () => (combinadas?.data ?? []).filter(isToday),
+    [combinadas, todayUtc], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  const todayDeletableIds = useMemo(() => todaysCombinadas.map((c) => c.id), [todaysCombinadas]);
+  const allTodaySelected = todayDeletableIds.length > 0 && todayDeletableIds.every((id) => selectedIds.has(id));
+  const toggleSelectAllToday = () => {
+    if (allTodaySelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(todayDeletableIds));
+    }
+  };
+  const toggleOne = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
   const combinadaColumns: Column<Combinada>[] = [
+    {
+      key: 'select',
+      header: '',
+      width: 'w-10',
+      render: (c) => {
+        // Only today's combinadas are deletable. Render a disabled placeholder
+        // for historical rows so the column alignment stays consistent.
+        if (!isToday(c)) {
+          return <span className="inline-block w-4 h-4" />;
+        }
+        return (
+          <input
+            type="checkbox"
+            checked={selectedIds.has(c.id)}
+            onChange={(e) => {
+              e.stopPropagation();
+              toggleOne(c.id);
+            }}
+            onClick={(e) => e.stopPropagation()}
+            className="w-4 h-4 cursor-pointer accent-primary"
+            aria-label={`Select combinada ${c.id}`}
+          />
+        );
+      },
+    },
     {
       key: 'settlement',
       header: 'Status',
@@ -240,12 +310,47 @@ export default function CombinadasPage() {
       </div>
 
       {tab === 'list' && (
-        <DataTable<Combinada>
-          columns={combinadaColumns}
-          data={combinadas?.data ?? []}
-          loading={isLoading}
-          keyExtractor={(c) => c.id}
-        />
+        <>
+          {/* Selection toolbar — appears above the table to handle "select all
+              today" and trigger bulk delete. Only counts today's combinadas
+              because deletion is restricted to today's date server-side. */}
+          {todayDeletableIds.length > 0 && (
+            <div
+              className="flex items-center justify-between rounded-2xl px-4 py-3"
+              style={{ background: '#121A2B', border: '1px solid rgba(255,255,255,0.08)' }}
+            >
+              <label className="flex items-center gap-3 text-sm text-text-secondary cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={allTodaySelected}
+                  onChange={toggleSelectAllToday}
+                  className="w-4 h-4 cursor-pointer accent-primary"
+                  aria-label="Select all today's combinadas"
+                />
+                <span>
+                  {selectedIds.size > 0
+                    ? `${selectedIds.size} selected`
+                    : `Select all today's combinadas (${todayDeletableIds.length})`}
+                </span>
+              </label>
+              <Button
+                variant="danger"
+                size="sm"
+                disabled={selectedIds.size === 0}
+                onClick={() => setShowDeleteConfirm(true)}
+              >
+                Delete selected
+              </Button>
+            </div>
+          )}
+
+          <DataTable<Combinada>
+            columns={combinadaColumns}
+            data={combinadas?.data ?? []}
+            loading={isLoading}
+            keyExtractor={(c) => c.id}
+          />
+        </>
       )}
 
       {tab === 'jobs' && (
@@ -263,6 +368,60 @@ export default function CombinadasPage() {
         onClose={() => setDetailId(null)}
         currentRiskMode={currentRiskMode}
       />
+
+      {/* Bulk delete confirmation modal — mirrors the danger-modal pattern
+          used in /config so the visual language stays consistent. */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div
+            className="rounded-2xl p-6 w-full max-w-md"
+            style={{ background: '#121A2B', border: '1px solid rgba(239,68,68,0.3)' }}
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-500/15 flex items-center justify-center">
+                <svg className="w-5 h-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-text-primary font-sans">
+                  Delete {selectedIds.size} combinada{selectedIds.size === 1 ? '' : 's'}?
+                </h3>
+                <p className="text-xs text-red-400 font-sans">This cannot be undone</p>
+              </div>
+            </div>
+            <div
+              className="rounded-xl p-3 mb-5"
+              style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}
+            >
+              <p className="text-xs text-red-300 font-sans">
+                The selected combinadas and any related user-access rows will be permanently removed from the database.
+                Restricted to today's combinadas only.
+              </p>
+              <p className="text-xs text-text-muted font-sans mt-2">
+                Tip: after deleting, click <strong className="text-text-primary">Generate Now</strong> to repopulate today's combinadas with the current config.
+              </p>
+            </div>
+            {bulkDeleteMut.isError && (
+              <p className="text-xs text-red-400 font-sans mb-3">
+                {(bulkDeleteMut.error as Error).message}
+              </p>
+            )}
+            <div className="flex justify-end gap-3">
+              <Button variant="secondary" onClick={() => setShowDeleteConfirm(false)} disabled={bulkDeleteMut.isPending}>
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                loading={bulkDeleteMut.isPending}
+                onClick={() => bulkDeleteMut.mutate(Array.from(selectedIds))}
+              >
+                Yes, delete {selectedIds.size}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
