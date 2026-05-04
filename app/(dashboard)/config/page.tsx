@@ -483,6 +483,65 @@ function ConfigPageInner() {
     },
   });
 
+  // Re-enrich batch — manual escape hatch for matches stuck on a phase
+  type ReEnrichPreview = {
+    dryRun: true;
+    validCount: number;
+    invalidCount: number;
+    preview: Array<{ matchId: number; kickoff: string | null; status: string | null; enrichmentPhase: number | null; home: string; away: string }>;
+    invalid: Array<{ matchId: number; reason: string }>;
+  };
+  const [reEnrichInput, setReEnrichInput] = useState('');
+  const [reEnrichPreview, setReEnrichPreview] = useState<ReEnrichPreview | null>(null);
+  const [reEnrichMessage, setReEnrichMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const parseReEnrichIds = (raw: string): number[] => {
+    const tokens = raw.split(/[\s,;]+/).map((s) => s.trim()).filter(Boolean);
+    const seen = new Set<number>();
+    const out: number[] = [];
+    for (const t of tokens) {
+      const n = Number.parseInt(t, 10);
+      if (!Number.isInteger(n) || n <= 0) continue;
+      if (seen.has(n)) continue;
+      seen.add(n);
+      out.push(n);
+    }
+    return out;
+  };
+
+  const reEnrichPreviewMutation = useMutation({
+    mutationFn: (ids: number[]) =>
+      api.post('/admin/enrichment/re-enrich-batch', { matchIds: ids, dryRun: true }) as Promise<ReEnrichPreview>,
+    onSuccess: (data) => {
+      setReEnrichPreview(data);
+      setReEnrichMessage(null);
+    },
+    onError: (err: Error) => {
+      setReEnrichPreview(null);
+      setReEnrichMessage({ type: 'error', text: err.message });
+    },
+  });
+
+  const reEnrichRunMutation = useMutation({
+    mutationFn: (ids: number[]) =>
+      api.post('/admin/enrichment/re-enrich-batch', { matchIds: ids, dryRun: false }) as Promise<{
+        jobId: number;
+        accepted: number;
+        rejected: number;
+      }>,
+    onSuccess: (data) => {
+      setReEnrichMessage({
+        type: 'success',
+        text: `Job #${data.jobId} started — ${data.accepted} match${data.accepted === 1 ? '' : 'es'} queued (${data.rejected} rejected). Check Jobs page for progress.`,
+      });
+      setReEnrichPreview(null);
+      setReEnrichInput('');
+    },
+    onError: (err: Error) => {
+      setReEnrichMessage({ type: 'error', text: err.message });
+    },
+  });
+
   // Danger zone — delete all sports data
   const [showDeleteAllConfirm, setShowDeleteAllConfirm] = useState(false);
   const [deleteAllResult, setDeleteAllResult] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -1088,6 +1147,116 @@ function ConfigPageInner() {
             {backfillMessage.text}
           </p>
         )}
+
+        <div className="border-t mt-3 pt-3" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+          <p className="text-sm text-text-primary font-sans">Re-enrich phase 3 (manual)</p>
+          <p className="text-xs text-text-muted/60 font-sans mt-0.5 max-w-2xl">
+            Re-run the full enrichment pipeline for an explicit list of match IDs. Use this for
+            matches that got stuck on a particular phase and won&apos;t be retried by the regular
+            scheduler (e.g. their pre-match window has passed). Live matches, missing match IDs,
+            and matches already at phase 3 are rejected during preview.
+          </p>
+
+          <textarea
+            className="mt-3 w-full rounded-lg p-3 text-sm font-mono text-text-primary"
+            style={{ background: '#0F1626', border: '1px solid rgba(255,255,255,0.08)', minHeight: 80 }}
+            placeholder="16656, 16659, 16660 — separate by comma, space or newline"
+            value={reEnrichInput}
+            onChange={(e) => {
+              setReEnrichInput(e.target.value);
+              if (reEnrichPreview) setReEnrichPreview(null);
+              if (reEnrichMessage) setReEnrichMessage(null);
+            }}
+          />
+
+          <div className="flex items-center justify-between mt-3 gap-3 flex-wrap">
+            <p className="text-xs text-text-muted/60 font-sans">
+              {(() => {
+                const parsed = parseReEnrichIds(reEnrichInput);
+                if (parsed.length === 0) return 'No match IDs detected.';
+                if (parsed.length > 100) return `${parsed.length} IDs detected — capped at 100 per batch.`;
+                return `${parsed.length} unique match ID${parsed.length === 1 ? '' : 's'} detected.`;
+              })()}
+            </p>
+            <div className="flex gap-2">
+              <Button
+                variant="secondary"
+                loading={reEnrichPreviewMutation.isPending}
+                disabled={(() => {
+                  const parsed = parseReEnrichIds(reEnrichInput);
+                  return parsed.length === 0 || parsed.length > 100;
+                })()}
+                onClick={() => {
+                  const parsed = parseReEnrichIds(reEnrichInput);
+                  if (parsed.length === 0 || parsed.length > 100) return;
+                  reEnrichPreviewMutation.mutate(parsed);
+                }}
+              >
+                Preview
+              </Button>
+              <Button
+                variant="primary"
+                loading={reEnrichRunMutation.isPending}
+                disabled={!reEnrichPreview || reEnrichPreview.validCount === 0}
+                onClick={() => {
+                  if (!reEnrichPreview || reEnrichPreview.validCount === 0) return;
+                  const parsed = parseReEnrichIds(reEnrichInput);
+                  if (parsed.length === 0) return;
+                  if (window.confirm(`Run full enrichment for ${reEnrichPreview.validCount} match${reEnrichPreview.validCount === 1 ? '' : 'es'}? This may take several minutes.`)) {
+                    reEnrichRunMutation.mutate(parsed);
+                  }
+                }}
+              >
+                Run
+              </Button>
+            </div>
+          </div>
+
+          {reEnrichPreview && (
+            <div className="mt-3 rounded-lg p-3 text-xs font-mono" style={{ background: '#0F1626', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <p className="text-text-primary mb-2">
+                <span className="text-success">Valid: {reEnrichPreview.validCount}</span>
+                <span className="mx-2 text-text-muted/40">·</span>
+                <span className={reEnrichPreview.invalidCount > 0 ? 'text-danger' : 'text-text-muted'}>
+                  Invalid: {reEnrichPreview.invalidCount}
+                </span>
+              </p>
+              {reEnrichPreview.preview.length > 0 && (
+                <div className="mb-2">
+                  <p className="text-text-muted/60 mb-1">First {reEnrichPreview.preview.length} valid match(es):</p>
+                  <ul className="space-y-0.5">
+                    {reEnrichPreview.preview.map((m) => (
+                      <li key={m.matchId} className="text-text-muted">
+                        #{m.matchId} · {m.status ?? '?'} · phase={m.enrichmentPhase ?? 0} · {m.home} vs {m.away}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {reEnrichPreview.invalid.length > 0 && (
+                <div>
+                  <p className="text-text-muted/60 mb-1">Rejected:</p>
+                  <ul className="space-y-0.5">
+                    {reEnrichPreview.invalid.slice(0, 20).map((row) => (
+                      <li key={row.matchId} className="text-danger/80">
+                        #{row.matchId} → {row.reason}
+                      </li>
+                    ))}
+                    {reEnrichPreview.invalid.length > 20 && (
+                      <li className="text-text-muted/40">... and {reEnrichPreview.invalid.length - 20} more</li>
+                    )}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+
+          {reEnrichMessage && (
+            <p className={`text-xs font-sans mt-2 ${reEnrichMessage.type === 'success' ? 'text-success' : 'text-danger'}`}>
+              {reEnrichMessage.text}
+            </p>
+          )}
+        </div>
       </SectionCard>
 
       {/* Danger Zone */}
