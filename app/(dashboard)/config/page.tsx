@@ -58,6 +58,8 @@ interface PredictionConfig {
   combinadasPremiumMaxOdds?: number;
   enrichmentMode?: string;
   earlyEnrichmentHourUtc?: number;
+  /** Per-model max output token override. Empty/missing → backend uses baked-in default. */
+  llmMaxTokens?: Record<string, number>;
 }
 
 interface TeamLite {
@@ -74,6 +76,20 @@ interface ApiKey {
 }
 
 const MODELS = ['deepseek-v4-flash', 'deepseek-v4-pro', 'gpt-5.4-mini', 'gpt-5.4', 'gpt-5.4-think', 'gemini-3.1-pro', 'glm-5', 'kimi-k2.5'];
+// Backend defaults baked into batch-processor.getMaxTokens. Shown as placeholder
+// in the per-model max-tokens inputs so operators can see what the system uses
+// when no override is set. Keep in sync with backend; see batch-processor.ts.
+const MODEL_DEFAULT_MAX_TOKENS: Record<string, number> = {
+  'deepseek-v4-pro': 16384,
+  'deepseek-v4-flash': 12288,
+  'deepseek-r1': 8192,
+  'gpt-5.4-mini': 4096,
+  'gpt-5.4': 4096,
+  'gpt-5.4-think': 4096,
+  'gemini-3.1-pro': 4096,
+  'glm-5': 4096,
+  'kimi-k2.5': 4096,
+};
 const MARKETS = ['match_result', 'over_under_2_5', 'over_under_1_5', 'btts', 'double_chance', 'asian_handicap', 'correct_score', 'first_goal', 'corners', 'handicap', 'cards_over_under', 'penalty', 'red_card'];
 const DATA_FIELDS = ['fixture_info', 'standings', 'recent_form', 'season_stats', 'h2h', 'injuries', 'odds', 'match_preview', 'squads', 'lineups', 'squad_insights', 'key_player_form', 'deep_stats'];
 const REASONING_OPTIONS = ['', 'low', 'medium', 'high'];
@@ -354,6 +370,7 @@ function ConfigPageInner() {
       llmTimeoutSeconds: cfg.llmTimeoutSeconds ?? 30,
       predictionWindowMinutes: cfg.predictionWindowMinutes ?? 0,
       featuredLeagueIds: cfg.featuredLeagueIds ?? [39, 140, 135],
+      llmMaxTokens: cfg.llmMaxTokens ?? {},
     };
   }, [cfg]);
 
@@ -622,6 +639,62 @@ function ConfigPageInner() {
         <Field label="Historical context" subtitle="Include past prediction outcomes to improve accuracy">
           <Toggle value={activeForm.historicalContextEnabled} onChange={(v) => setField('historicalContextEnabled', v)} />
         </Field>
+      </SectionCard>
+
+      <SectionCard
+        title="Output Token Limits"
+        subtitle="Per-model max output tokens. Leave blank to use the backend default. Raise when you see prediction_jobs failing with finishReason=length."
+      >
+        {MODELS.map((model) => {
+          const override = activeForm.llmMaxTokens?.[model];
+          const fallback = MODEL_DEFAULT_MAX_TOKENS[model];
+          const hasOverride = typeof override === 'number';
+          return (
+            <Field
+              key={model}
+              label={model}
+              subtitle={fallback ? `Default ${fallback.toLocaleString()}` : 'No backend default registered'}
+            >
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min={512}
+                  max={65536}
+                  step={256}
+                  value={hasOverride ? override : ''}
+                  placeholder={fallback ? String(fallback) : ''}
+                  onChange={(e) => {
+                    const raw = e.target.value.trim();
+                    const next = { ...(activeForm.llmMaxTokens ?? {}) };
+                    if (raw === '') {
+                      delete next[model];
+                    } else {
+                      const n = Number.parseInt(raw, 10);
+                      if (Number.isInteger(n) && n >= 512 && n <= 65536) {
+                        next[model] = n;
+                      }
+                    }
+                    setField('llmMaxTokens', next);
+                  }}
+                  className="h-9 w-32 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
+                />
+                {hasOverride && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = { ...(activeForm.llmMaxTokens ?? {}) };
+                      delete next[model];
+                      setField('llmMaxTokens', next);
+                    }}
+                    className="text-xs text-text-muted hover:text-text-primary font-sans"
+                  >
+                    reset
+                  </button>
+                )}
+              </div>
+            </Field>
+          );
+        })}
       </SectionCard>
 
       <SectionCard title="Output Markets" subtitle="Betting markets included in each generated prediction">
