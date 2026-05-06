@@ -83,7 +83,9 @@ export function BySourceDonut({
                 ))}
               </Pie>
               <Tooltip
-                contentStyle={{ background: '#1F2A40', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, color: '#F5F7FB', fontSize: 12 }}
+                contentStyle={{ background: '#1F2A40', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, fontSize: 12 }}
+                labelStyle={{ color: '#F5F7FB', marginBottom: 4 }}
+                itemStyle={{ color: '#F5F7FB' }}
                 formatter={(v, name) => [formatCost(Number(v)), LABELS[name as string] ?? String(name)]}
               />
             </PieChart>

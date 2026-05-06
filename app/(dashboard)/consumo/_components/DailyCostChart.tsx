@@ -71,7 +71,9 @@ export function DailyCostChart({ data, loading }: { data: DailySeriesPoint[] | u
               tickFormatter={(v: number) => `$${v.toFixed(2)}`}
             />
             <Tooltip
-              contentStyle={{ background: '#1F2A40', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, color: '#F5F7FB', fontSize: 12 }}
+              contentStyle={{ background: '#1F2A40', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, fontSize: 12 }}
+              labelStyle={{ color: '#F5F7FB', marginBottom: 4 }}
+              itemStyle={{ color: '#F5F7FB' }}
               cursor={{ fill: 'rgba(255,255,255,0.04)' }}
               formatter={(v, name) => [`$${Number(v).toFixed(4)}`, name === 'prediction' ? 'Prediction' : 'Combinada']}
             />
@@ -80,12 +82,12 @@ export function DailyCostChart({ data, loading }: { data: DailySeriesPoint[] | u
               iconType="circle"
               formatter={(v) => (v === 'prediction' ? 'Prediction' : 'Combinada')}
             />
-            <Bar dataKey="prediction" stackId="a" radius={[0, 0, 0, 0]}>
+            <Bar dataKey="prediction" stackId="a" fill={SOURCE_COLORS.prediction} radius={[0, 0, 0, 0]}>
               {rows.map((r, i) => (
                 <Cell key={`p-${i}`} fill={r.isAnomaly ? ANOMALY_COLOR : SOURCE_COLORS.prediction} />
               ))}
             </Bar>
-            <Bar dataKey="combinada" stackId="a" radius={[6, 6, 0, 0]}>
+            <Bar dataKey="combinada" stackId="a" fill={SOURCE_COLORS.combinada} radius={[6, 6, 0, 0]}>
               {rows.map((r, i) => (
                 <Cell key={`c-${i}`} fill={r.isAnomaly ? ANOMALY_COLOR : SOURCE_COLORS.combinada} />
               ))}
