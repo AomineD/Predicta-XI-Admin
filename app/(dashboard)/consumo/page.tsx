@@ -16,6 +16,9 @@ import { InfoModal } from './_components/InfoModal';
 import { ErrorModal } from './_components/ErrorModal';
 import { ActionsDropdown } from './_components/ActionsDropdown';
 import { ConsumoFilters, type ConsumoFiltersValue } from './_components/ConsumoFilters';
+import { DailyCostChart } from './_components/DailyCostChart';
+import { DailyTokensChart } from './_components/DailyTokensChart';
+import type { DailySeriesPoint } from './_components/charts-types';
 
 const PAGE_SIZE = 20;
 
@@ -62,6 +65,20 @@ export default function ConsumoPage() {
     queryFn: () => {
       const qs = buildParams(false);
       return api.get(`/admin/consumo/summary${qs ? '?' + qs : ''}`);
+    },
+  });
+
+  const { data: daily, isLoading: dailyLoading } = useQuery<DailySeriesPoint[]>({
+    queryKey: ['consumo-daily', filters],
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (filters.dateFrom) params.set('from', new Date(filters.dateFrom).toISOString());
+      if (filters.dateTo) params.set('to', new Date(filters.dateTo + 'T23:59:59').toISOString());
+      if (filters.provider) params.set('provider', filters.provider);
+      if (filters.source) params.set('callType', filters.source);
+      params.set('groupBy', 'callType');
+      const qs = params.toString();
+      return api.get(`/admin/consumo/daily${qs ? '?' + qs : ''}`);
     },
   });
 
@@ -177,6 +194,11 @@ export default function ConsumoPage() {
       {summary && <SummaryCards summary={summary} />}
 
       <ConsumoFilters value={filters} onChange={handleFiltersChange} onClear={handleClear} />
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-4">
+        <DailyCostChart data={daily} loading={dailyLoading} />
+        <DailyTokensChart data={daily} loading={dailyLoading} />
+      </div>
 
       <DataTable
         columns={columns}
