@@ -18,6 +18,8 @@ import { ActionsDropdown } from './_components/ActionsDropdown';
 import { ConsumoFilters, type ConsumoFiltersValue } from './_components/ConsumoFilters';
 import { DailyCostChart } from './_components/DailyCostChart';
 import { DailyTokensChart } from './_components/DailyTokensChart';
+import { ByModelTable, type ByModelRow } from './_components/ByModelTable';
+import { BySourceDonut, type BySourceRow } from './_components/BySourceDonut';
 import type { DailySeriesPoint } from './_components/charts-types';
 
 const PAGE_SIZE = 20;
@@ -68,17 +70,41 @@ export default function ConsumoPage() {
     },
   });
 
+  const buildRangeParams = (extra?: Record<string, string>) => {
+    const params = new URLSearchParams();
+    if (filters.dateFrom) params.set('from', new Date(filters.dateFrom).toISOString());
+    if (filters.dateTo) params.set('to', new Date(filters.dateTo + 'T23:59:59').toISOString());
+    if (filters.provider) params.set('provider', filters.provider);
+    if (filters.source) params.set('callType', filters.source);
+    if (extra) for (const [k, v] of Object.entries(extra)) params.set(k, v);
+    return params.toString();
+  };
+
   const { data: daily, isLoading: dailyLoading } = useQuery<DailySeriesPoint[]>({
     queryKey: ['consumo-daily', filters],
+    queryFn: () => {
+      const qs = buildRangeParams({ groupBy: 'callType' });
+      return api.get(`/admin/consumo/daily${qs ? '?' + qs : ''}`);
+    },
+  });
+
+  const { data: byModel } = useQuery<ByModelRow[]>({
+    queryKey: ['consumo-by-model', filters],
+    queryFn: () => {
+      const qs = buildRangeParams();
+      return api.get(`/admin/consumo/by-model${qs ? '?' + qs : ''}`);
+    },
+  });
+
+  const { data: bySource } = useQuery<BySourceRow[]>({
+    queryKey: ['consumo-by-source', { from: filters.dateFrom, to: filters.dateTo, provider: filters.provider }],
     queryFn: () => {
       const params = new URLSearchParams();
       if (filters.dateFrom) params.set('from', new Date(filters.dateFrom).toISOString());
       if (filters.dateTo) params.set('to', new Date(filters.dateTo + 'T23:59:59').toISOString());
       if (filters.provider) params.set('provider', filters.provider);
-      if (filters.source) params.set('callType', filters.source);
-      params.set('groupBy', 'callType');
       const qs = params.toString();
-      return api.get(`/admin/consumo/daily${qs ? '?' + qs : ''}`);
+      return api.get(`/admin/consumo/by-source${qs ? '?' + qs : ''}`);
     },
   });
 
@@ -191,13 +217,27 @@ export default function ConsumoPage() {
     <div>
       <PageHeader title="Consumo" description="LLM API usage — tokens, costs, and debugging. Test predictions are marked as TEST and do not count toward production KPIs/stats." />
 
-      {summary && <SummaryCards summary={summary} />}
+      {summary && <SummaryCards summary={summary} daily={daily} />}
 
       <ConsumoFilters value={filters} onChange={handleFiltersChange} onClear={handleClear} />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-4">
         <DailyCostChart data={daily} loading={dailyLoading} />
         <DailyTokensChart data={daily} loading={dailyLoading} />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-4">
+        <div className="lg:col-span-2">
+          <ByModelTable
+            rows={byModel ?? []}
+            totalCost={parseFloat(summary?.totalCostUsd ?? '0') || 0}
+          />
+        </div>
+        <BySourceDonut
+          rows={bySource ?? []}
+          activeSource={filters.source}
+          onSelectSource={(source) => handleFiltersChange({ source })}
+        />
       </div>
 
       <DataTable
