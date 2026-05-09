@@ -75,7 +75,7 @@ interface ApiKey {
   updatedAt: string;
 }
 
-const MODELS = ['deepseek-v4-flash', 'deepseek-v4-pro', 'gpt-5.4-mini', 'gpt-5.4', 'gpt-5.4-think', 'gemini-3.1-pro', 'glm-5', 'kimi-k2.5'];
+const MODELS = ['deepseek-v4-flash', 'deepseek-v4-pro', 'gpt-5.4-mini', 'gpt-5.4', 'gpt-5.4-think', 'gemini-3.1-pro', 'gemini-3.1-flash-lite-preview', 'glm-5', 'kimi-k2.5'];
 // Backend defaults baked into batch-processor.getMaxTokens. Shown as placeholder
 // in the per-model max-tokens inputs so operators can see what the system uses
 // when no override is set. Keep in sync with backend; see batch-processor.ts.
@@ -87,6 +87,7 @@ const MODEL_DEFAULT_MAX_TOKENS: Record<string, number> = {
   'gpt-5.4': 4096,
   'gpt-5.4-think': 4096,
   'gemini-3.1-pro': 4096,
+  'gemini-3.1-flash-lite-preview': 4096,
   'glm-5': 4096,
   'kimi-k2.5': 4096,
 };
