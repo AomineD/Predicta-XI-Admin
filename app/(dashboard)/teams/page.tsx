@@ -12,8 +12,14 @@ interface Team {
   logo: string | null;
   flashscoreSlug: string | null;
   country: string | null;
+  teamType: 'club' | 'national';
   createdAt: string;
 }
+
+// Sentinel value for the country dropdown that activates the teamType filter
+// instead of the country filter. Picked unlikely to ever collide with a real
+// country name returned from the backend.
+const FILTER_SELECCIONES = '__selecciones__';
 
 interface TeamsResponse {
   items: Team[];
@@ -140,7 +146,14 @@ export default function TeamsPage() {
 
   const queryParams = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
   if (search) queryParams.set('search', search);
-  if (countryFilter) queryParams.set('country', countryFilter);
+  if (countryFilter === FILTER_SELECCIONES) {
+    // Pseudo-country option: switches the filter from `country=` to
+    // `teamType=national`. The backend whitelist accepts only 'national' |
+    // 'club', so smuggling the sentinel through is harmless.
+    queryParams.set('teamType', 'national');
+  } else if (countryFilter) {
+    queryParams.set('country', countryFilter);
+  }
 
   const { data, isLoading } = useQuery<TeamsResponse>({
     queryKey: ['teams', page, search, countryFilter],
@@ -156,8 +169,18 @@ export default function TeamsPage() {
     },
   });
 
-  // Extract unique countries from current page for filter
-  const countries = [...new Set((data?.items ?? []).map((t) => t.country).filter(Boolean))] as string[];
+  // Extract unique countries from current page for filter. Excludes the
+  // pseudo-"World" countries used as the home country of national teams so the
+  // dropdown stays focused on club leagues; the "Selecciones" option is the
+  // proper way to surface national teams.
+  const countries = [
+    ...new Set(
+      (data?.items ?? [])
+        .filter((t) => t.teamType !== 'national')
+        .map((t) => t.country)
+        .filter(Boolean),
+    ),
+  ] as string[];
 
   const totalPages = data ? Math.ceil(data.total / pageSize) : 1;
 
@@ -183,6 +206,8 @@ export default function TeamsPage() {
           className="h-9 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
         >
           <option value="">All countries</option>
+          <option value={FILTER_SELECCIONES}>🌐 Selecciones</option>
+          <option value="" disabled>──────────</option>
           {countries.sort().map((c) => <option key={c} value={c}>{c}</option>)}
         </select>
       </div>
