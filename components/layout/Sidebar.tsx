@@ -15,6 +15,7 @@ import {
   Activity,
   Coins,
   Layers,
+  Award,
   BarChart3,
   LogOut,
 } from 'lucide-react';
@@ -28,6 +29,7 @@ const NAV_ITEMS = [
   { href: '/config',      label: 'Config',        icon: Settings },
   { href: '/credits',    label: 'Credits',       icon: Coins },
   { href: '/combinadas', label: 'Combinadas',    icon: Layers },
+  { href: '/quinielas', label: 'Quinielas',     icon: Award },
   { href: '/models',     label: 'Models',        icon: BarChart3 },
   { href: '/jobs',        label: 'Jobs',          icon: ClockIcon },
   { href: '/consumo',    label: 'Consumo',       icon: Activity },
