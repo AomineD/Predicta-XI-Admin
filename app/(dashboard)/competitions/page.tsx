@@ -241,20 +241,25 @@ function CompetitionDetailsEditor({
         </label>
 
         <label className="block">
-          <span className="text-xs text-text-muted font-sans">Historical context (LLM prompt)</span>
+          <span className="text-xs text-text-muted font-sans flex justify-between">
+            <span>Historical context (LLM prompt)</span>
+            <span className={historicalContext.length > 12000 ? 'text-danger' : 'text-text-muted'}>
+              {historicalContext.length} / 12000
+            </span>
+          </span>
           <textarea
             value={historicalContext}
             onChange={(e) => setHistoricalContext(e.target.value)}
             rows={6}
             placeholder="Brief description, recent editions, scoring quirks…"
-            className="mt-1 w-full px-3 py-2 rounded-xl text-xs font-mono text-text-primary bg-surface-3 border border-border outline-none placeholder:text-text-muted resize-y"
+            className={`mt-1 w-full px-3 py-2 rounded-xl text-xs font-mono text-text-primary bg-surface-3 outline-none placeholder:text-text-muted resize-y ${historicalContext.length > 12000 ? 'border border-danger' : 'border border-border'}`}
           />
         </label>
 
         <div className="flex gap-2 pt-2">
           <button
             type="button"
-            disabled={missingSeasonYear}
+            disabled={missingSeasonYear || historicalContext.length > 12000}
             onClick={() => onSave({
               name: name.trim() || undefined,
               country: country.trim() ? country.trim() : null,
