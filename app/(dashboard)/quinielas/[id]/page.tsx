@@ -27,7 +27,8 @@ interface QuinielaPick {
 
 interface QuinielaJob {
   id: number;
-  phase: 'phase1' | 'phase2';
+  phase: 'phase1' | 'phase2' | null;
+  operation?: 'generate' | 'reset' | 'sync_history';
   status: string;
   triggeredBy: string;
   model: string | null;
@@ -68,6 +69,7 @@ const TABS = [
 export default function QuinielaDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const [tab, setTab] = useState<string>('summary');
+  const [resetTarget, setResetTarget] = useState<'phase1' | 'phase2' | 'all' | null>(null);
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({
@@ -83,15 +85,22 @@ export default function QuinielaDetailPage({ params }: { params: Promise<{ id: s
     onSuccess: invalidate,
   });
 
-  const generatePhase1Mut = useMutation({
+  // Fire-and-forget: server returns { jobId, status: 'pending' }; the dispatcher
+  // picks it up. Polling at refetchInterval=15s surfaces the result.
+  const generatePhase1Mut = useMutation<{ jobId: number; status: string }, Error, boolean>({
     mutationFn: (regenerate: boolean) =>
       api.post(`/admin/quinielas/${id}/generate-phase1`, { regenerate }),
     onSuccess: invalidate,
   });
 
-  const generatePhase2Mut = useMutation({
+  const generatePhase2Mut = useMutation<{ jobId: number; status: string }, Error, boolean>({
     mutationFn: (regenerate: boolean) =>
       api.post(`/admin/quinielas/${id}/generate-phase2`, { regenerate }),
+    onSuccess: invalidate,
+  });
+
+  const syncHistoryMut = useMutation<{ jobId: number; status: string }, Error, void>({
+    mutationFn: () => api.post(`/admin/quinielas/${id}/sync-team-history`),
     onSuccess: invalidate,
   });
 
@@ -118,10 +127,18 @@ export default function QuinielaDetailPage({ params }: { params: Promise<{ id: s
   const canSettleAuto = quiniela.status === 'phase1_locked'
     || quiniela.status === 'phase2_generated'
     || quiniela.status === 'phase2_locked';
+  const canResetPhase1 = phase1Picks.length > 0 && quiniela.status !== 'settled';
+  const canResetPhase2 = phase2Picks.length > 0 && quiniela.status !== 'settled';
+
+  // Pending/running jobs that haven't shown up in picks yet — we surface a
+  // tiny banner so the admin sees "queued / running" feedback after clicking
+  // a fire-and-forget button.
+  const activeJobs = jobs.filter((j) => j.status === 'pending' || j.status === 'running');
 
   const genError =
     (generatePhase1Mut.error as Error | undefined)?.message ??
     (generatePhase2Mut.error as Error | undefined)?.message ??
+    (syncHistoryMut.error as Error | undefined)?.message ??
     null;
 
   return (
@@ -162,12 +179,54 @@ export default function QuinielaDetailPage({ params }: { params: Promise<{ id: s
                 Settle auto
               </Button>
             )}
+            <Button onClick={() => syncHistoryMut.mutate()} loading={syncHistoryMut.isPending}>
+              Sync team history
+            </Button>
+            {(canResetPhase1 || canResetPhase2) && (
+              <div className="flex items-center gap-1">
+                {canResetPhase1 && (
+                  <Button variant="danger" onClick={() => setResetTarget('phase1')}>
+                    Reset Phase 1
+                  </Button>
+                )}
+                {canResetPhase2 && (
+                  <Button variant="danger" onClick={() => setResetTarget('phase2')}>
+                    Reset Phase 2
+                  </Button>
+                )}
+                {canResetPhase1 && canResetPhase2 && (
+                  <Button variant="danger" onClick={() => setResetTarget('all')}>
+                    Reset all
+                  </Button>
+                )}
+              </div>
+            )}
           </div>
         }
       />
+      {resetTarget && (
+        <ResetPhaseModal
+          quinielaId={id}
+          quinielaStatus={quiniela.status}
+          target={resetTarget}
+          onClose={() => setResetTarget(null)}
+          onSuccess={() => {
+            setResetTarget(null);
+            invalidate();
+          }}
+        />
+      )}
       {settleAutoMut.data && (
         <div className="mb-4 rounded-xl p-3 text-sm" style={{ background: 'rgba(124,255,91,0.1)', border: '1px solid rgba(124,255,91,0.3)', color: '#7CFF5B' }}>
           Evaluated {settleAutoMut.data.evaluated} · Settled {settleAutoMut.data.settled} · Pending {settleAutoMut.data.pending} · Skipped {settleAutoMut.data.skipped}
+        </div>
+      )}
+      {activeJobs.length > 0 && (
+        <div className="mb-4 rounded-xl p-3 text-sm flex items-center gap-3" style={{ background: 'rgba(124,196,255,0.1)', border: '1px solid rgba(124,196,255,0.3)', color: '#7CC4FF' }}>
+          <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+          <span>
+            {activeJobs.length} job{activeJobs.length > 1 ? 's' : ''} en curso ({activeJobs.map((j) => `${j.operation ?? 'job'} ${j.phase ?? ''}`.trim()).join(', ')}). Esta pantalla se refresca sola cada 15s.
+          </span>
         </div>
       )}
       {genError && (
@@ -187,8 +246,18 @@ export default function QuinielaDetailPage({ params }: { params: Promise<{ id: s
 
       <div className="mt-6">
         {tab === 'summary' && <SummaryTab quiniela={quiniela} />}
-        {tab === 'phase1' && <PicksTab picks={phase1Picks} quinielaId={id} />}
-        {tab === 'phase2' && <PicksTab picks={phase2Picks} quinielaId={id} />}
+        {tab === 'phase1' && (
+          <>
+            <JobIssuesBanner job={latestJobByPhase(jobs, 'phase1')} quinielaId={id} phase="phase1" />
+            <PicksTab picks={phase1Picks} quinielaId={id} />
+          </>
+        )}
+        {tab === 'phase2' && (
+          <>
+            <JobIssuesBanner job={latestJobByPhase(jobs, 'phase2')} quinielaId={id} phase="phase2" />
+            <PicksTab picks={phase2Picks} quinielaId={id} />
+          </>
+        )}
         {tab === 'jobs' && <JobsTab jobs={jobs} />}
       </div>
     </>
@@ -378,6 +447,262 @@ function SettleManualModal({
           <Button onClick={onClose} variant="ghost">Cancel</Button>
           <Button onClick={() => settleMut.mutate()} loading={settleMut.isPending} variant="primary">
             Save
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function latestJobByPhase(jobs: QuinielaJob[], phase: 'phase1' | 'phase2'): QuinielaJob | null {
+  for (const j of jobs) {
+    if (j.phase === phase) return j;
+  }
+  return null;
+}
+
+interface ParsedJobIssues {
+  missingRequired: string[];
+  omittedAllowed: string[];
+  rejected: number;
+  rejectedDetail: string | null;
+}
+
+function parseJobIssues(message: string | null): ParsedJobIssues | null {
+  if (!message) return null;
+  const parts = message.split('|').map((s) => s.trim());
+  let missingRequired: string[] = [];
+  let omittedAllowed: string[] = [];
+  let rejected = 0;
+  let rejectedDetail: string | null = null;
+  for (const part of parts) {
+    const missing = /^Missing required after retry:\s*(.+)$/i.exec(part);
+    if (missing) {
+      missingRequired = missing[1].split(',').map((s) => s.trim()).filter(Boolean);
+      continue;
+    }
+    const omitted = /^Omitted \(allowed\):\s*(.+)$/i.exec(part);
+    if (omitted) {
+      omittedAllowed = omitted[1].split(',').map((s) => s.trim()).filter(Boolean);
+      continue;
+    }
+    const rej = /^Rejected\s+(\d+)\s+picks:\s*(.+)$/i.exec(part);
+    if (rej) {
+      rejected = Number(rej[1]);
+      rejectedDetail = rej[2];
+    }
+  }
+  if (missingRequired.length === 0 && omittedAllowed.length === 0 && rejected === 0) return null;
+  return { missingRequired, omittedAllowed, rejected, rejectedDetail };
+}
+
+function JobIssuesBanner({
+  job,
+  quinielaId,
+  phase,
+}: {
+  job: QuinielaJob | null;
+  quinielaId: string;
+  phase: 'phase1' | 'phase2';
+}) {
+  const [showPayload, setShowPayload] = useState(false);
+  if (!job) return null;
+  const issues = parseJobIssues(job.errorMessage);
+  if (!issues) return null;
+
+  const tone = issues.missingRequired.length > 0 || issues.rejected > 0 ? 'danger' : 'warning';
+  const bg = tone === 'danger' ? 'rgba(239,68,68,0.08)' : 'rgba(255,176,46,0.08)';
+  const border = tone === 'danger' ? 'rgba(239,68,68,0.3)' : 'rgba(255,176,46,0.3)';
+  const color = tone === 'danger' ? '#FCA5A5' : '#FFB02E';
+
+  return (
+    <div className="mb-4 rounded-xl p-4 text-sm space-y-2" style={{ background: bg, border: `1px solid ${border}`, color }}>
+      <div className="font-semibold uppercase tracking-wider text-xs">
+        Job #{job.id} · {phase} · {job.model ?? '—'}
+      </div>
+      {issues.missingRequired.length > 0 && (
+        <div>
+          <span className="font-semibold">Categorías faltantes (incluso tras retry):</span>{' '}
+          {issues.missingRequired.map((c) => (
+            <span key={c} className="inline-block font-mono text-xs bg-black/30 rounded px-1.5 py-0.5 mr-1">{c}</span>
+          ))}
+          <p className="text-xs mt-1 opacity-80">
+            Probables causas: payload sin <span className="font-mono">recentForm</span> /{' '}
+            <span className="font-mono">preTournamentRanking</span> / <span className="font-mono">previousEditions</span>{' '}
+            para estas categorías. Sembrá ranking o esperá data de matches antes de regenerar.
+          </p>
+        </div>
+      )}
+      {issues.omittedAllowed.length > 0 && (
+        <div>
+          <span className="font-semibold">Omitidas (permitido):</span>{' '}
+          {issues.omittedAllowed.map((c) => (
+            <span key={c} className="inline-block font-mono text-xs bg-black/30 rounded px-1.5 py-0.5 mr-1">{c}</span>
+          ))}
+        </div>
+      )}
+      {issues.rejected > 0 && (
+        <div>
+          <span className="font-semibold">Rechazadas:</span> {issues.rejected} pick(s).{' '}
+          {issues.rejectedDetail && (
+            <span className="font-mono text-xs opacity-80">{issues.rejectedDetail}</span>
+          )}
+        </div>
+      )}
+      <div className="pt-1">
+        <button
+          onClick={() => setShowPayload(true)}
+          className="text-xs underline opacity-80 hover:opacity-100"
+        >
+          Ver payload enviado al LLM
+        </button>
+      </div>
+      {showPayload && (
+        <PayloadPreviewModal quinielaId={quinielaId} phase={phase} onClose={() => setShowPayload(false)} />
+      )}
+    </div>
+  );
+}
+
+function PayloadPreviewModal({
+  quinielaId,
+  phase,
+  onClose,
+}: {
+  quinielaId: string;
+  phase: 'phase1' | 'phase2';
+  onClose: () => void;
+}) {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['quiniela-payload-preview', quinielaId, phase],
+    queryFn: () => api.get<{ phase: string; payload: Record<string, unknown> }>(
+      `/admin/quinielas/${quinielaId}/payload-preview?phase=${phase}`,
+    ),
+  });
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6" onClick={onClose}>
+      <div
+        className="w-full max-w-4xl max-h-[80vh] rounded-2xl p-6 flex flex-col"
+        style={{ background: '#121A2B', border: '1px solid rgba(255,255,255,0.08)' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-bold text-text-primary font-sans">Payload preview · {phase}</h2>
+          <Button onClick={onClose} variant="ghost" size="sm">Close</Button>
+        </div>
+        {isLoading && <p className="text-text-muted text-sm">Loading…</p>}
+        {error && <p className="text-danger text-sm">{(error as Error).message}</p>}
+        {data && (
+          <pre className="flex-1 overflow-auto text-xs font-mono bg-black/30 rounded-xl p-3 text-text-secondary">
+            {JSON.stringify(data.payload, null, 2)}
+          </pre>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ResetPhaseModal({
+  quinielaId,
+  quinielaStatus,
+  target,
+  onClose,
+  onSuccess,
+}: {
+  quinielaId: string;
+  quinielaStatus: string;
+  target: 'phase1' | 'phase2' | 'all';
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [confirmText, setConfirmText] = useState('');
+  const [wipeJobs, setWipeJobs] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const isLocked =
+    (target === 'phase2' && quinielaStatus === 'phase2_locked') ||
+    ((target === 'phase1' || target === 'all') &&
+      (quinielaStatus === 'phase1_locked' ||
+        quinielaStatus === 'phase2_generated' ||
+        quinielaStatus === 'phase2_locked'));
+  const requiresForce = isLocked;
+
+  const label =
+    target === 'phase1'
+      ? 'Phase 1'
+      : target === 'phase2'
+        ? 'Phase 2'
+        : 'all phases';
+
+  const consequence =
+    target === 'phase1'
+      ? 'Wipes Phase 1 picks (and Phase 2 if generated, since reasoning depends on Phase 1). State drops to draft.'
+      : target === 'phase2'
+        ? 'Wipes Phase 2 picks only. State drops to phase1_locked / phase1_generated.'
+        : 'Wipes all picks and resets state to draft.';
+
+  const resetMut = useMutation({
+    mutationFn: () => {
+      const params = new URLSearchParams({ phase: target });
+      if (requiresForce) params.set('force', 'true');
+      if (wipeJobs) params.set('wipeJobs', 'true');
+      return api.delete<{ status: string; picksDeleted: number; jobsDeleted: number }>(
+        `/admin/quinielas/${quinielaId}/picks?${params.toString()}`,
+      );
+    },
+    onSuccess,
+    onError: (err: Error) => setError(err.message),
+  });
+
+  const canSubmit = confirmText === 'reset';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+      <div
+        className="w-full max-w-md rounded-2xl p-6 space-y-4"
+        style={{ background: '#121A2B', border: '1px solid rgba(255,255,255,0.08)' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="text-lg font-bold text-danger font-sans">Reset {label}</h2>
+        <p className="text-sm text-text-secondary">{consequence}</p>
+        {requiresForce && (
+          <p className="text-xs text-warning">
+            Quiniela está en <span className="font-mono">{quinielaStatus}</span> — esto borra picks ya publicados.
+          </p>
+        )}
+
+        <label className="flex items-center gap-2 text-xs text-text-secondary cursor-pointer">
+          <input
+            type="checkbox"
+            checked={wipeJobs}
+            onChange={(e) => setWipeJobs(e.target.checked)}
+            className="accent-danger"
+          />
+          También borrar el historial de LLM jobs (no recomendado — perdés trazabilidad)
+        </label>
+
+        <div>
+          <label className="block text-xs font-medium text-text-muted uppercase tracking-wider mb-1">
+            Escribí <span className="font-mono text-danger">reset</span> para confirmar
+          </label>
+          <input
+            value={confirmText}
+            onChange={(e) => setConfirmText(e.target.value)}
+            className="w-full bg-surface-2 border border-border rounded-xl px-3 py-2 text-sm text-text-primary font-mono"
+          />
+        </div>
+
+        {error && <p className="text-sm text-danger">{error}</p>}
+
+        <div className="flex justify-end gap-2 pt-2">
+          <Button onClick={onClose} variant="ghost">Cancel</Button>
+          <Button
+            onClick={() => resetMut.mutate()}
+            variant="danger"
+            disabled={!canSubmit}
+            loading={resetMut.isPending}
+          >
+            Reset {label}
           </Button>
         </div>
       </div>
