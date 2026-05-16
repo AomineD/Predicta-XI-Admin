@@ -25,6 +25,17 @@ interface QuinielaPick {
   createdAt: string | null;
 }
 
+interface QuinielaJobProgress {
+  kind: 'sync_history';
+  total: number;
+  pending: number;
+  running: number;
+  retrying: number;
+  completed: number;
+  failed: number;
+  cancelled: number;
+}
+
 interface QuinielaJob {
   id: number;
   phase: 'phase1' | 'phase2' | null;
@@ -37,6 +48,7 @@ interface QuinielaJob {
   startedAt: string | null;
   finishedAt: string | null;
   createdAt: string | null;
+  progress?: QuinielaJobProgress | null;
 }
 
 interface QuinielaDetail {
@@ -225,7 +237,11 @@ export default function QuinielaDetailPage({ params }: { params: Promise<{ id: s
         <div className="mb-4 rounded-xl p-3 text-sm flex items-center gap-3" style={{ background: 'rgba(124,196,255,0.1)', border: '1px solid rgba(124,196,255,0.3)', color: '#7CC4FF' }}>
           <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
           <span>
-            {activeJobs.length} job{activeJobs.length > 1 ? 's' : ''} en curso ({activeJobs.map((j) => `${j.operation ?? 'job'} ${j.phase ?? ''}`.trim()).join(', ')}). Esta pantalla se refresca sola cada 15s.
+            {activeJobs.length} job{activeJobs.length > 1 ? 's' : ''} en curso ({activeJobs.map((j) => {
+              const label = jobOperationLabel(j);
+              const detail = jobProgressText(j);
+              return detail ? `${label} (${detail})` : label;
+            }).join(', ')}). Esta pantalla se refresca sola cada 15s.
           </span>
         </div>
       )}
@@ -710,28 +726,61 @@ function ResetPhaseModal({
   );
 }
 
+function jobOperationLabel(job: QuinielaJob): string {
+  const op = job.operation ?? 'generate';
+  if (op === 'generate') return job.phase ? `Generate ${job.phase}` : 'Generate';
+  if (op === 'reset') return job.phase ? `Reset ${job.phase}` : 'Reset';
+  if (op === 'sync_history') return 'Sync team history';
+  return op;
+}
+
+function jobProgressText(job: QuinielaJob): string | null {
+  // Sync-history progress is the only fan-out operation today. Show a compact
+  // "X/Y teams (running R, retrying T, failed F)" so the admin can tell at a
+  // glance whether the queue is moving and whether anything is stuck.
+  if (job.operation !== 'sync_history' || !job.progress) return null;
+  const p = job.progress;
+  const parts: string[] = [`${p.completed}/${p.total} teams`];
+  if (p.running > 0) parts.push(`running ${p.running}`);
+  if (p.retrying > 0) parts.push(`retrying ${p.retrying}`);
+  if (p.failed > 0) parts.push(`failed ${p.failed}`);
+  return parts.join(' · ');
+}
+
+function jobDetailText(job: QuinielaJob): string | null {
+  // The rightmost detail line varies by operation: generate exposes picks,
+  // sync_history exposes aggregate team progress, reset exposes nothing.
+  const op = job.operation ?? 'generate';
+  if (op === 'generate') return `picks: ${job.picksGenerated}`;
+  if (op === 'sync_history') return jobProgressText(job);
+  return null;
+}
+
 function JobsTab({ jobs }: { jobs: QuinielaJob[] }) {
   if (jobs.length === 0) {
     return <p className="text-text-muted text-sm">No LLM jobs yet.</p>;
   }
   return (
     <div className="space-y-2">
-      {jobs.map((job) => (
-        <div
-          key={job.id}
-          className="rounded-xl p-3 flex items-center justify-between"
-          style={{ background: '#0E1626', border: '1px solid rgba(255,255,255,0.06)' }}
-        >
-          <div className="flex items-center gap-3">
-            <span className="text-xs font-mono text-text-muted">#{job.id}</span>
-            <span className="text-sm text-text-primary font-sans">{job.phase}</span>
-            <StatusBadge status={job.status} />
-            <span className="text-xs text-text-muted">picks: {job.picksGenerated}</span>
-            {job.model && <span className="text-xs text-text-muted font-mono">{job.model}</span>}
+      {jobs.map((job) => {
+        const detail = jobDetailText(job);
+        return (
+          <div
+            key={job.id}
+            className="rounded-xl p-3 flex items-center justify-between"
+            style={{ background: '#0E1626', border: '1px solid rgba(255,255,255,0.06)' }}
+          >
+            <div className="flex items-center gap-3 flex-wrap">
+              <span className="text-xs font-mono text-text-muted">#{job.id}</span>
+              <span className="text-sm text-text-primary font-sans">{jobOperationLabel(job)}</span>
+              <StatusBadge status={job.status} />
+              {detail && <span className="text-xs text-text-muted">{detail}</span>}
+              {job.model && <span className="text-xs text-text-muted font-mono">{job.model}</span>}
+            </div>
+            <div className="text-xs text-text-muted">{formatDateTime(job.finishedAt ?? job.startedAt ?? job.createdAt)}</div>
           </div>
-          <div className="text-xs text-text-muted">{formatDateTime(job.finishedAt ?? job.startedAt ?? job.createdAt)}</div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
