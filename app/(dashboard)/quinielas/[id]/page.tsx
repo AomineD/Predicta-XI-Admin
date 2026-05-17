@@ -116,6 +116,29 @@ export default function QuinielaDetailPage({ params }: { params: Promise<{ id: s
     onSuccess: invalidate,
   });
 
+  // Re-sync guard: if the last sync_history job finished < 30 min ago and the
+  // current team_history_sync_jobs are all completed, ask the admin to confirm
+  // before re-running (scraping all teams is slow and rate-limited).
+  const triggerSyncHistory = () => {
+    const latestSync = (data?.jobs ?? [])
+      .filter((j) => j.operation === 'sync_history' && j.status === 'completed' && j.finishedAt)
+      .sort((a, b) => (b.finishedAt ?? '').localeCompare(a.finishedAt ?? ''))[0];
+    if (latestSync?.finishedAt) {
+      const ageMs = Date.now() - new Date(latestSync.finishedAt).getTime();
+      const allTeamsCompleted = latestSync.progress
+        ? latestSync.progress.completed > 0 && latestSync.progress.completed === latestSync.progress.total
+        : false;
+      if (ageMs < 30 * 60_000 && allTeamsCompleted) {
+        const minutes = Math.max(1, Math.round(ageMs / 60_000));
+        const ok = window.confirm(
+          `Ya hay datos recientes: la última sincronización terminó hace ${minutes} min con ${latestSync.progress?.completed}/${latestSync.progress?.total} equipos.\n\n¿Forzar re-sync de todos los equipos?`,
+        );
+        if (!ok) return;
+      }
+    }
+    syncHistoryMut.mutate();
+  };
+
   const settleAutoMut = useMutation<{ evaluated: number; settled: number; pending: number; skipped: number }>({
     mutationFn: () =>
       api.post(`/admin/quinielas/${id}/settle-auto`),
@@ -191,7 +214,7 @@ export default function QuinielaDetailPage({ params }: { params: Promise<{ id: s
                 Settle auto
               </Button>
             )}
-            <Button onClick={() => syncHistoryMut.mutate()} loading={syncHistoryMut.isPending}>
+            <Button onClick={triggerSyncHistory} loading={syncHistoryMut.isPending}>
               Sync team history
             </Button>
             {(canResetPhase1 || canResetPhase2) && (
