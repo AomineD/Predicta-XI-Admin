@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { TeamNewsManager } from '@/components/team-news/TeamNewsManager';
 
 interface Team {
   id: number;
@@ -32,10 +33,12 @@ function TeamEditor({
   team,
   onSave,
   onClose,
+  onManageNews,
 }: {
   team: Team;
   onSave: (updates: Partial<Team>) => void;
   onClose: () => void;
+  onManageNews: () => void;
 }) {
   const [name, setName] = useState(team.name);
   const [shortName, setShortName] = useState(team.shortName);
@@ -115,7 +118,7 @@ function TeamEditor({
           />
         </label>
 
-        <div className="flex gap-2 pt-2">
+        <div className="flex gap-2 pt-2 items-center">
           <button
             type="button"
             onClick={() => onSave({ name, shortName, logo: logo || undefined, country: country || undefined, flashscoreSlug: flashscoreSlug || undefined })}
@@ -130,6 +133,14 @@ function TeamEditor({
           >
             Cancel
           </button>
+          <button
+            type="button"
+            onClick={onManageNews}
+            title="Manage team news (injuries, suspensions, etc.) — injected manually into the quiniela payload"
+            className="ml-auto px-4 py-2 rounded-xl text-sm font-sans font-medium border border-border text-text-secondary hover:text-text-primary hover:bg-surface-2"
+          >
+            📰 Manage news
+          </button>
         </div>
       </div>
     </div>
@@ -142,6 +153,7 @@ export default function TeamsPage() {
   const [countryFilter, setCountryFilter] = useState('');
   const [page, setPage] = useState(1);
   const [editingTeam, setEditingTeam] = useState<Team | null>(null);
+  const [managingNewsTeam, setManagingNewsTeam] = useState<Team | null>(null);
   const pageSize = 24;
 
   const queryParams = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
@@ -285,6 +297,21 @@ export default function TeamsPage() {
           team={editingTeam}
           onSave={(updates) => updateTeam.mutate({ id: editingTeam.id, ...updates })}
           onClose={() => setEditingTeam(null)}
+          onManageNews={() => {
+            // Swap edit popup → news popup. Keep the team reference so the
+            // user can pop back into edit if needed via the team card click.
+            setManagingNewsTeam(editingTeam);
+            setEditingTeam(null);
+          }}
+        />
+      )}
+
+      {/* News popup */}
+      {managingNewsTeam && (
+        <TeamNewsManager
+          teamId={managingNewsTeam.id}
+          teamName={managingNewsTeam.name}
+          onClose={() => setManagingNewsTeam(null)}
         />
       )}
     </div>

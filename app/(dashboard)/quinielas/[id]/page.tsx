@@ -9,6 +9,7 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { MetricCard } from '@/components/ui/MetricCard';
 import { Tabs } from '@/components/ui/Tabs';
 import { formatDateTime } from '@/lib/utils';
+import { TeamNewsManager } from '@/components/team-news/TeamNewsManager';
 
 interface QuinielaPick {
   id: string;
@@ -82,6 +83,8 @@ export default function QuinielaDetailPage({ params }: { params: Promise<{ id: s
   const { id } = use(params);
   const [tab, setTab] = useState<string>('summary');
   const [resetTarget, setResetTarget] = useState<'phase1' | 'phase2' | 'all' | null>(null);
+  const [newsPickerOpen, setNewsPickerOpen] = useState(false);
+  const [newsTeam, setNewsTeam] = useState<{ id: number; name: string } | null>(null);
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({
@@ -248,6 +251,12 @@ export default function QuinielaDetailPage({ params }: { params: Promise<{ id: s
             <Button onClick={() => syncFifaRankingMut.mutate()} loading={syncFifaRankingMut.isPending}>
               Sync FIFA ranking
             </Button>
+            <Button
+              onClick={() => setNewsPickerOpen(true)}
+              title="Inject team news (injuries, suspensions). Las noticias se leen al generar Phase 1."
+            >
+              📰 Team news
+            </Button>
             {(canResetPhase1 || canResetPhase2) && (
               <div className="flex items-center gap-1">
                 {canResetPhase1 && (
@@ -280,6 +289,24 @@ export default function QuinielaDetailPage({ params }: { params: Promise<{ id: s
             setResetTarget(null);
             invalidate();
           }}
+        />
+      )}
+      {newsPickerOpen && (
+        <TeamNewsPickerModal
+          competitionId={quiniela.competitionId}
+          seasonYear={quiniela.seasonYear}
+          onClose={() => setNewsPickerOpen(false)}
+          onSelect={(team) => {
+            setNewsPickerOpen(false);
+            setNewsTeam(team);
+          }}
+        />
+      )}
+      {newsTeam && (
+        <TeamNewsManager
+          teamId={newsTeam.id}
+          teamName={newsTeam.name}
+          onClose={() => setNewsTeam(null)}
         />
       )}
       {syncFifaRankingMut.data && (
@@ -859,6 +886,128 @@ function JobsTab({ jobs }: { jobs: QuinielaJob[] }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+interface PickerTeam {
+  id: number;
+  name: string;
+  shortName: string;
+  logo: string | null;
+  country: string | null;
+}
+
+interface PickerTeamsResponse {
+  items: PickerTeam[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
+/**
+ * Modal lightweight para buscar y seleccionar un equipo nacional al cual
+ * inyectar noticias. Cuando el admin elige uno, devuelve el {id, name}
+ * vía onSelect — el padre se encarga de abrir el TeamNewsManager.
+ *
+ * Filtramos teamType=national por defecto: en quinielas WC todos los
+ * equipos relevantes son selecciones. Si en el futuro hay quinielas de
+ * clubes, removemos el filtro.
+ *
+ * No usamos competitionId/seasonYear todavía porque /admin/teams no
+ * soporta filtrar por "qualified to competition X" — los props quedan
+ * para una futura iteración donde el backend exponga ese listado.
+ */
+function TeamNewsPickerModal({
+  onClose,
+  onSelect,
+}: {
+  competitionId: number;
+  seasonYear: string;
+  onClose: () => void;
+  onSelect: (team: { id: number; name: string }) => void;
+}) {
+  const [search, setSearch] = useState('');
+
+  const { data, isLoading } = useQuery<PickerTeamsResponse>({
+    queryKey: ['teams-picker', search],
+    queryFn: () => {
+      const qp = new URLSearchParams({ page: '1', pageSize: '30', teamType: 'national' });
+      if (search.trim()) qp.set('search', search.trim());
+      return api.get(`/admin/teams?${qp.toString()}`);
+    },
+  });
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        className="w-full max-w-2xl max-h-[80vh] rounded-2xl flex flex-col"
+        style={{ background: '#121A2B', border: '1px solid rgba(255,255,255,0.12)' }}
+      >
+        <div
+          className="flex items-center justify-between px-5 py-4"
+          style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}
+        >
+          <div>
+            <h2 className="text-base font-bold text-text-primary font-sans">📰 Pick a team to inject news</h2>
+            <p className="text-xs text-text-muted font-sans">
+              Searching across all national teams. Pick one and add injury/suspension notes.
+            </p>
+          </div>
+          <Button variant="ghost" size="sm" onClick={onClose}>Close</Button>
+        </div>
+
+        <div className="px-5 pt-4">
+          <input
+            autoFocus
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Type to search teams…"
+            className="w-full h-10 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none placeholder:text-text-muted"
+          />
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-5 py-3">
+          {isLoading && <p className="text-text-muted text-sm font-sans">Loading…</p>}
+          {!isLoading && (data?.items ?? []).length === 0 && (
+            <p className="text-text-muted text-sm font-sans">No national teams match.</p>
+          )}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {(data?.items ?? []).map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => onSelect({ id: t.id, name: t.name })}
+                className="rounded-xl p-3 flex items-center gap-3 text-left transition-colors hover:border-primary/40 cursor-pointer"
+                style={{ background: '#0E1626', border: '1px solid rgba(255,255,255,0.06)' }}
+              >
+                {t.logo ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={t.logo}
+                    alt={t.name}
+                    className="w-8 h-8 object-contain shrink-0"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                  />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-surface-3 flex items-center justify-center shrink-0">
+                    <span className="text-[10px] font-semibold text-text-muted font-sans">
+                      {t.name.slice(0, 2).toUpperCase()}
+                    </span>
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-text-primary font-sans truncate">{t.name}</p>
+                  <p className="text-[10px] text-text-muted font-sans truncate">{t.country ?? t.shortName}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
