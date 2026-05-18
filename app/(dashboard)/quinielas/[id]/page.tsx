@@ -145,6 +145,33 @@ export default function QuinielaDetailPage({ params }: { params: Promise<{ id: s
     onSuccess: invalidate,
   });
 
+  // Sync FIFA Men's World Ranking → competition_pre_tournament_ranking.
+  // The backend hits FIFA's public API, intersects with qualified teams in
+  // competition_standings, and stores a dense 1..N ranking. Required before
+  // Generate Phase 1 (assertMinDataCoverage blocks otherwise).
+  const syncFifaRankingMut = useMutation<
+    {
+      inserted: number;
+      unmatchedFromFifa: string[];
+      qualifiedNotFoundInFifa: string[];
+      scheduleIdUsed: string;
+    },
+    Error,
+    void
+  >({
+    mutationFn: () => {
+      const compId = data?.quiniela.competitionId;
+      const seasonYear = data?.quiniela.seasonYear;
+      if (!compId || !seasonYear) {
+        return Promise.reject(new Error('Missing competitionId or seasonYear'));
+      }
+      return api.post(
+        `/admin/competitions/${compId}/sync-fifa-ranking?seasonYear=${encodeURIComponent(seasonYear)}`,
+      );
+    },
+    onSuccess: invalidate,
+  });
+
   if (isLoading || !data) {
     return <p className="text-text-muted">Loading…</p>;
   }
@@ -174,6 +201,7 @@ export default function QuinielaDetailPage({ params }: { params: Promise<{ id: s
     (generatePhase1Mut.error as Error | undefined)?.message ??
     (generatePhase2Mut.error as Error | undefined)?.message ??
     (syncHistoryMut.error as Error | undefined)?.message ??
+    (syncFifaRankingMut.error as Error | undefined)?.message ??
     null;
 
   return (
@@ -217,6 +245,9 @@ export default function QuinielaDetailPage({ params }: { params: Promise<{ id: s
             <Button onClick={triggerSyncHistory} loading={syncHistoryMut.isPending}>
               Sync team history
             </Button>
+            <Button onClick={() => syncFifaRankingMut.mutate()} loading={syncFifaRankingMut.isPending}>
+              Sync FIFA ranking
+            </Button>
             {(canResetPhase1 || canResetPhase2) && (
               <div className="flex items-center gap-1">
                 {canResetPhase1 && (
@@ -250,6 +281,30 @@ export default function QuinielaDetailPage({ params }: { params: Promise<{ id: s
             invalidate();
           }}
         />
+      )}
+      {syncFifaRankingMut.data && (
+        <div
+          className="mb-4 rounded-xl p-3 text-sm"
+          style={{
+            background: 'rgba(124,255,91,0.1)',
+            border: '1px solid rgba(124,255,91,0.3)',
+            color: '#7CFF5B',
+          }}
+        >
+          FIFA ranking saved: {syncFifaRankingMut.data.inserted} teams ranked.
+          {syncFifaRankingMut.data.qualifiedNotFoundInFifa.length > 0 && (
+            <span style={{ color: '#FFD27A' }}>
+              {' · Qualified but missing in FIFA list: '}
+              {syncFifaRankingMut.data.qualifiedNotFoundInFifa.join(', ')}
+            </span>
+          )}
+          {syncFifaRankingMut.data.unmatchedFromFifa.length > 0 && (
+            <span style={{ color: '#FFD27A' }}>
+              {' · FIFA names with no DB match: '}
+              {syncFifaRankingMut.data.unmatchedFromFifa.join(', ')}
+            </span>
+          )}
+        </div>
       )}
       {settleAutoMut.data && (
         <div className="mb-4 rounded-xl p-3 text-sm" style={{ background: 'rgba(124,255,91,0.1)', border: '1px solid rgba(124,255,91,0.3)', color: '#7CFF5B' }}>
