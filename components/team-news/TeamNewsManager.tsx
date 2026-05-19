@@ -65,6 +65,24 @@ function daysAgo(iso: string): number {
   return Math.max(0, Math.floor(ms / (24 * 60 * 60 * 1000)));
 }
 
+/**
+ * Defense-in-depth: only allow http(s) source URLs to be rendered as
+ * clickable links. Backend stores admin-curated + Flashscore-scraped URLs
+ * which today are all http(s), but a future scrape bug or template change
+ * could surface `javascript:` / `data:` hrefs. React's escaping handles
+ * textContent but NOT href values — see security review item 3 (HIGH-ish).
+ */
+function safeHttpUrl(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  try {
+    const u = new URL(raw);
+    if (u.protocol === 'http:' || u.protocol === 'https:') return raw;
+  } catch {
+    // Not a parseable URL — drop it.
+  }
+  return null;
+}
+
 export function TeamNewsManager({
   teamId,
   teamName,
@@ -138,6 +156,22 @@ export function TeamNewsManager({
     onSuccess: () => qc.invalidateQueries({ queryKey: ['team-news', teamId] }),
   });
 
+  const syncMut = useMutation<{
+    teamId: number;
+    teamName: string;
+    scraped: number;
+    alreadyKnown: number;
+    tooOld: number;
+    classified: number;
+    skippedNotRelevant: number;
+    inserted: number;
+    skippedNoSlug?: boolean;
+    error?: string;
+  }>({
+    mutationFn: () => api.post(`/admin/teams/${teamId}/news/sync`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['team-news', teamId] }),
+  });
+
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
@@ -166,8 +200,56 @@ export function TeamNewsManager({
             <h2 className="text-base font-bold text-text-primary font-sans">📰 Team News</h2>
             <p className="text-xs text-text-muted font-sans">{teamName}</p>
           </div>
-          <Button variant="ghost" size="sm" onClick={onClose}>Close</Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => syncMut.mutate()}
+              loading={syncMut.isPending}
+              title="Scrape Flashscore /team/news/, classify via LLM, persist new entries"
+            >
+              🔄 Sync from Flashscore
+            </Button>
+            <Button variant="ghost" size="sm" onClick={onClose}>Close</Button>
+          </div>
         </div>
+
+        {syncMut.data && !syncMut.isPending && (
+          <div
+            className="mx-6 mt-3 rounded-xl p-2 text-xs"
+            style={{
+              background: syncMut.data.error
+                ? 'rgba(239,68,68,0.1)'
+                : syncMut.data.skippedNoSlug
+                  ? 'rgba(255,176,46,0.1)'
+                  : 'rgba(124,255,91,0.1)',
+              border: `1px solid ${syncMut.data.error
+                ? 'rgba(239,68,68,0.3)'
+                : syncMut.data.skippedNoSlug
+                  ? 'rgba(255,176,46,0.3)'
+                  : 'rgba(124,255,91,0.3)'}`,
+              color: syncMut.data.error
+                ? '#FCA5A5'
+                : syncMut.data.skippedNoSlug
+                  ? '#FFB02E'
+                  : '#7CFF5B',
+            }}
+          >
+            {syncMut.data.error
+              ? `Error: ${syncMut.data.error}`
+              : syncMut.data.skippedNoSlug
+                ? 'Skipped: team has no flashscore_slug. Edit the team to add one.'
+                : `Synced: scraped ${syncMut.data.scraped} · classified ${syncMut.data.classified} · inserted ${syncMut.data.inserted} · already known ${syncMut.data.alreadyKnown} · too old ${syncMut.data.tooOld} · not relevant ${syncMut.data.skippedNotRelevant}`}
+          </div>
+        )}
+        {syncMut.error && (
+          <div
+            className="mx-6 mt-3 rounded-xl p-2 text-xs"
+            style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#FCA5A5' }}
+          >
+            Sync failed: {(syncMut.error as Error).message}
+          </div>
+        )}
 
         {/* Body — form + list */}
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-5">
@@ -325,16 +407,19 @@ Pedri"
                             ))}
                           </div>
                         )}
-                        {n.sourceUrl && (
-                          <a
-                            href={n.sourceUrl}
-                            target="_blank"
-                            rel="noreferrer noopener"
-                            className="text-[10px] text-text-muted underline hover:text-text-primary mt-1 inline-block"
-                          >
-                            source
-                          </a>
-                        )}
+                        {(() => {
+                          const safeUrl = safeHttpUrl(n.sourceUrl);
+                          return safeUrl ? (
+                            <a
+                              href={safeUrl}
+                              target="_blank"
+                              rel="noreferrer noopener"
+                              className="text-[10px] text-text-muted underline hover:text-text-primary mt-1 inline-block"
+                            >
+                              source
+                            </a>
+                          ) : null;
+                        })()}
                       </div>
                       <button
                         type="button"

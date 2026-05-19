@@ -175,6 +175,22 @@ export default function QuinielaDetailPage({ params }: { params: Promise<{ id: s
     onSuccess: invalidate,
   });
 
+  // Bulk team-news sync: scrapes Flashscore /team/news/ for every qualified
+  // team and classifies via LLM. Serial under the hood, so it takes several
+  // minutes for 48 teams. Surfaces aggregate counts on success.
+  const syncTeamNewsMut = useMutation<
+    {
+      totalTeams: number;
+      syncedTeams: number;
+      totalNewsInserted: number;
+      perTeam: Array<{ teamId: number; teamName: string; inserted: number; error?: string; skippedNoSlug?: boolean }>;
+    },
+    Error,
+    void
+  >({
+    mutationFn: () => api.post(`/admin/quinielas/${id}/sync-team-news`),
+  });
+
   if (isLoading || !data) {
     return <p className="text-text-muted">Loading…</p>;
   }
@@ -257,6 +273,13 @@ export default function QuinielaDetailPage({ params }: { params: Promise<{ id: s
             >
               📰 Team news
             </Button>
+            <Button
+              onClick={() => syncTeamNewsMut.mutate()}
+              loading={syncTeamNewsMut.isPending}
+              title="Scrape Flashscore + LLM classify for ALL qualified teams. Tarda varios minutos."
+            >
+              🔄 Sync news (all teams)
+            </Button>
             {(canResetPhase1 || canResetPhase2) && (
               <div className="flex items-center gap-1">
                 {canResetPhase1 && (
@@ -336,6 +359,33 @@ export default function QuinielaDetailPage({ params }: { params: Promise<{ id: s
       {settleAutoMut.data && (
         <div className="mb-4 rounded-xl p-3 text-sm" style={{ background: 'rgba(124,255,91,0.1)', border: '1px solid rgba(124,255,91,0.3)', color: '#7CFF5B' }}>
           Evaluated {settleAutoMut.data.evaluated} · Settled {settleAutoMut.data.settled} · Pending {settleAutoMut.data.pending} · Skipped {settleAutoMut.data.skipped}
+        </div>
+      )}
+      {syncTeamNewsMut.data && (
+        <div
+          className="mb-4 rounded-xl p-3 text-sm"
+          style={{ background: 'rgba(124,255,91,0.1)', border: '1px solid rgba(124,255,91,0.3)', color: '#7CFF5B' }}
+        >
+          Team news sync: {syncTeamNewsMut.data.syncedTeams}/{syncTeamNewsMut.data.totalTeams} teams synced ·{' '}
+          {syncTeamNewsMut.data.totalNewsInserted} new news inserted.
+          {(() => {
+            const noSlug = syncTeamNewsMut.data.perTeam.filter((t) => t.skippedNoSlug);
+            const errors = syncTeamNewsMut.data.perTeam.filter((t) => t.error);
+            const parts: string[] = [];
+            if (noSlug.length > 0) parts.push(`No slug: ${noSlug.map((t) => t.teamName).join(', ')}`);
+            if (errors.length > 0) parts.push(`Errors: ${errors.map((t) => t.teamName).join(', ')}`);
+            return parts.length > 0
+              ? <span style={{ color: '#FFD27A' }}>{' · ' + parts.join(' · ')}</span>
+              : null;
+          })()}
+        </div>
+      )}
+      {syncTeamNewsMut.error && (
+        <div
+          className="mb-4 rounded-xl p-3 text-sm"
+          style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#FCA5A5' }}
+        >
+          Team news sync failed: {(syncTeamNewsMut.error as Error).message}
         </div>
       )}
       {activeJobs.length > 0 && (
