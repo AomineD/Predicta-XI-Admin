@@ -905,20 +905,38 @@ function JobsTab({ jobs }: { jobs: QuinielaJob[] }) {
     <div className="space-y-2">
       {jobs.map((job) => {
         const detail = jobDetailText(job);
+        // For ops where `error_message` carries useful operator info
+        // (sync_team_news funnel: scraped/classified/notRelevant breakdown,
+        // sync_history aggregate counters, reset summaries) show the full
+        // text under the row instead of swallowing it behind the parsed
+        // detail. For `generate` errors we still rely on JobIssuesBanner so
+        // we don't double-render.
+        const showFullMessage = !!job.errorMessage
+          && job.operation !== 'generate'
+          && job.errorMessage !== detail;
         return (
           <div
             key={job.id}
-            className="rounded-xl p-3 flex items-center justify-between"
+            className="rounded-xl p-3 flex flex-col gap-2"
             style={{ background: '#0E1626', border: '1px solid rgba(255,255,255,0.06)' }}
           >
-            <div className="flex items-center gap-3 flex-wrap">
-              <span className="text-xs font-mono text-text-muted">#{job.id}</span>
-              <span className="text-sm text-text-primary font-sans">{jobOperationLabel(job)}</span>
-              <StatusBadge status={job.status} />
-              {detail && <span className="text-xs text-text-muted">{detail}</span>}
-              {job.model && <span className="text-xs text-text-muted font-mono">{job.model}</span>}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="text-xs font-mono text-text-muted">#{job.id}</span>
+                <span className="text-sm text-text-primary font-sans">{jobOperationLabel(job)}</span>
+                <StatusBadge status={job.status} />
+                {detail && <span className="text-xs text-text-muted">{detail}</span>}
+                {job.model && <span className="text-xs text-text-muted font-mono">{job.model}</span>}
+              </div>
+              <div className="text-xs text-text-muted">{formatDateTime(job.finishedAt ?? job.startedAt ?? job.createdAt)}</div>
             </div>
-            <div className="text-xs text-text-muted">{formatDateTime(job.finishedAt ?? job.startedAt ?? job.createdAt)}</div>
+            {showFullMessage && (
+              <pre
+                className="text-[11px] font-mono whitespace-pre-wrap break-words bg-black/30 rounded-lg p-2 text-text-secondary"
+              >
+                {job.errorMessage}
+              </pre>
+            )}
           </div>
         );
       })}
