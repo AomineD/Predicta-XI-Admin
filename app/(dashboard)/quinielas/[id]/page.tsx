@@ -40,7 +40,7 @@ interface QuinielaJobProgress {
 interface QuinielaJob {
   id: number;
   phase: 'phase1' | 'phase2' | null;
-  operation?: 'generate' | 'reset' | 'sync_history';
+  operation?: 'generate' | 'reset' | 'sync_history' | 'sync_team_news';
   status: string;
   triggeredBy: string;
   model: string | null;
@@ -175,20 +175,13 @@ export default function QuinielaDetailPage({ params }: { params: Promise<{ id: s
     onSuccess: invalidate,
   });
 
-  // Bulk team-news sync: scrapes Flashscore /team/news/ for every qualified
-  // team and classifies via LLM. Serial under the hood, so it takes several
-  // minutes for 48 teams. Surfaces aggregate counts on success.
-  const syncTeamNewsMut = useMutation<
-    {
-      totalTeams: number;
-      syncedTeams: number;
-      totalNewsInserted: number;
-      perTeam: Array<{ teamId: number; teamName: string; inserted: number; error?: string; skippedNoSlug?: boolean }>;
-    },
-    Error,
-    void
-  >({
+  // Bulk team-news sync: enqueues a `sync_team_news` quiniela_job. Returns
+  // {jobId, status: 'pending'} immediately; the scheduler picks it up in
+  // the background and writes progress to the row's error_message which
+  // the active-jobs banner picks up at the 15s polling cadence.
+  const syncTeamNewsMut = useMutation<{ jobId: number; status: string }, Error, void>({
     mutationFn: () => api.post(`/admin/quinielas/${id}/sync-team-news`),
+    onSuccess: invalidate,
   });
 
   if (isLoading || !data) {
@@ -361,31 +354,12 @@ export default function QuinielaDetailPage({ params }: { params: Promise<{ id: s
           Evaluated {settleAutoMut.data.evaluated} · Settled {settleAutoMut.data.settled} · Pending {settleAutoMut.data.pending} · Skipped {settleAutoMut.data.skipped}
         </div>
       )}
-      {syncTeamNewsMut.data && (
-        <div
-          className="mb-4 rounded-xl p-3 text-sm"
-          style={{ background: 'rgba(124,255,91,0.1)', border: '1px solid rgba(124,255,91,0.3)', color: '#7CFF5B' }}
-        >
-          Team news sync: {syncTeamNewsMut.data.syncedTeams}/{syncTeamNewsMut.data.totalTeams} teams synced ·{' '}
-          {syncTeamNewsMut.data.totalNewsInserted} new news inserted.
-          {(() => {
-            const noSlug = syncTeamNewsMut.data.perTeam.filter((t) => t.skippedNoSlug);
-            const errors = syncTeamNewsMut.data.perTeam.filter((t) => t.error);
-            const parts: string[] = [];
-            if (noSlug.length > 0) parts.push(`No slug: ${noSlug.map((t) => t.teamName).join(', ')}`);
-            if (errors.length > 0) parts.push(`Errors: ${errors.map((t) => t.teamName).join(', ')}`);
-            return parts.length > 0
-              ? <span style={{ color: '#FFD27A' }}>{' · ' + parts.join(' · ')}</span>
-              : null;
-          })()}
-        </div>
-      )}
       {syncTeamNewsMut.error && (
         <div
           className="mb-4 rounded-xl p-3 text-sm"
           style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#FCA5A5' }}
         >
-          Team news sync failed: {(syncTeamNewsMut.error as Error).message}
+          Team news enqueue failed: {(syncTeamNewsMut.error as Error).message}
         </div>
       )}
       {activeJobs.length > 0 && (
@@ -886,28 +860,40 @@ function jobOperationLabel(job: QuinielaJob): string {
   if (op === 'generate') return job.phase ? `Generate ${job.phase}` : 'Generate';
   if (op === 'reset') return job.phase ? `Reset ${job.phase}` : 'Reset';
   if (op === 'sync_history') return 'Sync team history';
+  if (op === 'sync_team_news') return 'Sync team news';
   return op;
 }
 
 function jobProgressText(job: QuinielaJob): string | null {
-  // Sync-history progress is the only fan-out operation today. Show a compact
-  // "X/Y teams (running R, retrying T, failed F)" so the admin can tell at a
-  // glance whether the queue is moving and whether anything is stuck.
-  if (job.operation !== 'sync_history' || !job.progress) return null;
-  const p = job.progress;
-  const parts: string[] = [`${p.completed}/${p.total} teams`];
-  if (p.running > 0) parts.push(`running ${p.running}`);
-  if (p.retrying > 0) parts.push(`retrying ${p.retrying}`);
-  if (p.failed > 0) parts.push(`failed ${p.failed}`);
-  return parts.join(' · ');
+  // Sync-history progress: aggregate counts from team_history_sync_jobs.
+  if (job.operation === 'sync_history' && job.progress) {
+    const p = job.progress;
+    const parts: string[] = [`${p.completed}/${p.total} teams`];
+    if (p.running > 0) parts.push(`running ${p.running}`);
+    if (p.retrying > 0) parts.push(`retrying ${p.retrying}`);
+    if (p.failed > 0) parts.push(`failed ${p.failed}`);
+    return parts.join(' · ');
+  }
+  // Sync-team-news progress: scheduler writes a human-readable status line
+  // into error_message every 5 teams. We surface it verbatim while running;
+  // completed jobs show the final summary. Truncated to keep the banner
+  // compact.
+  if (job.operation === 'sync_team_news' && job.errorMessage) {
+    const m = job.errorMessage.match(/teams.*?inserted=\d+\)?|teams synced, \d+ new news inserted/i);
+    if (m) return m[0].slice(0, 80);
+    return job.errorMessage.slice(0, 80);
+  }
+  return null;
 }
 
 function jobDetailText(job: QuinielaJob): string | null {
   // The rightmost detail line varies by operation: generate exposes picks,
-  // sync_history exposes aggregate team progress, reset exposes nothing.
+  // sync_history exposes aggregate team progress, sync_team_news shows the
+  // running progress message or final summary, reset exposes nothing.
   const op = job.operation ?? 'generate';
   if (op === 'generate') return `picks: ${job.picksGenerated}`;
   if (op === 'sync_history') return jobProgressText(job);
+  if (op === 'sync_team_news') return jobProgressText(job);
   return null;
 }
 
