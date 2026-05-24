@@ -19,6 +19,8 @@ interface QuinielaSummary {
   status: string;
   tournamentStartsAt: string;
   tournamentEndsAt: string | null;
+  phase1SettlementAt: string | null;
+  phase2SettlementAt: string | null;
   phase1GeneratedAt: string | null;
   phase2GeneratedAt: string | null;
   settledAt: string | null;
@@ -130,6 +132,8 @@ function CreateQuinielaModal({ onClose, onCreated }: CreateQuinielaModalProps) {
   const [name, setName] = useState('');
   const [tournamentStartsAt, setTournamentStartsAt] = useState('');
   const [tournamentEndsAt, setTournamentEndsAt] = useState('');
+  const [phase1SettlementAt, setPhase1SettlementAt] = useState('');
+  const [phase2SettlementAt, setPhase2SettlementAt] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const { data: competitions } = useQuery({
@@ -147,6 +151,8 @@ function CreateQuinielaModal({ onClose, onCreated }: CreateQuinielaModalProps) {
         name,
         tournamentStartsAt: new Date(tournamentStartsAt).toISOString(),
         tournamentEndsAt: tournamentEndsAt ? new Date(tournamentEndsAt).toISOString() : null,
+        phase1SettlementAt: phase1SettlementAt ? new Date(phase1SettlementAt).toISOString() : null,
+        phase2SettlementAt: phase2SettlementAt ? new Date(phase2SettlementAt).toISOString() : null,
       }),
     onSuccess: onCreated,
     onError: (err: Error) => setError(err.message),
@@ -221,6 +227,39 @@ function CreateQuinielaModal({ onClose, onCreated }: CreateQuinielaModalProps) {
               onChange={(e) => setTournamentEndsAt(e.target.value)}
               className="w-full bg-surface-2 border border-border rounded-xl px-3 py-2 text-sm text-text-primary"
             />
+          </div>
+
+          <div className="pt-2" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+            <p className="text-xs font-semibold text-text-secondary mb-1 mt-2">Settlement schedule (optional)</p>
+            <p className="text-[11px] text-text-muted leading-snug mb-3">
+              Date/time each phase becomes eligible for auto-settlement. Leave empty to settle each phase
+              only manually. Set Phase 1 after the group stage ends, Phase 2 after the final. The settler
+              still waits for real results before scoring a pick.
+            </p>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-text-muted uppercase tracking-wider mb-1">
+                  Phase 1 settlement
+                </label>
+                <input
+                  type="datetime-local"
+                  value={phase1SettlementAt}
+                  onChange={(e) => setPhase1SettlementAt(e.target.value)}
+                  className="w-full bg-surface-2 border border-border rounded-xl px-3 py-2 text-sm text-text-primary"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-text-muted uppercase tracking-wider mb-1">
+                  Phase 2 settlement
+                </label>
+                <input
+                  type="datetime-local"
+                  value={phase2SettlementAt}
+                  onChange={(e) => setPhase2SettlementAt(e.target.value)}
+                  className="w-full bg-surface-2 border border-border rounded-xl px-3 py-2 text-sm text-text-primary"
+                />
+              </div>
+            </div>
           </div>
         </div>
 

@@ -61,6 +61,8 @@ interface QuinielaDetail {
     status: string;
     tournamentStartsAt: string;
     tournamentEndsAt: string | null;
+    phase1SettlementAt: string | null;
+    phase2SettlementAt: string | null;
     phase1GeneratedAt: string | null;
     phase2GeneratedAt: string | null;
     settledAt: string | null;
@@ -390,7 +392,7 @@ export default function QuinielaDetailPage({ params }: { params: Promise<{ id: s
       <Tabs value={tab} onChange={setTab} items={TABS} />
 
       <div className="mt-6">
-        {tab === 'summary' && <SummaryTab quiniela={quiniela} />}
+        {tab === 'summary' && <SummaryTab quiniela={quiniela} quinielaId={id} />}
         {tab === 'phase1' && (
           <>
             <JobIssuesBanner job={latestJobByPhase(jobs, 'phase1')} quinielaId={id} phase="phase1" />
@@ -409,22 +411,182 @@ export default function QuinielaDetailPage({ params }: { params: Promise<{ id: s
   );
 }
 
-function SummaryTab({ quiniela }: { quiniela: QuinielaDetail['quiniela'] }) {
+function SummaryTab({ quiniela, quinielaId }: { quiniela: QuinielaDetail['quiniela']; quinielaId: string }) {
+  const [editSchedule, setEditSchedule] = useState(false);
+
   return (
-    <div
-      className="rounded-2xl p-6 space-y-3"
-      style={{ background: '#121A2B', border: '1px solid rgba(255,255,255,0.08)' }}
-    >
-      <Row label="Status" value={<StatusBadge status={quiniela.status} />} />
-      <Row label="Competition ID" value={String(quiniela.competitionId)} />
-      <Row label="Season year" value={quiniela.seasonYear} />
-      <Row label="Tournament starts" value={formatDateTime(quiniela.tournamentStartsAt)} />
-      <Row label="Tournament ends" value={formatDateTime(quiniela.tournamentEndsAt)} />
-      <Row label="Phase 1 generated" value={formatDateTime(quiniela.phase1GeneratedAt)} />
-      <Row label="Phase 2 generated" value={formatDateTime(quiniela.phase2GeneratedAt)} />
-      <Row label="Settled at" value={formatDateTime(quiniela.settledAt)} />
-      <Row label="Credits charged (snapshot)" value={String(quiniela.creditsCharged)} />
-      <Row label="Created at" value={formatDateTime(quiniela.createdAt)} />
+    <div className="space-y-4">
+      <div
+        className="rounded-2xl p-6 space-y-3"
+        style={{ background: '#121A2B', border: '1px solid rgba(255,255,255,0.08)' }}
+      >
+        <Row label="Status" value={<StatusBadge status={quiniela.status} />} />
+        <Row label="Competition ID" value={String(quiniela.competitionId)} />
+        <Row label="Season year" value={quiniela.seasonYear} />
+        <Row label="Tournament starts" value={formatDateTime(quiniela.tournamentStartsAt)} />
+        <Row label="Tournament ends" value={formatDateTime(quiniela.tournamentEndsAt)} />
+        <Row label="Phase 1 generated" value={formatDateTime(quiniela.phase1GeneratedAt)} />
+        <Row label="Phase 2 generated" value={formatDateTime(quiniela.phase2GeneratedAt)} />
+        <Row label="Settled at" value={formatDateTime(quiniela.settledAt)} />
+        <Row label="Credits charged (snapshot)" value={String(quiniela.creditsCharged)} />
+        <Row label="Created at" value={formatDateTime(quiniela.createdAt)} />
+      </div>
+
+      <div
+        className="rounded-2xl p-6 space-y-3"
+        style={{ background: '#121A2B', border: '1px solid rgba(255,255,255,0.08)' }}
+      >
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-bold text-text-primary font-sans">Settlement schedule</h3>
+            <p className="text-xs text-text-muted font-sans mt-0.5">
+              When the scheduler auto-settles each phase. Empty = manual only.
+            </p>
+          </div>
+          <Button size="sm" variant="secondary" onClick={() => setEditSchedule(true)}>
+            Edit schedule
+          </Button>
+        </div>
+        <Row
+          label="Phase 1 settlement"
+          value={<SettlementValue iso={quiniela.phase1SettlementAt} />}
+        />
+        <Row
+          label="Phase 2 settlement"
+          value={<SettlementValue iso={quiniela.phase2SettlementAt} />}
+        />
+      </div>
+
+      {editSchedule && (
+        <SettlementScheduleModal
+          quinielaId={quinielaId}
+          phase1SettlementAt={quiniela.phase1SettlementAt}
+          phase2SettlementAt={quiniela.phase2SettlementAt}
+          onClose={() => setEditSchedule(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Renders a settlement timestamp with a colored hint: green once the scheduled
+ * time has passed (phase is being settled), amber while still in the future
+ * (scheduled), muted dash when unset (manual-only).
+ */
+function SettlementValue({ iso }: { iso: string | null }) {
+  // Snapshot the clock once via a lazy initializer (runs a single time, not on
+  // every render) so the active/scheduled tint stays stable and pure.
+  const [nowMs] = useState(() => Date.now());
+
+  if (!iso) return <span className="text-text-muted">— (manual only)</span>;
+  const due = new Date(iso).getTime() <= nowMs;
+  return (
+    <span style={{ color: due ? '#7CFF5B' : '#FFD27A' }}>
+      {formatDateTime(iso)} {due ? '· active' : '· scheduled'}
+    </span>
+  );
+}
+
+/**
+ * datetime-local needs `YYYY-MM-DDTHH:mm` in LOCAL time. Convert an ISO/UTC
+ * string into that shape so the picker pre-fills the stored value correctly.
+ */
+function isoToLocalInput(iso: string | null): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function SettlementScheduleModal({
+  quinielaId,
+  phase1SettlementAt,
+  phase2SettlementAt,
+  onClose,
+}: {
+  quinielaId: string;
+  phase1SettlementAt: string | null;
+  phase2SettlementAt: string | null;
+  onClose: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const [phase1, setPhase1] = useState(isoToLocalInput(phase1SettlementAt));
+  const [phase2, setPhase2] = useState(isoToLocalInput(phase2SettlementAt));
+  const [error, setError] = useState<string | null>(null);
+
+  const saveMut = useMutation({
+    mutationFn: () =>
+      api.patch(`/admin/quinielas/${quinielaId}`, {
+        // Empty input clears the schedule (null); a value sets it. We always
+        // send both so clearing a previously-set date persists.
+        phase1SettlementAt: phase1 ? new Date(phase1).toISOString() : null,
+        phase2SettlementAt: phase2 ? new Date(phase2).toISOString() : null,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['quiniela-detail', quinielaId] });
+      onClose();
+    },
+    onError: (err: Error) => setError(err.message),
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+      <div
+        className="w-full max-w-md rounded-2xl p-6 space-y-4"
+        style={{ background: '#121A2B', border: '1px solid rgba(255,255,255,0.08)' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div>
+          <h2 className="text-lg font-bold text-text-primary font-sans">Settlement schedule</h2>
+          <p className="text-xs text-text-muted font-sans mt-1 leading-snug">
+            Pick when the scheduler may start auto-settling each phase. Set Phase 1 for after the group
+            stage, Phase 2 for after the final. Picks still only score once real results are in. Clear a
+            field to switch that phase back to manual-only.
+          </p>
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-text-muted uppercase tracking-wider mb-1">
+            Phase 1 settlement
+          </label>
+          <input
+            type="datetime-local"
+            value={phase1}
+            onChange={(e) => setPhase1(e.target.value)}
+            className="w-full bg-surface-2 border border-border rounded-xl px-3 py-2 text-sm text-text-primary"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-text-muted uppercase tracking-wider mb-1">
+            Phase 2 settlement
+          </label>
+          <input
+            type="datetime-local"
+            value={phase2}
+            onChange={(e) => setPhase2(e.target.value)}
+            className="w-full bg-surface-2 border border-border rounded-xl px-3 py-2 text-sm text-text-primary"
+          />
+        </div>
+
+        {error && <p className="text-sm text-danger">{error}</p>}
+
+        <div className="flex justify-between gap-2 pt-2">
+          <Button
+            onClick={() => { setPhase1(''); setPhase2(''); }}
+            variant="ghost"
+          >
+            Clear both
+          </Button>
+          <div className="flex gap-2">
+            <Button onClick={onClose} variant="ghost">Cancel</Button>
+            <Button onClick={() => saveMut.mutate()} loading={saveMut.isPending} variant="primary">
+              Save
+            </Button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
