@@ -4,7 +4,7 @@ import { use, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   RotateCcw, History, Flag, Newspaper, RefreshCw, Gavel, CalendarClock, Trash2,
-  Wand2, type LucideIcon,
+  Wand2, ImageIcon, type LucideIcon,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -32,6 +32,8 @@ interface QuinielaPick {
   actualValue: Record<string, unknown> | null;
   model: string;
   createdAt: string | null;
+  teamLogoUrl?: string | null;
+  playerAvatarUrl?: string | null;
 }
 
 interface QuinielaJobProgress {
@@ -199,6 +201,14 @@ export default function QuinielaDetailPage({ params }: { params: Promise<{ id: s
     onSuccess: invalidate,
   });
 
+  // Fire-and-forget: enqueues a `sync_avatars` quiniela_job that resolves the
+  // picked players' Flashscore slugs and scrapes their headshots into
+  // player_avatars. Result surfaces via the 15s polling once the job finishes.
+  const syncAvatarsMut = useMutation<{ jobId: number; status: string }, Error, void>({
+    mutationFn: () => api.post(`/admin/quinielas/${id}/sync-player-avatars`),
+    onSuccess: invalidate,
+  });
+
   if (isLoading || !data) {
     return <p className="text-text-muted">Loading…</p>;
   }
@@ -251,6 +261,7 @@ export default function QuinielaDetailPage({ params }: { params: Promise<{ id: s
         { label: 'Sync FIFA ranking', icon: Flag, onClick: () => syncFifaRankingMut.mutate() },
         { label: 'Team news…', icon: Newspaper, onClick: () => setNewsPickerOpen(true) },
         { label: 'Sync news (all teams)', icon: RefreshCw, onClick: () => syncTeamNewsMut.mutate() },
+        { label: 'Sync player avatars', icon: ImageIcon, onClick: () => syncAvatarsMut.mutate() },
       ],
     },
     {
@@ -801,12 +812,29 @@ function PickRow({ pick, quinielaId }: { pick: QuinielaPick; quinielaId: string 
   const tone = confidenceTone(pick.confidence);
   const toneColor = tone === 'high' ? '#7CFF5B' : tone === 'medium' ? '#FFB02E' : '#FCA5A5';
 
+  // Player picks favour the headshot; otherwise show the team crest. The
+  // avatar is round (player), the crest is square-ish (logo). Both come from
+  // Flashscore and may be absent (no thumbnail rendered then).
+  const isPlayerCategory = !!pick.playerAvatarUrl;
+  const thumbUrl = pick.playerAvatarUrl ?? pick.teamLogoUrl ?? null;
+
   return (
     <div
       className="rounded-xl p-4"
       style={{ background: '#0E1626', border: '1px solid rgba(255,255,255,0.06)' }}
     >
       <div className="flex items-start justify-between gap-4">
+        {thumbUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={thumbUrl}
+            alt=""
+            width={40}
+            height={40}
+            className={`shrink-0 object-contain bg-black/20 ${isPlayerCategory ? 'rounded-full object-cover' : 'rounded-md p-0.5'}`}
+            style={{ width: 40, height: 40 }}
+          />
+        )}
         <div className="flex-1 min-w-0">
           {pick.subjectKey && pick.category !== 'group_standings' && (
             <div className="text-[11px] text-text-muted font-mono mb-0.5">{pick.subjectKey}</div>
