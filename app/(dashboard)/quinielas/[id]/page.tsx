@@ -2,14 +2,22 @@
 
 import { use, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  RotateCcw, History, Flag, Newspaper, RefreshCw, Gavel, CalendarClock, Trash2,
+  Wand2, type LucideIcon,
+} from 'lucide-react';
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Button } from '@/components/ui/Button';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { MetricCard } from '@/components/ui/MetricCard';
 import { Tabs } from '@/components/ui/Tabs';
+import { ActionMenu, type ActionMenuSection } from '@/components/ui/ActionMenu';
 import { formatDateTime } from '@/lib/utils';
 import { TeamNewsManager } from '@/components/team-news/TeamNewsManager';
+import {
+  categoryLabel, categoryIcon, formatPickValue, confidenceTone, MANUAL_ONLY_CATEGORIES,
+} from '@/lib/quiniela-picks';
 
 interface QuinielaPick {
   id: string;
@@ -40,7 +48,7 @@ interface QuinielaJobProgress {
 interface QuinielaJob {
   id: number;
   phase: 'phase1' | 'phase2' | null;
-  operation?: 'generate' | 'reset' | 'sync_history' | 'sync_team_news';
+  operation?: 'generate' | 'reset' | 'sync_history' | 'sync_team_news' | 'settle';
   status: string;
   triggeredBy: string;
   model: string | null;
@@ -75,18 +83,20 @@ interface QuinielaDetail {
 }
 
 const TABS = [
-  { id: 'summary', label: 'Summary' },
-  { id: 'phase1',  label: 'Phase 1 Picks' },
-  { id: 'phase2',  label: 'Phase 2 Picks' },
-  { id: 'jobs',    label: 'LLM Jobs' },
+  { id: 'overview',   label: 'Overview' },
+  { id: 'picks',      label: 'Picks' },
+  { id: 'settlement', label: 'Settlement' },
+  { id: 'jobs',       label: 'Jobs' },
 ];
 
 export default function QuinielaDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const [tab, setTab] = useState<string>('summary');
+  const [tab, setTab] = useState<string>('overview');
+  const [picksPhase, setPicksPhase] = useState<'phase1' | 'phase2'>('phase1');
   const [resetTarget, setResetTarget] = useState<'phase1' | 'phase2' | 'all' | null>(null);
   const [newsPickerOpen, setNewsPickerOpen] = useState(false);
   const [newsTeam, setNewsTeam] = useState<{ id: number; name: string } | null>(null);
+  const [editSchedule, setEditSchedule] = useState(false);
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({
@@ -144,9 +154,12 @@ export default function QuinielaDetailPage({ params }: { params: Promise<{ id: s
     syncHistoryMut.mutate();
   };
 
-  const settleAutoMut = useMutation<{ evaluated: number; settled: number; pending: number; skipped: number }>({
-    mutationFn: () =>
-      api.post(`/admin/quinielas/${id}/settle-auto`),
+  // Fire-and-forget settlement: enqueues a `settle` quiniela_job (returns
+  // {jobId, status:'pending'}); the dispatcher runs the evaluators with
+  // respectSchedule:false. Progress surfaces via the active-jobs banner + 15s
+  // polling, same as Generate.
+  const settleNowMut = useMutation<{ jobId: number; status: string }, Error, void>({
+    mutationFn: () => api.post(`/admin/quinielas/${id}/settle-now`),
     onSuccess: invalidate,
   });
 
@@ -195,7 +208,6 @@ export default function QuinielaDetailPage({ params }: { params: Promise<{ id: s
   const phase1Picks = picks.filter((p) => p.phase === 'phase1');
   const phase2Picks = picks.filter((p) => p.phase === 'phase2');
 
-  const canLock = quiniela.status === 'phase1_generated' || quiniela.status === 'phase2_generated';
   const canGeneratePhase1 = quiniela.status === 'draft';
   const canRegeneratePhase1 = quiniela.status === 'phase1_generated';
   const canGeneratePhase2 = quiniela.status === 'phase1_locked';
@@ -203,6 +215,9 @@ export default function QuinielaDetailPage({ params }: { params: Promise<{ id: s
   const canSettleAuto = quiniela.status === 'phase1_locked'
     || quiniela.status === 'phase2_generated'
     || quiniela.status === 'phase2_locked';
+  // When nothing else is the lifecycle CTA (phase2_locked), settlement becomes
+  // the header's primary action; otherwise it lives in the Acciones menu.
+  const settleIsPrimary = quiniela.status === 'phase2_locked';
   const canResetPhase1 = phase1Picks.length > 0 && quiniela.status !== 'settled';
   const canResetPhase2 = phase2Picks.length > 0 && quiniela.status !== 'settled';
 
@@ -216,7 +231,58 @@ export default function QuinielaDetailPage({ params }: { params: Promise<{ id: s
     (generatePhase2Mut.error as Error | undefined)?.message ??
     (syncHistoryMut.error as Error | undefined)?.message ??
     (syncFifaRankingMut.error as Error | undefined)?.message ??
+    (settleNowMut.error as Error | undefined)?.message ??
     null;
+
+  // Build the secondary-action menu. Items use `hidden` so empty sections are
+  // dropped by ActionMenu.
+  const menuSections: ActionMenuSection[] = [
+    {
+      label: 'Lifecycle',
+      items: [
+        { label: 'Regenerate Phase 1', icon: RotateCcw, onClick: () => generatePhase1Mut.mutate(true), hidden: !canRegeneratePhase1 },
+        { label: 'Regenerate Phase 2', icon: RotateCcw, onClick: () => generatePhase2Mut.mutate(true), hidden: !canRegeneratePhase2 },
+      ],
+    },
+    {
+      label: 'Data & sync',
+      items: [
+        { label: 'Sync team history', icon: History, onClick: triggerSyncHistory },
+        { label: 'Sync FIFA ranking', icon: Flag, onClick: () => syncFifaRankingMut.mutate() },
+        { label: 'Team news…', icon: Newspaper, onClick: () => setNewsPickerOpen(true) },
+        { label: 'Sync news (all teams)', icon: RefreshCw, onClick: () => syncTeamNewsMut.mutate() },
+      ],
+    },
+    {
+      label: 'Settlement',
+      items: [
+        { label: 'Run settlement now', icon: Gavel, onClick: () => settleNowMut.mutate(), hidden: !canSettleAuto || settleIsPrimary },
+        { label: 'Edit schedule…', icon: CalendarClock, onClick: () => setEditSchedule(true) },
+      ],
+    },
+    {
+      label: 'Danger',
+      items: [
+        { label: 'Reset Phase 1', icon: Trash2, danger: true, onClick: () => setResetTarget('phase1'), hidden: !canResetPhase1 },
+        { label: 'Reset Phase 2', icon: Trash2, danger: true, onClick: () => setResetTarget('phase2'), hidden: !canResetPhase2 },
+        { label: 'Reset all', icon: Trash2, danger: true, onClick: () => setResetTarget('all'), hidden: !(canResetPhase1 && canResetPhase2) },
+      ],
+    },
+  ];
+
+  // Single contextual primary action for the header (advance the lifecycle).
+  let primaryCta: React.ReactNode = null;
+  if (canGeneratePhase1) {
+    primaryCta = <Button variant="primary" loading={generatePhase1Mut.isPending} onClick={() => generatePhase1Mut.mutate(false)}>Generate Phase 1</Button>;
+  } else if (quiniela.status === 'phase1_generated') {
+    primaryCta = <Button variant="primary" loading={lockMut.isPending} onClick={() => lockMut.mutate()}>Publish Phase 1</Button>;
+  } else if (canGeneratePhase2) {
+    primaryCta = <Button variant="primary" loading={generatePhase2Mut.isPending} onClick={() => generatePhase2Mut.mutate(false)}>Generate Phase 2</Button>;
+  } else if (quiniela.status === 'phase2_generated') {
+    primaryCta = <Button variant="primary" loading={lockMut.isPending} onClick={() => lockMut.mutate()}>Publish Phase 2</Button>;
+  } else if (settleIsPrimary) {
+    primaryCta = <Button variant="primary" loading={settleNowMut.isPending} onClick={() => settleNowMut.mutate()}>Run settlement now</Button>;
+  }
 
   return (
     <>
@@ -224,76 +290,10 @@ export default function QuinielaDetailPage({ params }: { params: Promise<{ id: s
         title={quiniela.name}
         description={`${quiniela.seasonYear} · Tournament: ${formatDateTime(quiniela.tournamentStartsAt)}${quiniela.tournamentEndsAt ? ` → ${formatDateTime(quiniela.tournamentEndsAt)}` : ''}`}
         action={
-          <div className="flex items-center gap-2 flex-wrap justify-end">
+          <div className="flex items-center gap-2 justify-end">
             <StatusBadge status={quiniela.status} />
-            {canGeneratePhase1 && (
-              <Button onClick={() => generatePhase1Mut.mutate(false)} loading={generatePhase1Mut.isPending} variant="primary">
-                Generate Phase 1
-              </Button>
-            )}
-            {canRegeneratePhase1 && (
-              <Button onClick={() => generatePhase1Mut.mutate(true)} loading={generatePhase1Mut.isPending}>
-                Regenerate Phase 1
-              </Button>
-            )}
-            {canGeneratePhase2 && (
-              <Button onClick={() => generatePhase2Mut.mutate(false)} loading={generatePhase2Mut.isPending} variant="primary">
-                Generate Phase 2
-              </Button>
-            )}
-            {canRegeneratePhase2 && (
-              <Button onClick={() => generatePhase2Mut.mutate(true)} loading={generatePhase2Mut.isPending}>
-                Regenerate Phase 2
-              </Button>
-            )}
-            {canLock && (
-              <Button onClick={() => lockMut.mutate()} loading={lockMut.isPending} variant="primary">
-                Publish ({quiniela.status === 'phase1_generated' ? 'Phase 1' : 'Phase 2'})
-              </Button>
-            )}
-            {canSettleAuto && (
-              <Button onClick={() => settleAutoMut.mutate()} loading={settleAutoMut.isPending}>
-                Settle auto
-              </Button>
-            )}
-            <Button onClick={triggerSyncHistory} loading={syncHistoryMut.isPending}>
-              Sync team history
-            </Button>
-            <Button onClick={() => syncFifaRankingMut.mutate()} loading={syncFifaRankingMut.isPending}>
-              Sync FIFA ranking
-            </Button>
-            <Button
-              onClick={() => setNewsPickerOpen(true)}
-              title="Inject team news (injuries, suspensions). Las noticias se leen al generar Phase 1."
-            >
-              📰 Team news
-            </Button>
-            <Button
-              onClick={() => syncTeamNewsMut.mutate()}
-              loading={syncTeamNewsMut.isPending}
-              title="Scrape Flashscore + LLM classify for ALL qualified teams. Tarda varios minutos."
-            >
-              🔄 Sync news (all teams)
-            </Button>
-            {(canResetPhase1 || canResetPhase2) && (
-              <div className="flex items-center gap-1">
-                {canResetPhase1 && (
-                  <Button variant="danger" onClick={() => setResetTarget('phase1')}>
-                    Reset Phase 1
-                  </Button>
-                )}
-                {canResetPhase2 && (
-                  <Button variant="danger" onClick={() => setResetTarget('phase2')}>
-                    Reset Phase 2
-                  </Button>
-                )}
-                {canResetPhase1 && canResetPhase2 && (
-                  <Button variant="danger" onClick={() => setResetTarget('all')}>
-                    Reset all
-                  </Button>
-                )}
-              </div>
-            )}
+            {primaryCta}
+            <ActionMenu sections={menuSections} />
           </div>
         }
       />
@@ -327,6 +327,14 @@ export default function QuinielaDetailPage({ params }: { params: Promise<{ id: s
           onClose={() => setNewsTeam(null)}
         />
       )}
+      {editSchedule && (
+        <SettlementScheduleModal
+          quinielaId={id}
+          phase1SettlementAt={quiniela.phase1SettlementAt}
+          phase2SettlementAt={quiniela.phase2SettlementAt}
+          onClose={() => setEditSchedule(false)}
+        />
+      )}
       {syncFifaRankingMut.data && (
         <div
           className="mb-4 rounded-xl p-3 text-sm"
@@ -349,11 +357,6 @@ export default function QuinielaDetailPage({ params }: { params: Promise<{ id: s
               {syncFifaRankingMut.data.unmatchedFromFifa.join(', ')}
             </span>
           )}
-        </div>
-      )}
-      {settleAutoMut.data && (
-        <div className="mb-4 rounded-xl p-3 text-sm" style={{ background: 'rgba(124,255,91,0.1)', border: '1px solid rgba(124,255,91,0.3)', color: '#7CFF5B' }}>
-          Evaluated {settleAutoMut.data.evaluated} · Settled {settleAutoMut.data.settled} · Pending {settleAutoMut.data.pending} · Skipped {settleAutoMut.data.skipped}
         </div>
       )}
       {syncTeamNewsMut.error && (
@@ -392,18 +395,27 @@ export default function QuinielaDetailPage({ params }: { params: Promise<{ id: s
       <Tabs value={tab} onChange={setTab} items={TABS} />
 
       <div className="mt-6">
-        {tab === 'summary' && <SummaryTab quiniela={quiniela} quinielaId={id} />}
-        {tab === 'phase1' && (
-          <>
-            <JobIssuesBanner job={latestJobByPhase(jobs, 'phase1')} quinielaId={id} phase="phase1" />
-            <PicksTab picks={phase1Picks} quinielaId={id} />
-          </>
+        {tab === 'overview' && <OverviewTab quiniela={quiniela} jobs={jobs} settledPicks={settledPicks} totalPicks={picks.length} />}
+        {tab === 'picks' && (
+          <PicksSection
+            phase1Picks={phase1Picks}
+            phase2Picks={phase2Picks}
+            jobs={jobs}
+            quinielaId={id}
+            phase={picksPhase}
+            onPhaseChange={setPicksPhase}
+          />
         )}
-        {tab === 'phase2' && (
-          <>
-            <JobIssuesBanner job={latestJobByPhase(jobs, 'phase2')} quinielaId={id} phase="phase2" />
-            <PicksTab picks={phase2Picks} quinielaId={id} />
-          </>
+        {tab === 'settlement' && (
+          <SettlementTab
+            quiniela={quiniela}
+            picks={picks}
+            quinielaId={id}
+            canSettleAuto={canSettleAuto}
+            onRunNow={() => settleNowMut.mutate()}
+            runningNow={settleNowMut.isPending}
+            onEditSchedule={() => setEditSchedule(true)}
+          />
         )}
         {tab === 'jobs' && <JobsTab jobs={jobs} />}
       </div>
@@ -411,60 +423,207 @@ export default function QuinielaDetailPage({ params }: { params: Promise<{ id: s
   );
 }
 
-function SummaryTab({ quiniela, quinielaId }: { quiniela: QuinielaDetail['quiniela']; quinielaId: string }) {
-  const [editSchedule, setEditSchedule] = useState(false);
+function SectionCard({ children, className }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div
+      className={`rounded-2xl p-6 space-y-3 ${className ?? ''}`}
+      style={{ background: '#121A2B', border: '1px solid rgba(255,255,255,0.08)' }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function lastCompletedJob(jobs: QuinielaJob[], operation: QuinielaJob['operation']): QuinielaJob | null {
+  return (
+    jobs
+      .filter((j) => j.operation === operation && j.status === 'completed')
+      .sort((a, b) => (b.finishedAt ?? '').localeCompare(a.finishedAt ?? ''))[0] ?? null
+  );
+}
+
+function OverviewTab({
+  quiniela,
+  jobs,
+  settledPicks,
+  totalPicks,
+}: {
+  quiniela: QuinielaDetail['quiniela'];
+  jobs: QuinielaJob[];
+  settledPicks: number;
+  totalPicks: number;
+}) {
+  const lastHistory = lastCompletedJob(jobs, 'sync_history');
+  const lastNews = lastCompletedJob(jobs, 'sync_team_news');
 
   return (
     <div className="space-y-4">
-      <div
-        className="rounded-2xl p-6 space-y-3"
-        style={{ background: '#121A2B', border: '1px solid rgba(255,255,255,0.08)' }}
-      >
+      <SectionCard>
         <Row label="Status" value={<StatusBadge status={quiniela.status} />} />
         <Row label="Competition ID" value={String(quiniela.competitionId)} />
         <Row label="Season year" value={quiniela.seasonYear} />
         <Row label="Tournament starts" value={formatDateTime(quiniela.tournamentStartsAt)} />
         <Row label="Tournament ends" value={formatDateTime(quiniela.tournamentEndsAt)} />
+        <Row label="Created at" value={formatDateTime(quiniela.createdAt)} />
+        <Row label="Credits charged (snapshot)" value={String(quiniela.creditsCharged)} />
+      </SectionCard>
+
+      <SectionCard>
+        <h3 className="text-sm font-bold text-text-primary font-sans">Data readiness</h3>
+        <p className="text-xs text-text-muted font-sans mt-0.5">
+          Generation needs recent form, FIFA ranking and team news. Sync these from the Acciones menu before generating.
+        </p>
         <Row label="Phase 1 generated" value={formatDateTime(quiniela.phase1GeneratedAt)} />
         <Row label="Phase 2 generated" value={formatDateTime(quiniela.phase2GeneratedAt)} />
-        <Row label="Settled at" value={formatDateTime(quiniela.settledAt)} />
-        <Row label="Credits charged (snapshot)" value={String(quiniela.creditsCharged)} />
-        <Row label="Created at" value={formatDateTime(quiniela.createdAt)} />
-      </div>
+        <Row label="Last team-history sync" value={lastHistory ? formatDateTime(lastHistory.finishedAt) : '—'} />
+        <Row label="Last team-news sync" value={lastNews ? formatDateTime(lastNews.finishedAt) : '—'} />
+      </SectionCard>
 
+      <SectionCard>
+        <div>
+          <h3 className="text-sm font-bold text-text-primary font-sans">Settlement</h3>
+          <p className="text-xs text-text-muted font-sans mt-0.5">
+            Run, schedule and resolve manual awards from the Settlement tab.
+          </p>
+        </div>
+        <Row label="Settled picks" value={`${settledPicks}/${totalPicks}`} />
+        <Row label="Settled at" value={formatDateTime(quiniela.settledAt)} />
+        <Row label="Phase 1 schedule" value={<SettlementValue iso={quiniela.phase1SettlementAt} />} />
+        <Row label="Phase 2 schedule" value={<SettlementValue iso={quiniela.phase2SettlementAt} />} />
+      </SectionCard>
+    </div>
+  );
+}
+
+function PicksSection({
+  phase1Picks,
+  phase2Picks,
+  jobs,
+  quinielaId,
+  phase,
+  onPhaseChange,
+}: {
+  phase1Picks: QuinielaPick[];
+  phase2Picks: QuinielaPick[];
+  jobs: QuinielaJob[];
+  quinielaId: string;
+  phase: 'phase1' | 'phase2';
+  onPhaseChange: (p: 'phase1' | 'phase2') => void;
+}) {
+  const picks = phase === 'phase1' ? phase1Picks : phase2Picks;
+  const toggle = (p: 'phase1' | 'phase2', label: string, count: number) => (
+    <button
+      type="button"
+      onClick={() => onPhaseChange(p)}
+      className={`px-4 h-9 rounded-xl text-xs font-sans font-medium transition-colors ${
+        phase === p ? 'bg-surface-3 text-text-primary' : 'text-text-muted hover:text-text-primary hover:bg-surface-3/50'
+      }`}
+    >
+      {label} <span className="font-mono opacity-70">({count})</span>
+    </button>
+  );
+
+  return (
+    <div className="space-y-4">
       <div
-        className="rounded-2xl p-6 space-y-3"
+        className="inline-flex items-center gap-1 rounded-2xl p-1"
         style={{ background: '#121A2B', border: '1px solid rgba(255,255,255,0.08)' }}
       >
+        {toggle('phase1', 'Phase 1', phase1Picks.length)}
+        {toggle('phase2', 'Phase 2', phase2Picks.length)}
+      </div>
+      <JobIssuesBanner job={latestJobByPhase(jobs, phase)} quinielaId={quinielaId} phase={phase} />
+      <PicksTab picks={picks} quinielaId={quinielaId} />
+    </div>
+  );
+}
+
+function SettlementTab({
+  quiniela,
+  picks,
+  quinielaId,
+  canSettleAuto,
+  onRunNow,
+  runningNow,
+  onEditSchedule,
+}: {
+  quiniela: QuinielaDetail['quiniela'];
+  picks: QuinielaPick[];
+  quinielaId: string;
+  canSettleAuto: boolean;
+  onRunNow: () => void;
+  runningNow: boolean;
+  onEditSchedule: () => void;
+}) {
+  const awardPicks = picks.filter((p) => MANUAL_ONLY_CATEGORIES.has(p.category));
+  const manualPending = awardPicks.filter((p) => p.settlement === 'pending');
+
+  return (
+    <div className="space-y-4">
+      <SectionCard>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3 className="text-sm font-bold text-text-primary font-sans">Run settlement now</h3>
+            <p className="text-xs text-text-muted font-sans mt-0.5 max-w-xl leading-snug">
+              Evaluates every pick with real results available, ignoring the schedule. Runs in the background
+              (fire-and-forget) — watch the active-job banner and the Jobs tab for the outcome.
+            </p>
+          </div>
+          <Button variant="primary" onClick={onRunNow} loading={runningNow} disabled={!canSettleAuto}>
+            <Gavel size={15} /> Run now
+          </Button>
+        </div>
+        {!canSettleAuto && (
+          <p className="text-xs text-warning font-sans">Settlement becomes available once Phase 1 is published.</p>
+        )}
+      </SectionCard>
+
+      <SectionCard>
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-bold text-text-primary font-sans">Settlement schedule</h3>
+            <h3 className="text-sm font-bold text-text-primary font-sans">Scheduled settlement</h3>
             <p className="text-xs text-text-muted font-sans mt-0.5">
               When the scheduler auto-settles each phase. Empty = manual only.
             </p>
           </div>
-          <Button size="sm" variant="secondary" onClick={() => setEditSchedule(true)}>
+          <Button size="sm" variant="secondary" onClick={onEditSchedule}>
             Edit schedule
           </Button>
         </div>
-        <Row
-          label="Phase 1 settlement"
-          value={<SettlementValue iso={quiniela.phase1SettlementAt} />}
-        />
-        <Row
-          label="Phase 2 settlement"
-          value={<SettlementValue iso={quiniela.phase2SettlementAt} />}
-        />
-      </div>
+        <Row label="Phase 1 settlement" value={<SettlementValue iso={quiniela.phase1SettlementAt} />} />
+        <Row label="Phase 2 settlement" value={<SettlementValue iso={quiniela.phase2SettlementAt} />} />
+      </SectionCard>
 
-      {editSchedule && (
-        <SettlementScheduleModal
-          quinielaId={quinielaId}
-          phase1SettlementAt={quiniela.phase1SettlementAt}
-          phase2SettlementAt={quiniela.phase2SettlementAt}
-          onClose={() => setEditSchedule(false)}
-        />
-      )}
+      <SectionCard>
+        <div>
+          <h3 className="text-sm font-bold text-text-primary font-sans">
+            Awards awaiting manual settlement
+            {manualPending.length > 0 && (
+              <span className="ml-2 text-xs font-mono text-warning">{manualPending.length}</span>
+            )}
+          </h3>
+          <p className="text-xs text-text-muted font-sans mt-0.5">
+            Subjective awards (MVP, best young player, best goalkeeper) have no data source — settle them by hand
+            once officially announced.
+          </p>
+        </div>
+        {manualPending.length === 0 ? (
+          <p className="text-sm text-text-muted font-sans">
+            {awardPicks.length === 0 ? 'No award picks in this quiniela.' : 'All awards settled.'}
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {manualPending.map((p) => (
+              <div key={p.id}>
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-text-muted mb-1 font-sans">
+                  {categoryLabel(p.category)}
+                </div>
+                <PickRow pick={p} quinielaId={quinielaId} />
+              </div>
+            ))}
+          </div>
+        )}
+      </SectionCard>
     </div>
   );
 }
@@ -613,18 +772,22 @@ function PicksTab({ picks, quinielaId }: { picks: QuinielaPick[]; quinielaId: st
 
   return (
     <div className="space-y-6">
-      {Object.entries(grouped).map(([category, items]) => (
-        <div key={category}>
-          <h3 className="text-sm font-bold text-text-primary uppercase tracking-wider mb-2 font-sans">
-            {category.replace(/_/g, ' ')}
-          </h3>
-          <div className="space-y-2">
-            {items.map((pick) => (
-              <PickRow key={pick.id} pick={pick} quinielaId={quinielaId} />
-            ))}
+      {Object.entries(grouped).map(([category, items]) => {
+        const Icon = categoryIcon(category);
+        return (
+          <div key={category}>
+            <h3 className="flex items-center gap-2 text-sm font-bold text-text-primary uppercase tracking-wider mb-2 font-sans">
+              <Icon size={15} className="text-text-muted" />
+              {categoryLabel(category)}
+            </h3>
+            <div className="space-y-2">
+              {items.map((pick) => (
+                <PickRow key={pick.id} pick={pick} quinielaId={quinielaId} />
+              ))}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -633,7 +796,10 @@ function PickRow({ pick, quinielaId }: { pick: QuinielaPick; quinielaId: string 
   const queryClient = useQueryClient();
   const [showSettleManual, setShowSettleManual] = useState(false);
 
-  const isManualOnly = pick.category === 'mvp' || pick.category === 'best_young_player' || pick.category === 'best_goalkeeper';
+  const isManualOnly = MANUAL_ONLY_CATEGORIES.has(pick.category);
+  const display = formatPickValue(pick.category, pick.value, pick.subjectKey);
+  const tone = confidenceTone(pick.confidence);
+  const toneColor = tone === 'high' ? '#7CFF5B' : tone === 'medium' ? '#FFB02E' : '#FCA5A5';
 
   return (
     <div
@@ -641,20 +807,31 @@ function PickRow({ pick, quinielaId }: { pick: QuinielaPick; quinielaId: string 
       style={{ background: '#0E1626', border: '1px solid rgba(255,255,255,0.06)' }}
     >
       <div className="flex items-start justify-between gap-4">
-        <div className="flex-1">
-          {pick.subjectKey && (
-            <div className="text-xs text-text-muted font-mono mb-1">{pick.subjectKey}</div>
+        <div className="flex-1 min-w-0">
+          {pick.subjectKey && pick.category !== 'group_standings' && (
+            <div className="text-[11px] text-text-muted font-mono mb-0.5">{pick.subjectKey}</div>
           )}
-          <div className="text-sm text-text-primary font-sans">
-            <pre className="font-mono text-xs whitespace-pre-wrap">{JSON.stringify(pick.value, null, 2)}</pre>
-          </div>
+          <div className="text-sm text-text-primary font-sans font-medium">{display.primary}</div>
+          {display.secondary && (
+            <div className="text-xs text-text-secondary font-sans mt-0.5">{display.secondary}</div>
+          )}
           {pick.reasoning && (
             <p className="text-xs text-text-secondary mt-2 italic">{pick.reasoning}</p>
           )}
+          <details className="mt-2 group">
+            <summary className="text-[11px] text-text-muted cursor-pointer hover:text-text-secondary font-sans select-none list-none">
+              View raw JSON
+            </summary>
+            <pre className="font-mono text-[11px] whitespace-pre-wrap mt-1 bg-black/30 rounded-lg p-2 text-text-secondary">
+              {JSON.stringify(pick.value, null, 2)}
+            </pre>
+          </details>
         </div>
         <div className="flex flex-col items-end gap-2 shrink-0">
           <StatusBadge status={pick.settlement} />
-          <span className="text-xs text-text-muted font-mono">{pick.confidence}%</span>
+          <span className="text-xs font-mono font-semibold" style={{ color: toneColor }}>
+            {pick.confidence}%
+          </span>
           {isManualOnly && pick.settlement === 'pending' && (
             <Button size="sm" variant="secondary" onClick={() => setShowSettleManual(true)}>
               Settle
@@ -1023,6 +1200,7 @@ function jobOperationLabel(job: QuinielaJob): string {
   if (op === 'reset') return job.phase ? `Reset ${job.phase}` : 'Reset';
   if (op === 'sync_history') return 'Sync team history';
   if (op === 'sync_team_news') return 'Sync team news';
+  if (op === 'settle') return 'Settle';
   return op;
 }
 
@@ -1056,23 +1234,35 @@ function jobDetailText(job: QuinielaJob): string | null {
   if (op === 'generate') return `picks: ${job.picksGenerated}`;
   if (op === 'sync_history') return jobProgressText(job);
   if (op === 'sync_team_news') return jobProgressText(job);
+  if (op === 'settle') return job.errorMessage;
   return null;
+}
+
+function jobOperationIcon(job: QuinielaJob): LucideIcon {
+  switch (job.operation ?? 'generate') {
+    case 'generate': return Wand2;
+    case 'reset': return RotateCcw;
+    case 'sync_history': return History;
+    case 'sync_team_news': return Newspaper;
+    case 'settle': return Gavel;
+    default: return Wand2;
+  }
 }
 
 function JobsTab({ jobs }: { jobs: QuinielaJob[] }) {
   if (jobs.length === 0) {
-    return <p className="text-text-muted text-sm">No LLM jobs yet.</p>;
+    return <p className="text-text-muted text-sm font-sans">No jobs yet.</p>;
   }
   return (
     <div className="space-y-2">
       {jobs.map((job) => {
         const detail = jobDetailText(job);
+        const Icon = jobOperationIcon(job);
         // For ops where `error_message` carries useful operator info
-        // (sync_team_news funnel: scraped/classified/notRelevant breakdown,
-        // sync_history aggregate counters, reset summaries) show the full
-        // text under the row instead of swallowing it behind the parsed
-        // detail. For `generate` errors we still rely on JobIssuesBanner so
-        // we don't double-render.
+        // (sync_team_news funnel, sync_history aggregate counters, reset
+        // summaries) show the full text behind a Details toggle. `generate`
+        // errors render via JobIssuesBanner so we don't double-render; `settle`
+        // already surfaces its summary as the inline detail.
         const showFullMessage = !!job.errorMessage
           && job.operation !== 'generate'
           && job.errorMessage !== detail;
@@ -1082,22 +1272,34 @@ function JobsTab({ jobs }: { jobs: QuinielaJob[] }) {
             className="rounded-xl p-3 flex flex-col gap-2"
             style={{ background: '#0E1626', border: '1px solid rgba(255,255,255,0.06)' }}
           >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3 flex-wrap">
-                <span className="text-xs font-mono text-text-muted">#{job.id}</span>
-                <span className="text-sm text-text-primary font-sans">{jobOperationLabel(job)}</span>
-                <StatusBadge status={job.status} />
-                {detail && <span className="text-xs text-text-muted">{detail}</span>}
-                {job.model && <span className="text-xs text-text-muted font-mono">{job.model}</span>}
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <span className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-surface-3 text-text-secondary">
+                  <Icon size={15} />
+                </span>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm text-text-primary font-sans">{jobOperationLabel(job)}</span>
+                    <StatusBadge status={job.status} />
+                    <span className="text-[11px] font-mono text-text-muted">#{job.id}</span>
+                    {job.model && <span className="text-[11px] text-text-muted font-mono">{job.model}</span>}
+                  </div>
+                  {detail && <div className="text-xs text-text-muted font-sans mt-0.5 truncate">{detail}</div>}
+                </div>
               </div>
-              <div className="text-xs text-text-muted">{formatDateTime(job.finishedAt ?? job.startedAt ?? job.createdAt)}</div>
+              <div className="text-xs text-text-muted shrink-0 font-sans">
+                {formatDateTime(job.finishedAt ?? job.startedAt ?? job.createdAt)}
+              </div>
             </div>
             {showFullMessage && (
-              <pre
-                className="text-[11px] font-mono whitespace-pre-wrap break-words bg-black/30 rounded-lg p-2 text-text-secondary"
-              >
-                {job.errorMessage}
-              </pre>
+              <details>
+                <summary className="text-[11px] text-text-muted cursor-pointer hover:text-text-secondary font-sans select-none">
+                  Details
+                </summary>
+                <pre className="text-[11px] font-mono whitespace-pre-wrap break-words bg-black/30 rounded-lg p-2 text-text-secondary mt-1">
+                  {job.errorMessage}
+                </pre>
+              </details>
             )}
           </div>
         );
