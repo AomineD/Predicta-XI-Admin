@@ -409,11 +409,11 @@ function CreditsPageInner() {
       </SectionCard>
 
       {/* ── Section A2: Weekly Activity Bonus ── */}
-      <SectionCard title="Weekly Activity Bonus" subtitle="Reward users for daily engagement — runs every Monday. Set amount to 0 to disable.">
-        <Field label="Bonus credits" subtitle="Credits awarded to qualifying users each week">
+      <SectionCard title="Weekly Activity Bonus" subtitle="Auto-granted (no manual claim) when the user completes a consecutive-day streak, once every 7 days. Doubles to ×2 after a streak longer than 14 consecutive days — lost when the streak breaks. Set amount to 0 to disable.">
+        <Field label="Bonus credits" subtitle="Base credits per cycle. Loyal users (15+ day streak) earn ×2 this amount.">
           <NumInput value={f.weeklyActivityBonus} onChange={(v) => set('weeklyActivityBonus', v)} />
         </Field>
-        <Field label="Minimum active days" subtitle="Distinct days per week user must open the app (1–7)">
+        <Field label="Minimum active days" subtitle="Consecutive days the user must open the app to qualify (1–7)">
           <NumInput value={f.weeklyActivityMinDays} onChange={(v) => set('weeklyActivityMinDays', v)} min={1} />
         </Field>
       </SectionCard>
