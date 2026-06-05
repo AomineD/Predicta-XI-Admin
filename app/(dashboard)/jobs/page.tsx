@@ -96,6 +96,37 @@ interface SchedulerStatus {
   settlement: EnrichmentQueueInfo;
 }
 
+interface SyncQueueSummary {
+  state: 'running' | 'pending' | 'idle' | 'empty';
+  total: number;
+  pending: number;
+  running: number;
+  completed: number;
+  failed: number;
+  retrying: number;
+  cancelled: number;
+  scrapedTotal: number;
+  runningTeams: string[];
+  lastError: { team: string | null; message: string; at: string | null } | null;
+  startedAt: string | null;
+  lastCompletedAt: string | null;
+  etaSeconds: number | null;
+}
+
+interface StandingsSyncSummary {
+  competitions: number;
+  eligibleLeagues: number;
+  teams: number;
+  rows: number;
+  lastCapturedAt: string | null;
+}
+
+interface TeamDataSyncStatus {
+  teamHistory: SyncQueueSummary;
+  transfers: SyncQueueSummary;
+  standings: StandingsSyncSummary;
+}
+
 type Tab = 'predictions' | 'sync';
 
 // ── Helpers ────────────────────────────────────────────────
@@ -119,6 +150,32 @@ function formatDuration(ms: number | null): string {
 function truncateLog(log: string | null, maxLen = 80): string {
   if (!log) return '';
   return log.length > maxLen ? log.slice(0, maxLen) + '…' : log;
+}
+
+function percentOf(done: number, total: number): number {
+  if (total <= 0) return 0;
+  return Math.min(100, Math.round((done / total) * 100));
+}
+
+function formatEta(seconds: number | null): string | null {
+  if (seconds == null || seconds <= 0) return null;
+  if (seconds < 60) return `~${seconds}s`;
+  const mins = Math.round(seconds / 60);
+  if (mins < 60) return `~${mins}m`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m ? `~${h}h ${m}m` : `~${h}h`;
+}
+
+function formatAgo(iso: string | null): string {
+  if (!iso) return 'never';
+  const sec = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (sec < 60) return 'just now';
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
 }
 
 function formatPredictionErrorLog(raw: unknown): string | null {
@@ -479,6 +536,132 @@ function SchedulerBanners({ status }: { status: SchedulerStatus }) {
   );
 }
 
+// ── Team-data sync banners (history / transfers / standings) ───────────────
+
+function SyncQueueBanner({
+  label,
+  scrapedLabel,
+  info,
+  onShowError,
+}: {
+  label: string;
+  scrapedLabel: string;
+  info: SyncQueueSummary;
+  onShowError: (msg: string) => void;
+}) {
+  const queued = info.pending + info.retrying;
+  const percent = percentOf(info.completed, info.total);
+  const eta = formatEta(info.etaSeconds);
+  const isRunning = info.state === 'running';
+  const isQueued = info.state === 'pending';
+  const isEmpty = info.state === 'empty';
+
+  const borderColor = isRunning
+    ? 'rgba(124,255,91,0.3)'
+    : isQueued
+      ? 'rgba(255,196,77,0.25)'
+      : isEmpty
+        ? 'rgba(255,255,255,0.08)'
+        : 'rgba(77,168,255,0.2)';
+
+  const dotClass = isRunning
+    ? 'bg-success animate-pulse'
+    : isQueued
+      ? 'bg-amber-300'
+      : isEmpty
+        ? 'bg-text-muted'
+        : 'bg-blue-400';
+
+  return (
+    <div className="rounded-2xl px-4 py-3 flex flex-col gap-2" style={{ background: '#121A2B', border: `1px solid ${borderColor}` }}>
+      <div className="flex items-center gap-3 min-w-0">
+        <span className={`w-2 h-2 rounded-full flex-none ${dotClass}`} />
+        <span className="text-sm text-text-secondary font-sans font-medium flex-none">{label}</span>
+        {isRunning && info.runningTeams.length > 0 && (
+          <span className="text-sm text-success font-sans truncate">{info.runningTeams.join(', ')}</span>
+        )}
+        {isRunning && info.runningTeams.length === 0 && (
+          <span className="text-sm text-success font-sans">running…</span>
+        )}
+        {isQueued && <span className="text-sm text-amber-300 font-sans">queued</span>}
+        {info.state === 'idle' && <span className="text-sm text-blue-400 font-sans">up to date</span>}
+        {isEmpty && <span className="text-sm text-text-muted font-sans">no runs yet</span>}
+        {info.total > 0 && (
+          <span className="text-sm font-semibold text-text-primary font-mono ml-auto flex-none">{percent}%</span>
+        )}
+      </div>
+
+      {info.total > 0 && (
+        <div className="h-1.5 w-full rounded-full bg-white/5 overflow-hidden">
+          <div
+            className={`h-full rounded-full transition-all ${info.failed > 0 ? 'bg-amber-300' : 'bg-success'}`}
+            style={{ width: `${percent}%` }}
+          />
+        </div>
+      )}
+
+      {info.total > 0 && (
+        <div className="flex items-center gap-x-3 flex-wrap text-xs font-mono">
+          <span className="text-success">{info.completed} done</span>
+          {info.running > 0 && <span className="text-text-secondary">· {info.running} running</span>}
+          {queued > 0 && <span className="text-text-muted">· {queued} pending</span>}
+          <span className="text-text-muted">· {info.scrapedTotal} {scrapedLabel}</span>
+          <span className={info.failed > 0 ? 'text-danger' : 'text-text-muted'}>· {info.failed} errors</span>
+          {eta && <span className="text-blue-400 ml-auto whitespace-nowrap">ETA {eta}</span>}
+          {!eta && info.state === 'idle' && (
+            <span className="text-text-muted ml-auto whitespace-nowrap">last {formatAgo(info.lastCompletedAt)}</span>
+          )}
+        </div>
+      )}
+
+      {info.lastError && (
+        <button
+          onClick={() => onShowError(info.lastError!.message)}
+          className="text-danger text-xs truncate text-left hover:underline cursor-pointer"
+        >
+          {info.lastError.team ? `${info.lastError.team}: ` : ''}{truncateLog(info.lastError.message, 90)}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function StandingsBanner({ info }: { info: StandingsSyncSummary }) {
+  const hasData = info.rows > 0;
+  return (
+    <div
+      className="rounded-2xl px-4 py-3 flex flex-col gap-2"
+      style={{ background: '#121A2B', border: `1px solid ${hasData ? 'rgba(77,168,255,0.2)' : 'rgba(255,255,255,0.08)'}` }}
+    >
+      <div className="flex items-center gap-3 min-w-0">
+        <span className={`w-2 h-2 rounded-full flex-none ${hasData ? 'bg-blue-400' : 'bg-text-muted'}`} />
+        <span className="text-sm text-text-secondary font-sans font-medium flex-none">Standings Sync</span>
+        <span className={`text-sm font-sans ${hasData ? 'text-blue-400' : 'text-text-muted'}`}>
+          {hasData ? `${info.competitions}/${info.eligibleLeagues} leagues` : 'no data yet'}
+        </span>
+        <span className="text-xs text-text-muted font-sans ml-auto whitespace-nowrap">last {formatAgo(info.lastCapturedAt)}</span>
+      </div>
+      {hasData && (
+        <div className="flex items-center gap-x-3 text-xs font-mono text-text-muted">
+          <span>{info.rows} rows</span>
+          <span>· {info.teams} teams</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TeamDataSyncBanners({ status, onShowError }: { status: TeamDataSyncStatus; onShowError: (msg: string) => void }) {
+  return (
+    <div className="flex flex-col gap-2 mb-4">
+      <span className="text-xs font-semibold uppercase tracking-wide text-text-muted px-1">Team Data Syncs</span>
+      <SyncQueueBanner label="Team History Sync" scrapedLabel="matches" info={status.teamHistory} onShowError={onShowError} />
+      <SyncQueueBanner label="Transfer Sync" scrapedLabel="transfers" info={status.transfers} onShowError={onShowError} />
+      <StandingsBanner info={status.standings} />
+    </div>
+  );
+}
+
 // ── Log Modal ──────────────────────────────────────────────
 
 function LogModal({ log, onClose }: { log: string; onClose: () => void }) {
@@ -611,6 +794,12 @@ export default function JobsPage() {
   const { data: schedulerStatus } = useQuery<SchedulerStatus>({
     queryKey: ['scheduler-status'],
     queryFn: () => api.get('/admin/scheduler-status'),
+    refetchInterval: 10_000,
+  });
+
+  const { data: teamDataSync } = useQuery<TeamDataSyncStatus>({
+    queryKey: ['team-data-sync-status'],
+    queryFn: () => api.get('/admin/team-data-sync-status'),
     refetchInterval: 10_000,
   });
 
@@ -787,6 +976,8 @@ export default function JobsPage() {
       <PageHeader title="Jobs" description="Scheduler job history — auto-refreshes every 10s. Test prediction jobs are marked as TEST and excluded from KPIs/stats." />
 
       {schedulerStatus && <SchedulerBanners status={schedulerStatus} />}
+
+      {teamDataSync && <TeamDataSyncBanners status={teamDataSync} onShowError={setSelectedLog} />}
 
       <div className="flex gap-2 mb-4">
         <TabButton active={tab === 'sync'} label="Sync Jobs" onClick={() => setTab('sync')} />
