@@ -191,6 +191,20 @@ export default function TeamsPage() {
     mutationFn: () => api.post('/admin/teams/sync-all', {}),
   });
 
+  // Sync masivo de fichajes (clubes). Job aparte del sync principal: encola un
+  // scrape de la pestaña Transfers de Flashscore por cada club con slug. La app
+  // lee los fichajes desde DB (solo lectura). Fire-and-forget (202), máx. 1/5min.
+  const syncTransfers = useMutation<{ status: string }, Error, void>({
+    mutationFn: () => api.post('/admin/teams/sync-transfers-all', {}),
+  });
+
+  // Sync único de las tablas de liga de clubes a competition_standings (antes
+  // solo había torneos). Corre inline en la instancia con Flashscore; útil para
+  // capturar la tabla final cuando termina la temporada. Máx. 1/5min.
+  const syncStandings = useMutation<{ status: string; leagues: number }, Error, void>({
+    mutationFn: () => api.post('/admin/standings/sync-all', {}),
+  });
+
   // Extract unique countries from current page for filter. Excludes the
   // pseudo-"World" countries used as the home country of national teams so the
   // dropdown stays focused on club leagues; the "Selecciones" option is the
@@ -212,14 +226,32 @@ export default function TeamsPage() {
         title="Teams"
         description={`${data?.total ?? 0} teams in database`}
         action={
-          <Button
-            variant="primary"
-            loading={syncAllTeams.isPending}
-            onClick={() => syncAllTeams.mutate()}
-            title="Encola un re-sync completo (historial + plantillas) de todos los equipos con slug de Flashscore. Fire-and-forget: el worker lo procesa en segundo plano (~1h). Máx. 1 cada 5 min."
-          >
-            Sync All Teams
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="primary"
+              loading={syncAllTeams.isPending}
+              onClick={() => syncAllTeams.mutate()}
+              title="Encola un re-sync completo (historial + plantillas + FIFA/estadio) de todos los equipos con slug de Flashscore. Fire-and-forget: el worker lo procesa en segundo plano (~1h). Máx. 1 cada 5 min."
+            >
+              Sync All Teams
+            </Button>
+            <Button
+              variant="secondary"
+              loading={syncTransfers.isPending}
+              onClick={() => syncTransfers.mutate()}
+              title="Encola un scrape de fichajes (llegadas/salidas) de Flashscore para todos los clubes. Job aparte del sync principal; el worker lo drena en segundo plano (~1h). Máx. 1 cada 5 min."
+            >
+              Sync Transfers
+            </Button>
+            <Button
+              variant="secondary"
+              loading={syncStandings.isPending}
+              onClick={() => syncStandings.mutate()}
+              title="Sincroniza las tablas de liga de clubes (competition_standings). Corre inline (~varios min). Útil para capturar la tabla final de la temporada. Máx. 1 cada 5 min."
+            >
+              Sync Table
+            </Button>
+          </div>
         }
       />
 
@@ -233,6 +265,34 @@ export default function TeamsPage() {
         <div className="mb-4 rounded-xl px-4 py-2 text-sm font-sans bg-danger/15 border border-danger/30">
           <span className="text-danger font-medium">Sync failed:</span>{' '}
           <span className="text-text-muted">{syncAllTeams.error.message}</span>
+        </div>
+      )}
+
+      {syncTransfers.isSuccess && (
+        <div className="mb-4 rounded-xl px-4 py-2 text-sm font-sans bg-primary/10 border border-primary/30">
+          <span className="text-primary font-medium">Transfers sync enqueued.</span>{' '}
+          <span className="text-text-muted">The worker scrapes each club&apos;s transfers in the background (~1h).</span>
+        </div>
+      )}
+      {syncTransfers.error && (
+        <div className="mb-4 rounded-xl px-4 py-2 text-sm font-sans bg-danger/15 border border-danger/30">
+          <span className="text-danger font-medium">Transfers sync failed:</span>{' '}
+          <span className="text-text-muted">{syncTransfers.error.message}</span>
+        </div>
+      )}
+
+      {syncStandings.isSuccess && (
+        <div className="mb-4 rounded-xl px-4 py-2 text-sm font-sans bg-primary/10 border border-primary/30">
+          <span className="text-primary font-medium">
+            Table sync started{syncStandings.data ? ` (${syncStandings.data.leagues} leagues)` : ''}.
+          </span>{' '}
+          <span className="text-text-muted">Standings refresh inline; check back in a few minutes.</span>
+        </div>
+      )}
+      {syncStandings.error && (
+        <div className="mb-4 rounded-xl px-4 py-2 text-sm font-sans bg-danger/15 border border-danger/30">
+          <span className="text-danger font-medium">Table sync failed:</span>{' '}
+          <span className="text-text-muted">{syncStandings.error.message}</span>
         </div>
       )}
 
