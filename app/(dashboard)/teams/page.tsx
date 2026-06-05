@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { Button } from '@/components/ui/Button';
 import { TeamNewsManager } from '@/components/team-news/TeamNewsManager';
 
 interface Team {
@@ -181,6 +182,15 @@ export default function TeamsPage() {
     },
   });
 
+  // Re-sincronización completa (historial + plantillas) de TODOS los equipos.
+  // Distinto del botón "Sync Teams" de Competitions, que solo corrige slugs y
+  // logos desde standings. Este endpoint es fire-and-forget (responde 202) y el
+  // worker drena la cola en segundo plano; el rate-limit del backend lo limita
+  // a 1 cada 5 min.
+  const syncAllTeams = useMutation<{ status: string }, Error, void>({
+    mutationFn: () => api.post('/admin/teams/sync-all', {}),
+  });
+
   // Extract unique countries from current page for filter. Excludes the
   // pseudo-"World" countries used as the home country of national teams so the
   // dropdown stays focused on club leagues; the "Selecciones" option is the
@@ -201,7 +211,30 @@ export default function TeamsPage() {
       <PageHeader
         title="Teams"
         description={`${data?.total ?? 0} teams in database`}
+        action={
+          <Button
+            variant="primary"
+            loading={syncAllTeams.isPending}
+            onClick={() => syncAllTeams.mutate()}
+            title="Encola un re-sync completo (historial + plantillas) de todos los equipos con slug de Flashscore. Fire-and-forget: el worker lo procesa en segundo plano (~1h). Máx. 1 cada 5 min."
+          >
+            Sync All Teams
+          </Button>
+        }
       />
+
+      {syncAllTeams.isSuccess && (
+        <div className="mb-4 rounded-xl px-4 py-2 text-sm font-sans bg-primary/10 border border-primary/30">
+          <span className="text-primary font-medium">Full team sync enqueued.</span>{' '}
+          <span className="text-text-muted">The worker drains the queue in the background (~1h). Track progress in the Jobs tab.</span>
+        </div>
+      )}
+      {syncAllTeams.error && (
+        <div className="mb-4 rounded-xl px-4 py-2 text-sm font-sans bg-danger/15 border border-danger/30">
+          <span className="text-danger font-medium">Sync failed:</span>{' '}
+          <span className="text-text-muted">{syncAllTeams.error.message}</span>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex gap-3 mb-4">
