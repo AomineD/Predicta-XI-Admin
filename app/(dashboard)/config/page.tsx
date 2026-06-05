@@ -39,6 +39,7 @@ interface PredictionConfig {
   enrichmentQueueMinutesBefore: number;
   enrichmentQueueMaxRetries: number;
   enrichmentQueueRetryMinutes: number;
+  teamRefreshEnabled: boolean;
   llmTimeoutSeconds: number;
   predictionWindowMinutes: number;
   featuredLeagueIds: number[];
@@ -368,6 +369,7 @@ function ConfigPageInner() {
       resultSyncMaxRetryHours: cfg.resultSyncMaxRetryHours ?? 24,
       enrichmentSyncEnabled: cfg.enrichmentSyncEnabled ?? false,
       enrichmentSyncIntervalMinutes: cfg.enrichmentSyncIntervalMinutes ?? 15,
+      teamRefreshEnabled: cfg.teamRefreshEnabled ?? false,
       llmTimeoutSeconds: cfg.llmTimeoutSeconds ?? 30,
       predictionWindowMinutes: cfg.predictionWindowMinutes ?? 0,
       featuredLeagueIds: cfg.featuredLeagueIds ?? [39, 140, 135],
@@ -856,6 +858,12 @@ function ConfigPageInner() {
             onChange={(e) => setField('enrichmentQueueRetryMinutes', Number(e.target.value))}
             className="h-9 w-24 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
           />
+        </Field>
+
+        <SubHeading>Post-match Refresh</SubHeading>
+
+        <Field label="Enabled" subtitle="Re-sync team form, squad, and league standings after each settled match">
+          <Toggle value={activeForm.teamRefreshEnabled ?? false} onChange={(v) => setField('teamRefreshEnabled', v)} />
         </Field>
       </SectionCard>
       </div>

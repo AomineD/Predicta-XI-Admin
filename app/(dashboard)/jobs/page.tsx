@@ -113,12 +113,27 @@ interface SyncQueueSummary {
   etaSeconds: number | null;
 }
 
+interface StandingsQueueSummary {
+  state: 'running' | 'pending' | 'idle' | 'empty';
+  total: number;
+  pending: number;
+  running: number;
+  completed: number;
+  failed: number;
+  retrying: number;
+  runningLeagues: string[];
+  lastError: { league: string | null; message: string; at: string | null } | null;
+  lastCompletedAt: string | null;
+  etaSeconds: number | null;
+}
+
 interface StandingsSyncSummary {
   competitions: number;
   eligibleLeagues: number;
   teams: number;
   rows: number;
   lastCapturedAt: string | null;
+  queue: StandingsQueueSummary;
 }
 
 interface TeamDataSyncStatus {
@@ -626,26 +641,104 @@ function SyncQueueBanner({
   );
 }
 
-function StandingsBanner({ info }: { info: StandingsSyncSummary }) {
+const EMPTY_STANDINGS_QUEUE: StandingsQueueSummary = {
+  state: 'empty', total: 0, pending: 0, running: 0, completed: 0, failed: 0,
+  retrying: 0, runningLeagues: [], lastError: null, lastCompletedAt: null, etaSeconds: null,
+};
+
+function StandingsBanner({ info, onShowError }: { info: StandingsSyncSummary; onShowError: (msg: string) => void }) {
+  // Defensive default: tolerate a backend that doesn't return `queue` yet
+  // (admin panel deployed ahead of the API) instead of crashing the banner.
+  const q = info.queue ?? EMPTY_STANDINGS_QUEUE;
   const hasData = info.rows > 0;
+  const queued = q.pending + q.retrying;
+  const percent = percentOf(q.completed, q.total);
+  const eta = formatEta(q.etaSeconds);
+  const isRunning = q.state === 'running';
+  const isQueued = q.state === 'pending';
+  const hasQueue = q.total > 0;
+  // idle (queue drained) and empty (never enqueued) read the same to an
+  // operator: it's the coverage that says whether the tables are there.
+  const settledLabel = hasData ? 'up to date' : 'no data yet';
+
+  // Border/dot follow the QUEUE state when there's work, else fall back to the
+  // coverage signal (blue if any standings exist, muted if none yet).
+  const borderColor = isRunning
+    ? 'rgba(124,255,91,0.3)'
+    : isQueued
+      ? 'rgba(255,196,77,0.25)'
+      : hasData
+        ? 'rgba(77,168,255,0.2)'
+        : 'rgba(255,255,255,0.08)';
+
+  const dotClass = isRunning
+    ? 'bg-success animate-pulse'
+    : isQueued
+      ? 'bg-amber-300'
+      : hasData
+        ? 'bg-blue-400'
+        : 'bg-text-muted';
+
   return (
-    <div
-      className="rounded-2xl px-4 py-3 flex flex-col gap-2"
-      style={{ background: '#121A2B', border: `1px solid ${hasData ? 'rgba(77,168,255,0.2)' : 'rgba(255,255,255,0.08)'}` }}
-    >
+    <div className="rounded-2xl px-4 py-3 flex flex-col gap-2" style={{ background: '#121A2B', border: `1px solid ${borderColor}` }}>
       <div className="flex items-center gap-3 min-w-0">
-        <span className={`w-2 h-2 rounded-full flex-none ${hasData ? 'bg-blue-400' : 'bg-text-muted'}`} />
+        <span className={`w-2 h-2 rounded-full flex-none ${dotClass}`} />
         <span className="text-sm text-text-secondary font-sans font-medium flex-none">Standings Sync</span>
-        <span className={`text-sm font-sans ${hasData ? 'text-blue-400' : 'text-text-muted'}`}>
-          {hasData ? `${info.competitions}/${info.eligibleLeagues} leagues` : 'no data yet'}
-        </span>
-        <span className="text-xs text-text-muted font-sans ml-auto whitespace-nowrap">last {formatAgo(info.lastCapturedAt)}</span>
+        {isRunning && q.runningLeagues.length > 0 && (
+          <span className="text-sm text-success font-sans truncate">{q.runningLeagues.join(', ')}</span>
+        )}
+        {isRunning && q.runningLeagues.length === 0 && (
+          <span className="text-sm text-success font-sans">running…</span>
+        )}
+        {isQueued && <span className="text-sm text-amber-300 font-sans">queued</span>}
+        {/* idle and empty both mean "no work in flight" — show a status word
+            (like the sibling banners), not coverage. Coverage lives on its own line. */}
+        {(q.state === 'idle' || q.state === 'empty') && (
+          <span className={`text-sm font-sans ${hasData ? 'text-blue-400' : 'text-text-muted'}`}>{settledLabel}</span>
+        )}
+        {hasQueue && (
+          <span className="text-sm font-semibold text-text-primary font-mono ml-auto flex-none">{percent}%</span>
+        )}
       </div>
+
+      {hasQueue && (
+        <div className="h-1.5 w-full rounded-full bg-white/5 overflow-hidden">
+          <div
+            className={`h-full rounded-full transition-all ${q.failed > 0 ? 'bg-amber-300' : 'bg-success'}`}
+            style={{ width: `${percent}%` }}
+          />
+        </div>
+      )}
+
+      {hasQueue && (
+        <div className="flex items-center gap-x-3 flex-wrap text-xs font-mono">
+          <span className="text-success">{q.completed} done</span>
+          {q.running > 0 && <span className="text-text-secondary">· {q.running} running</span>}
+          {queued > 0 && <span className="text-text-muted">· {queued} pending</span>}
+          <span className={q.failed > 0 ? 'text-danger' : 'text-text-muted'}>· {q.failed} errors</span>
+          {eta && <span className="text-blue-400 ml-auto whitespace-nowrap">ETA {eta}</span>}
+        </div>
+      )}
+
+      {/* Coverage line: always shown when standings exist, regardless of queue
+          state. Carries the X/8 leagues count so the status slot above stays
+          purely about queue state. lastCapturedAt is non-null whenever hasData. */}
       {hasData && (
         <div className="flex items-center gap-x-3 text-xs font-mono text-text-muted">
-          <span>{info.rows} rows</span>
+          <span>{info.competitions}/{info.eligibleLeagues} leagues</span>
+          <span>· {info.rows} rows</span>
           <span>· {info.teams} teams</span>
+          <span className="ml-auto whitespace-nowrap">last {formatAgo(info.lastCapturedAt)}</span>
         </div>
+      )}
+
+      {q.lastError && (
+        <button
+          onClick={() => onShowError(q.lastError!.message)}
+          className="text-danger text-xs truncate text-left hover:underline cursor-pointer"
+        >
+          {q.lastError.league ? `${q.lastError.league}: ` : ''}{truncateLog(q.lastError.message, 90)}
+        </button>
       )}
     </div>
   );
@@ -657,7 +750,7 @@ function TeamDataSyncBanners({ status, onShowError }: { status: TeamDataSyncStat
       <span className="text-xs font-semibold uppercase tracking-wide text-text-muted px-1">Team Data Syncs</span>
       <SyncQueueBanner label="Team History Sync" scrapedLabel="matches" info={status.teamHistory} onShowError={onShowError} />
       <SyncQueueBanner label="Transfer Sync" scrapedLabel="transfers" info={status.transfers} onShowError={onShowError} />
-      <StandingsBanner info={status.standings} />
+      <StandingsBanner info={status.standings} onShowError={onShowError} />
     </div>
   );
 }
