@@ -8,6 +8,7 @@ import { DataTable, type Column } from '@/components/ui/DataTable';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Button } from '@/components/ui/Button';
+import { QuinielaSubnav } from '@/components/quinielas/QuinielaSubnav';
 import { formatDateTime } from '@/lib/utils';
 
 interface QuinielaSummary {
@@ -99,6 +100,8 @@ export default function QuinielasPage() {
         description="Tournament-level predictions (World Cup, Champions, etc.). Generate Phase 1 before kickoff and Phase 2 after the group stage."
         action={<Button variant="primary" onClick={() => setShowCreate(true)}>New quiniela</Button>}
       />
+
+      <QuinielaSubnav />
 
       <DataTable
         columns={columns}
