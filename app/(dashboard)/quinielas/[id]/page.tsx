@@ -78,6 +78,7 @@ interface QuinielaDetail {
     settledAt: string | null;
     creditsCharged: number;
     createdAt: string | null;
+    groupPlayableCategories: string[] | null;
   };
   picks: QuinielaPick[];
   jobs: QuinielaJob[];
@@ -406,7 +407,16 @@ export default function QuinielaDetailPage({ params }: { params: Promise<{ id: s
       <Tabs value={tab} onChange={setTab} items={TABS} />
 
       <div className="mt-6">
-        {tab === 'overview' && <OverviewTab quiniela={quiniela} jobs={jobs} settledPicks={settledPicks} totalPicks={picks.length} />}
+        {tab === 'overview' && (
+          <div className="space-y-4">
+            <OverviewTab quiniela={quiniela} jobs={jobs} settledPicks={settledPicks} totalPicks={picks.length} />
+            <GroupCategoriesCard
+              quinielaId={id}
+              picks={picks}
+              initial={quiniela.groupPlayableCategories ?? []}
+            />
+          </div>
+        )}
         {tab === 'picks' && (
           <PicksSection
             phase1Picks={phase1Picks}
@@ -503,6 +513,108 @@ function OverviewTab({
         <Row label="Phase 2 schedule" value={<SettlementValue iso={quiniela.phase2SettlementAt} />} />
       </SectionCard>
     </div>
+  );
+}
+
+// Single-subject categories playable in friends-group competition mode (mirrors
+// the backend scoring.ts SINGLE_SUBJECT_GROUP_CATEGORIES set).
+const SINGLE_SUBJECT_GROUP_CATEGORIES = [
+  'champion', 'runner_up', 'first_eliminated', 'team_with_most_goals', 'best_defense', 'dark_horse',
+  'top_scorer', 'top_assister', 'mvp', 'best_young_player', 'best_goalkeeper', 'final_score',
+] as const;
+
+/**
+ * Lets the admin pick which tournament categories are playable in friends-group
+ * competition mode. The backend (PATCH /admin/quinielas/:id/group-categories)
+ * only accepts single-subject categories that have an AI pick, so we offer
+ * exactly those. While empty, the tournament does NOT appear in the app's
+ * "create competition group" screen.
+ */
+function GroupCategoriesCard({
+  quinielaId,
+  picks,
+  initial,
+}: {
+  quinielaId: string;
+  picks: QuinielaPick[];
+  initial: string[];
+}) {
+  const queryClient = useQueryClient();
+  const available = SINGLE_SUBJECT_GROUP_CATEGORIES.filter((c) =>
+    picks.some((p) => p.category === c),
+  );
+  const [selected, setSelected] = useState<string[]>(
+    initial.filter((c) => (SINGLE_SUBJECT_GROUP_CATEGORIES as readonly string[]).includes(c)),
+  );
+  const [savedMsg, setSavedMsg] = useState<string | null>(null);
+
+  const toggle = (c: string) =>
+    setSelected((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]));
+
+  const saveMut = useMutation({
+    mutationFn: () =>
+      api.patch(`/admin/quinielas/${quinielaId}/group-categories`, { categories: selected }),
+    onSuccess: () => {
+      setSavedMsg('Saved.');
+      queryClient.invalidateQueries({ queryKey: ['quiniela-detail', quinielaId] });
+    },
+    onError: () => setSavedMsg(null),
+  });
+
+  return (
+    <SectionCard>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h3 className="text-sm font-bold text-text-primary font-sans">Friends-group categories</h3>
+          <p className="text-xs text-text-muted font-sans mt-0.5 max-w-xl leading-snug">
+            Categories friends can predict in competition-mode groups. Only single-subject categories
+            that already have an AI pick can be enabled (the pick carries the official result used to
+            score). While empty, this tournament won&apos;t appear when creating a group.
+          </p>
+        </div>
+        <Button
+          variant="primary"
+          loading={saveMut.isPending}
+          disabled={available.length === 0}
+          onClick={() => { setSavedMsg(null); saveMut.mutate(); }}
+        >
+          Save categories
+        </Button>
+      </div>
+
+      {available.length === 0 ? (
+        <p className="text-sm text-text-muted font-sans">
+          No single-subject categories with an AI pick in this quiniela yet. Generate Phase 1 first.
+        </p>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {available.map((c) => {
+            const on = selected.includes(c);
+            return (
+              <button
+                key={c}
+                type="button"
+                onClick={() => toggle(c)}
+                className={`px-3 py-1 rounded-lg text-xs font-sans font-medium transition-colors ${
+                  on ? 'bg-primary text-background' : 'bg-surface-3 text-text-secondary hover:text-text-primary'
+                }`}
+              >
+                {categoryLabel(c)}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {saveMut.error && (
+        <p className="text-xs text-danger font-sans">{(saveMut.error as Error).message}</p>
+      )}
+      {savedMsg && !saveMut.error && (
+        <p className="text-xs text-success font-sans">
+          {savedMsg} {selected.length} categor{selected.length === 1 ? 'y' : 'ies'} enabled.
+        </p>
+      )}
+    </SectionCard>
   );
 }
 
