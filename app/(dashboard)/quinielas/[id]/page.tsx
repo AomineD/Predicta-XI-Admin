@@ -193,6 +193,35 @@ export default function QuinielaDetailPage({ params }: { params: Promise<{ id: s
     onSuccess: invalidate,
   });
 
+  // Hydrate competition_top_performers from the confederation qualifier
+  // top-scorer pages — the pre-tournament feed that powers the top_scorer /
+  // top_assister candidate lists in friends-group picks. Synchronous scrape;
+  // returns a summary so we can see scrape failures / name-mismatch drops.
+  const syncQualifierTopPerfMut = useMutation<
+    {
+      sourcesAttempted: number;
+      sourcesScraped: number;
+      scorersUpserted: number;
+      assistersUpserted: number;
+      droppedNotQualified: number;
+      failedSources: Array<{ confederation: string; error: string }>;
+    },
+    Error,
+    void
+  >({
+    mutationFn: () => {
+      const compId = data?.quiniela.competitionId;
+      const seasonYear = data?.quiniela.seasonYear;
+      if (!compId || !seasonYear) {
+        return Promise.reject(new Error('Missing competitionId or seasonYear'));
+      }
+      return api.post(
+        `/admin/competitions/${compId}/sync-qualifier-top-performers?seasonYear=${encodeURIComponent(seasonYear)}`,
+      );
+    },
+    onSuccess: invalidate,
+  });
+
   // Bulk team-news sync: enqueues a `sync_team_news` quiniela_job. Returns
   // {jobId, status: 'pending'} immediately; the scheduler picks it up in
   // the background and writes progress to the row's error_message which
@@ -242,6 +271,7 @@ export default function QuinielaDetailPage({ params }: { params: Promise<{ id: s
     (generatePhase2Mut.error as Error | undefined)?.message ??
     (syncHistoryMut.error as Error | undefined)?.message ??
     (syncFifaRankingMut.error as Error | undefined)?.message ??
+    (syncQualifierTopPerfMut.error as Error | undefined)?.message ??
     (settleNowMut.error as Error | undefined)?.message ??
     null;
 
@@ -260,6 +290,7 @@ export default function QuinielaDetailPage({ params }: { params: Promise<{ id: s
       items: [
         { label: 'Sync team history', icon: History, onClick: triggerSyncHistory },
         { label: 'Sync FIFA ranking', icon: Flag, onClick: () => syncFifaRankingMut.mutate() },
+        { label: 'Sync qualifier top scorers', icon: RefreshCw, onClick: () => syncQualifierTopPerfMut.mutate() },
         { label: 'Team news…', icon: Newspaper, onClick: () => setNewsPickerOpen(true) },
         { label: 'Sync news (all teams)', icon: RefreshCw, onClick: () => syncTeamNewsMut.mutate() },
         { label: 'Sync player avatars', icon: ImageIcon, onClick: () => syncAvatarsMut.mutate() },
@@ -367,6 +398,23 @@ export default function QuinielaDetailPage({ params }: { params: Promise<{ id: s
             <span style={{ color: '#FFD27A' }}>
               {' · FIFA names with no DB match: '}
               {syncFifaRankingMut.data.unmatchedFromFifa.join(', ')}
+            </span>
+          )}
+        </div>
+      )}
+      {syncQualifierTopPerfMut.data && (
+        <div
+          className="mb-4 rounded-xl p-3 text-sm"
+          style={{ background: 'rgba(124,196,255,0.1)', border: '1px solid rgba(124,196,255,0.3)', color: '#7CC4FF' }}
+        >
+          Qualifier top scorers: {syncQualifierTopPerfMut.data.scorersUpserted} scorers ·{' '}
+          {syncQualifierTopPerfMut.data.assistersUpserted} assisters upserted (
+          {syncQualifierTopPerfMut.data.sourcesScraped}/{syncQualifierTopPerfMut.data.sourcesAttempted} confederations,{' '}
+          {syncQualifierTopPerfMut.data.droppedNotQualified} dropped as not-qualified).
+          {syncQualifierTopPerfMut.data.failedSources.length > 0 && (
+            <span style={{ color: '#FFD27A' }}>
+              {' · Failed: '}
+              {syncQualifierTopPerfMut.data.failedSources.map((f) => `${f.confederation} (${f.error})`).join('; ')}
             </span>
           )}
         </div>
@@ -983,6 +1031,7 @@ function PickRow({ pick, quinielaId }: { pick: QuinielaPick; quinielaId: string 
         <SettleManualModal
           pickId={pick.id}
           quinielaId={quinielaId}
+          category={pick.category}
           onClose={() => setShowSettleManual(false)}
           onSuccess={() => {
             setShowSettleManual(false);
@@ -994,14 +1043,32 @@ function PickRow({ pick, quinielaId }: { pick: QuinielaPick; quinielaId: string 
   );
 }
 
+// Single-subject player categories (settled manually for the subjective awards).
+const PLAYER_CATEGORIES = new Set([
+  'top_scorer', 'top_assister', 'mvp', 'best_young_player', 'best_goalkeeper',
+]);
+
+interface PoolPlayer {
+  playerName: string;
+  playerSlug: string | null;
+  teamId: number;
+  teamName: string | null;
+  position: string | null;
+  age: number | null;
+}
+interface PoolTeam { teamId: number; name: string; logoUrl: string | null }
+interface CompetitionPlayerPool { teams: PoolTeam[]; players: PoolPlayer[] }
+
 function SettleManualModal({
   pickId,
   quinielaId,
+  category,
   onClose,
   onSuccess,
 }: {
   pickId: string;
   quinielaId: string;
+  category: string;
   onClose: () => void;
   onSuccess: () => void;
 }) {
@@ -1009,21 +1076,39 @@ function SettleManualModal({
   const [actualValueRaw, setActualValueRaw] = useState('');
   const [error, setError] = useState<string | null>(null);
 
+  const isPlayer = PLAYER_CATEGORIES.has(category);
+  const [teamId, setTeamId] = useState<number | null>(null);
+  const [search, setSearch] = useState('');
+  const [winner, setWinner] = useState<{ playerName: string; playerSlug: string | null } | null>(null);
+
+  // Same pool the app + submit-validation use, so the chosen winner matches user
+  // picks by slug instead of a hand-typed name.
+  const { data: pool } = useQuery<CompetitionPlayerPool>({
+    queryKey: ['quiniela-player-pool', quinielaId],
+    queryFn: () => api.get<CompetitionPlayerPool>(`/admin/quinielas/${quinielaId}/competition-player-pool`),
+    enabled: isPlayer,
+  });
+
+  const teamPlayers = (pool?.players ?? []).filter((p) => p.teamId === teamId);
+  const q = search.trim().toLowerCase();
+  const filtered = q ? teamPlayers.filter((p) => p.playerName.toLowerCase().includes(q)) : teamPlayers;
+
   const settleMut = useMutation({
     mutationFn: () => {
       let actualValue: Record<string, unknown> | null = null;
-      if (actualValueRaw.trim()) {
+      if (isPlayer) {
+        if (settlement !== 'void' && !winner) throw new Error('Pick the winning player');
+        actualValue = winner
+          ? { playerName: winner.playerName, ...(winner.playerSlug ? { playerSlug: winner.playerSlug } : {}) }
+          : null;
+      } else if (actualValueRaw.trim()) {
         try {
           actualValue = JSON.parse(actualValueRaw);
         } catch {
           throw new Error('actualValue must be valid JSON');
         }
       }
-      return api.post(`/admin/quinielas/${quinielaId}/settle-pick`, {
-        pickId,
-        settlement,
-        actualValue,
-      });
+      return api.post(`/admin/quinielas/${quinielaId}/settle-pick`, { pickId, settlement, actualValue });
     },
     onSuccess,
     onError: (err: Error) => setError(err.message),
@@ -1052,18 +1137,78 @@ function SettleManualModal({
           </select>
         </div>
 
-        <div>
-          <label className="block text-xs font-medium text-text-muted uppercase tracking-wider mb-1">
-            Actual value (JSON, optional)
-          </label>
-          <textarea
-            value={actualValueRaw}
-            onChange={(e) => setActualValueRaw(e.target.value)}
-            placeholder='{ "playerName": "..." }'
-            rows={4}
-            className="w-full bg-surface-2 border border-border rounded-xl px-3 py-2 text-sm text-text-primary font-mono"
-          />
-        </div>
+        {isPlayer ? (
+          <div className="space-y-2">
+            <label className="block text-xs font-medium text-text-muted uppercase tracking-wider">
+              Actual winner {settlement !== 'void' && <span className="text-danger">*</span>}
+            </label>
+            {winner && (
+              <p className="text-sm text-text-primary font-sans">
+                Selected: <span className="font-semibold">{winner.playerName}</span>
+              </p>
+            )}
+            <select
+              value={teamId ?? ''}
+              onChange={(e) => { setTeamId(e.target.value ? Number(e.target.value) : null); setSearch(''); }}
+              className="w-full bg-surface-2 border border-border rounded-xl px-3 py-2 text-sm text-text-primary"
+            >
+              <option value="">Select team…</option>
+              {(pool?.teams ?? []).map((t) => (
+                <option key={t.teamId} value={t.teamId}>{t.name}</option>
+              ))}
+            </select>
+            {teamId != null && (
+              <>
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search player…"
+                  className="w-full bg-surface-2 border border-border rounded-xl px-3 py-2 text-sm text-text-primary placeholder:text-text-muted"
+                />
+                <div className="max-h-48 overflow-y-auto rounded-xl border border-border">
+                  {filtered.length === 0 ? (
+                    <p className="text-xs text-text-muted px-3 py-2 font-sans">No players.</p>
+                  ) : (
+                    filtered.map((p) => {
+                      const on = winner?.playerSlug
+                        ? winner.playerSlug === p.playerSlug
+                        : winner?.playerName === p.playerName;
+                      return (
+                        <button
+                          key={p.playerSlug ?? p.playerName}
+                          type="button"
+                          onClick={() => setWinner({ playerName: p.playerName, playerSlug: p.playerSlug })}
+                          className={`block w-full text-left px-3 py-2 text-sm ${on ? 'bg-primary text-background' : 'text-text-primary hover:bg-surface-3'}`}
+                        >
+                          {p.playerName}
+                          {(p.position || p.age != null) && (
+                            <span className="text-xs opacity-60">
+                              {' · '}{[p.position, p.age != null ? `${p.age}` : null].filter(Boolean).join(' · ')}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        ) : (
+          <div>
+            <label className="block text-xs font-medium text-text-muted uppercase tracking-wider mb-1">
+              Actual value (JSON, optional)
+            </label>
+            <textarea
+              value={actualValueRaw}
+              onChange={(e) => setActualValueRaw(e.target.value)}
+              placeholder='{ "playerName": "..." }'
+              rows={4}
+              className="w-full bg-surface-2 border border-border rounded-xl px-3 py-2 text-sm text-text-primary font-mono"
+            />
+          </div>
+        )}
 
         {error && <p className="text-sm text-danger">{error}</p>}
 
