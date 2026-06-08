@@ -46,6 +46,7 @@ interface SocialConfig {
   maxActiveGroupsByTier: Record<string, number>;
   weeklyMinMatches: number;
   weeklyMaxMatches: number;
+  maxGroupsPerCompetition: number;
   joinInterstitialEnabled: boolean;
 }
 
@@ -303,6 +304,9 @@ function ConfigTab() {
         </Field>
         <Field label="Daily prize cap per user" subtitle="Max prize credits a user can earn per day (cap: 2000)">
           <NumInput value={f.dailyPrizeCapPerUser} onChange={(v) => set('dailyPrizeCapPerUser', v)} max={MAX_DAILY_CAP} />
+        </Field>
+        <Field label="Max groups per competition" subtitle="Max competition groups a user can join per tournament. -1 = unlimited">
+          <NumInput value={f.maxGroupsPerCompetition} onChange={(v) => set('maxGroupsPerCompetition', v)} min={-1} max={50} />
         </Field>
       </SectionCard>
 
