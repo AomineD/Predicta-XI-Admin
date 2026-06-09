@@ -88,11 +88,20 @@ interface GroupMember {
   email: string | null;
 }
 
+interface PendingRequest {
+  userId: string;
+  displayName: string | null;
+  email: string | null;
+  requestedAt: string;
+}
+
 interface GroupDetail extends GroupRow {
   inviteCode: string;
   tierAtCreation: string;
   fixtureCount: number;
+  requiresApproval: boolean;
   members: GroupMember[];
+  pendingRequests: PendingRequest[];
 }
 
 interface AntiAbuse {
@@ -460,6 +469,11 @@ function GroupDetailModal({ id, onClose }: { id: string; onClose: () => void }) 
     onSuccess: invalidate,
   });
 
+  const rejectMut = useMutation({
+    mutationFn: (userId: string) => api.post<{ rejected: boolean }>(`/admin/groups/${id}/requests/${userId}/reject`),
+    onSuccess: invalidate,
+  });
+
   const g = detailQ.data;
   const canVoid = g && g.status !== 'settled' && g.status !== 'cancelled';
 
@@ -498,10 +512,45 @@ function GroupDetailModal({ id, onClose }: { id: string; onClose: () => void }) 
               <Meta label="Tier at creation" value={g.tierAtCreation} />
               <Meta label="Credits charged" value={String(g.creditsCharged)} mono />
               <Meta label="Matches / categories" value={String(g.fixtureCount)} mono />
+              <Meta label="Approval gate" value={g.requiresApproval ? 'On (owner approves)' : 'Off (instant join)'} />
               <Meta label="Join closes" value={formatDateTime(g.joinClosesAt)} />
               <Meta label="Created" value={formatDateTime(g.createdAt)} />
               <Meta label="Settled" value={formatDateTime(g.settledAt)} />
             </div>
+
+            {g.pendingRequests.length > 0 && (
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <Users size={14} className="text-warning" />
+                  <span className="text-xs font-semibold text-text-secondary uppercase tracking-wider font-sans">
+                    Pending requests ({g.pendingRequests.length})
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  {g.pendingRequests.map((r) => (
+                    <div
+                      key={r.userId}
+                      className="flex items-center gap-3 rounded-xl p-3"
+                      style={{ background: '#182235', border: '1px solid rgba(255,255,255,0.06)' }}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm text-text-primary font-medium truncate">{r.displayName ?? r.email ?? r.userId}</span>
+                        <div className="text-[11px] text-text-muted font-sans mt-0.5">requested {formatDateTime(r.requestedAt)}</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => rejectMut.mutate(r.userId)}
+                        disabled={rejectMut.isPending}
+                        title="Reject request"
+                        className="p-1.5 rounded-lg text-text-muted hover:text-danger hover:bg-danger/10 transition-colors disabled:opacity-40"
+                      >
+                        <XCircle size={15} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div>
               <div className="flex items-center gap-2 mb-2">
@@ -552,8 +601,8 @@ function GroupDetailModal({ id, onClose }: { id: string; onClose: () => void }) 
               </div>
             </div>
 
-            {(voidMut.error || banMut.error) && (
-              <p className="text-sm text-danger font-sans">{((voidMut.error ?? banMut.error) as Error).message}</p>
+            {(voidMut.error || banMut.error || rejectMut.error) && (
+              <p className="text-sm text-danger font-sans">{((voidMut.error ?? banMut.error ?? rejectMut.error) as Error).message}</p>
             )}
 
             <div className="flex items-center justify-between gap-3 pt-2 border-t" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
