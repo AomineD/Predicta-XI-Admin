@@ -15,6 +15,7 @@ const CREDITS_TABS = [
   { id: 'combinadas', label: 'Combinadas' },
   { id: 'quiniela', label: 'Quiniela' },
   { id: 'iap', label: 'IAP Packs' },
+  { id: 'proUpsell', label: 'PRO Upsell' },
   { id: 'tiers', label: 'Market Tiers' },
 ] as const;
 type CreditsTabId = typeof CREDITS_TABS[number]['id'];
@@ -36,6 +37,13 @@ interface CreditsConfig {
   combinadaPremiumCost: number;
   quinielaAccessCost: number;
   quinielaPhase2RegenerateAllowed: boolean;
+  proUpsellModalEnabled: boolean;
+  proUpsellFrequency: number;
+  proUpsellCooldownDays: number;
+  proOfferActive: boolean;
+  proOfferBadgeText: string | null;
+  proTrialEnabled: boolean;
+  proTrialLabel: string | null;
 }
 
 interface Tier {
@@ -421,6 +429,56 @@ function CreditsPageInner() {
           </span>
         </div>
         <p className="text-xs text-text-muted/50 font-sans">Monthly subscribers have unlimited prediction access regardless of credits.</p>
+      </SectionCard>
+      </div>
+
+      {/* PRO UPSELL TAB */}
+      <div hidden={tab !== 'proUpsell'} role="tabpanel" id="tabpanel-proUpsell" aria-labelledby="tab-proUpsell">
+      {/* ── Modal toggle + cadence ── */}
+      <SectionCard title="PRO Upsell Modal" subtitle="Non-aggressive modal that invites non-subscribers to PRO/Club. Shown only to users without an active subscription, every N app opens, with a cooldown after dismissal. Subscribers never see it.">
+        <Field label="Modal enabled" subtitle="Master switch. When off, the modal never shows.">
+          <Toggle value={f.proUpsellModalEnabled} onChange={(v) => set('proUpsellModalEnabled', v)} />
+        </Field>
+        <Field label="Frequency (app opens)" subtitle="Show the modal once every N eligible app opens (minimum 1).">
+          <NumInput value={f.proUpsellFrequency} onChange={(v) => set('proUpsellFrequency', v)} min={1} max={100} />
+        </Field>
+        <Field label="Cooldown (days)" subtitle="After it shows or is dismissed, don't show it again for this many days (0 = no cooldown).">
+          <NumInput value={f.proUpsellCooldownDays} onChange={(v) => set('proUpsellCooldownDays', v)} min={0} max={365} />
+        </Field>
+      </SectionCard>
+
+      {/* ── Price offer ── */}
+      <SectionCard title="Price Offer" subtitle="Surface a Google Play / App Store price promotion. The discount itself is configured in the store; this only controls the in-app badge. The app always shows the real localized store price.">
+        <Field label="Offer active" subtitle="Show an offer badge on the modal.">
+          <Toggle value={f.proOfferActive} onChange={(v) => set('proOfferActive', v)} />
+        </Field>
+        <Field label="Offer badge text" subtitle='Short label for the badge, e.g. "-40%" or "Summer offer". Leave blank to use a default "Offer" badge.'>
+          <input
+            type="text"
+            maxLength={60}
+            value={f.proOfferBadgeText ?? ''}
+            onChange={(e) => set('proOfferBadgeText', e.target.value)}
+            placeholder="-40%"
+            className="h-9 w-full px-3 rounded-xl text-sm bg-surface-2 border border-border text-text-primary font-sans"
+          />
+        </Field>
+      </SectionCard>
+
+      {/* ── Free trial ── */}
+      <SectionCard title="Free Trial" subtitle="Message a free-trial offer (e.g. 1 month). The trial is granted by Google Play / App Store on the subscription product — this only controls the in-app messaging.">
+        <Field label="Trial enabled" subtitle="Show the trial message on the subscribe CTA.">
+          <Toggle value={f.proTrialEnabled} onChange={(v) => set('proTrialEnabled', v)} />
+        </Field>
+        <Field label="Trial label" subtitle='CTA text when the trial is active, e.g. "Try 1 month free".'>
+          <input
+            type="text"
+            maxLength={60}
+            value={f.proTrialLabel ?? ''}
+            onChange={(e) => set('proTrialLabel', e.target.value)}
+            placeholder="Try 1 month free"
+            className="h-9 w-full px-3 rounded-xl text-sm bg-surface-2 border border-border text-text-primary font-sans"
+          />
+        </Field>
       </SectionCard>
       </div>
 
