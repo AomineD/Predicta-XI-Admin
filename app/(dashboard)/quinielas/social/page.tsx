@@ -49,6 +49,7 @@ interface SocialConfig {
   weeklyMaxMatches: number;
   maxGroupsPerCompetition: number;
   joinInterstitialEnabled: boolean;
+  appCheckEnforcementMode: 'disabled' | 'monitor' | 'enforce';
 }
 
 interface GroupRow {
@@ -323,6 +324,20 @@ function ConfigTab() {
         </Field>
         <Field label="Max groups per competition" subtitle="Max competition groups a user can join per tournament. -1 = unlimited">
           <NumInput value={f.maxGroupsPerCompetition} onChange={(v) => set('maxGroupsPerCompetition', v)} min={-1} max={50} />
+        </Field>
+        <Field
+          label="App Check enforcement"
+          subtitle="Anti-spoofing for the prize gate. disabled = ignore App Check; monitor = verify & record adoption, gate counts all; enforce = prize gate counts only members who joined from a genuine app (Play Integrity / App Attest). Roll out: release the app → monitor → enforce."
+        >
+          <select
+            value={f.appCheckEnforcementMode}
+            onChange={(e) => set('appCheckEnforcementMode', e.target.value as SocialConfig['appCheckEnforcementMode'])}
+            className="h-9 px-3 rounded-xl text-sm bg-surface-2 border border-border text-text-primary font-sans"
+          >
+            <option value="disabled">disabled</option>
+            <option value="monitor">monitor</option>
+            <option value="enforce">enforce</option>
+          </select>
         </Field>
       </SectionCard>
 
