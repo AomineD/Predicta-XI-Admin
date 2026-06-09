@@ -40,6 +40,7 @@ interface SocialConfig {
   createCostWeekly: number;
   prizeWinnerCredits: number;
   prizePodiumCredits: Record<string, number>;
+  prizeWeeklyWinnerCredits: number;
   minRealMembersForPrize: number;
   dailyPrizeCapPerUser: number;
   maxGroupSizeByTier: Record<string, number>;
@@ -295,7 +296,7 @@ function ConfigTab() {
         </Field>
       </SectionCard>
 
-      <SectionCard title="Prizes (house-funded)" subtitle="Credits awarded when a group settles. Per-prize cap: 500.">
+      <SectionCard title="Competition prizes (house-funded)" subtitle="Awarded when a competition group settles — full podium. Per-prize cap: 500.">
         <Field label="Winner (1st place)">
           <NumInput value={f.prizeWinnerCredits} onChange={(v) => set('prizeWinnerCredits', v)} max={MAX_PRIZE} />
         </Field>
@@ -304,6 +305,12 @@ function ConfigTab() {
         </Field>
         <Field label="3rd place">
           <NumInput value={f.prizePodiumCredits['3'] ?? 0} onChange={(v) => set('prizePodiumCredits', { ...f.prizePodiumCredits, '3': v })} max={MAX_PRIZE} />
+        </Field>
+      </SectionCard>
+
+      <SectionCard title="Weekly prize (house-funded)" subtitle="Awarded when a weekly group settles. Weekly pays the winner only — usually less than a competition run. Per-prize cap: 500.">
+        <Field label="Winner (1st place)">
+          <NumInput value={f.prizeWeeklyWinnerCredits} onChange={(v) => set('prizeWeeklyWinnerCredits', v)} max={MAX_PRIZE} />
         </Field>
       </SectionCard>
 
