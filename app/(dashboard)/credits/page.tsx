@@ -13,6 +13,7 @@ import { Trash2, Pencil, Plus, Infinity } from 'lucide-react';
 const CREDITS_TABS = [
   { id: 'general', label: 'General' },
   { id: 'combinadas', label: 'Combinadas' },
+  { id: 'quiniela', label: 'Quiniela' },
   { id: 'iap', label: 'IAP Packs' },
   { id: 'tiers', label: 'Market Tiers' },
 ] as const;
@@ -33,6 +34,8 @@ interface CreditsConfig {
   weeklyActivityMinDays: number;
   combinadaRegularCost: number;
   combinadaPremiumCost: number;
+  quinielaAccessCost: number;
+  quinielaPhase2RegenerateAllowed: boolean;
 }
 
 interface Tier {
@@ -316,7 +319,7 @@ function CreditsPageInner() {
 
   const f = form ?? configQ.data;
   if (!f) return null;
-  const set = (key: keyof CreditsConfig, val: number) => setForm({ ...f, [key]: val });
+  const set = <K extends keyof CreditsConfig>(key: K, val: CreditsConfig[K]) => setForm({ ...f, [key]: val });
   const tiers = tiersQ.data ?? [];
   const dirty = JSON.stringify(f) !== JSON.stringify(configQ.data);
 
@@ -375,6 +378,18 @@ function CreditsPageInner() {
         </Field>
         <Field label="Premium combinada cost" subtitle="Credits deducted for premium combinadas (0 = free for subscribers)">
           <NumInput value={f.combinadaPremiumCost} onChange={(v) => set('combinadaPremiumCost', v)} />
+        </Field>
+      </SectionCard>
+      </div>
+
+      {/* QUINIELA TAB */}
+      <div hidden={tab !== 'quiniela'} role="tabpanel" id="tabpanel-quiniela" aria-labelledby="tab-quiniela">
+      <SectionCard title="Tournament Quiniela" subtitle="Credit cost to unlock the AI-generated tournament quiniela. Premium / unlimited subscribers always access it for free.">
+        <Field label="Quiniela access cost" subtitle="Credits deducted the first time a user opens a quiniela (0 = free for everyone)">
+          <NumInput value={f.quinielaAccessCost} onChange={(v) => set('quinielaAccessCost', v)} min={0} />
+        </Field>
+        <Field label="Allow phase 2 regeneration" subtitle="Let users regenerate their picks when the second phase opens, without paying again">
+          <Toggle value={f.quinielaPhase2RegenerateAllowed} onChange={(v) => set('quinielaPhase2RegenerateAllowed', v)} />
         </Field>
       </SectionCard>
       </div>
