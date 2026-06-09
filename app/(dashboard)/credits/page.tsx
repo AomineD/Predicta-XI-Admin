@@ -14,6 +14,7 @@ const CREDITS_TABS = [
   { id: 'general', label: 'General' },
   { id: 'combinadas', label: 'Combinadas' },
   { id: 'quiniela', label: 'Quiniela' },
+  { id: 'referrals', label: 'Referrals' },
   { id: 'iap', label: 'IAP Packs' },
   { id: 'proUpsell', label: 'PRO Upsell' },
   { id: 'tiers', label: 'Market Tiers' },
@@ -44,7 +45,18 @@ interface CreditsConfig {
   proOfferBadgeText: string | null;
   proTrialEnabled: boolean;
   proTrialLabel: string | null;
+  referralEnabled: boolean;
+  referralCreditsPerReferral: number;
+  referralMilestoneSize: number;
+  referralMilestoneBonus: number;
+  referralWelcomeCredits: number;
+  referralMaxRewardedReferrals: number;
+  referralRequireAppCheck: string;
+  referralQualifyOnFirstPrediction: boolean;
+  referralAttributionWindowHours: number;
 }
+
+const APP_CHECK_MODES = ['disabled', 'monitor', 'enforce'] as const;
 
 interface Tier {
   id: string;
@@ -398,6 +410,60 @@ function CreditsPageInner() {
         </Field>
         <Field label="Allow phase 2 regeneration" subtitle="Let users regenerate their picks when the second phase opens, without paying again">
           <Toggle value={f.quinielaPhase2RegenerateAllowed} onChange={(v) => set('quinielaPhase2RegenerateAllowed', v)} />
+        </Field>
+      </SectionCard>
+      </div>
+
+      {/* REFERRALS TAB */}
+      <div hidden={tab !== 'referrals'} role="tabpanel" id="tabpanel-referrals" aria-labelledby="tab-referrals">
+      <SectionCard title="Referral Program" subtitle="Reward users with credits for inviting new, real users. A referral 'qualifies' the referrer only when the invited user signs up on a unique device (App Check) and opens their first prediction. Credits are an engagement currency — the anti-abuse gates below are what matter.">
+        <Field label="Enabled" subtitle="Master switch. When off, no codes are attributed and no credits are paid.">
+          <Toggle value={f.referralEnabled} onChange={(v) => set('referralEnabled', v)} />
+        </Field>
+        <Field label="Credits per referral" subtitle="Paid to the referrer for each qualified referral.">
+          <NumInput value={f.referralCreditsPerReferral} onChange={(v) => set('referralCreditsPerReferral', v)} min={0} max={1000} />
+        </Field>
+        <Field label="Welcome credits" subtitle="Bonus to the NEW (referred) user on attribution. 0 = single-sided (only the referrer earns).">
+          <NumInput value={f.referralWelcomeCredits} onChange={(v) => set('referralWelcomeCredits', v)} min={0} max={1000} />
+        </Field>
+      </SectionCard>
+
+      <SectionCard title="Milestone Bonus" subtitle="An extra bonus every N qualified referrals (e.g. every 5). Set size or bonus to 0 to disable.">
+        <Field label="Milestone size" subtitle="Grant the bonus on every multiple of this many qualified referrals.">
+          <NumInput value={f.referralMilestoneSize} onChange={(v) => set('referralMilestoneSize', v)} min={0} max={1000} />
+        </Field>
+        <Field label="Milestone bonus" subtitle="Extra credits granted to the referrer at each milestone.">
+          <NumInput value={f.referralMilestoneBonus} onChange={(v) => set('referralMilestoneBonus', v)} min={0} max={1000} />
+        </Field>
+      </SectionCard>
+
+      <SectionCard title="Anti-abuse" subtitle="Guardrails that protect ad/IAP revenue from credit farming. Device dedupe and the activation gate always apply; App Check enforcement is staged below.">
+        <Field label="App Check enforcement" subtitle="disabled = ignore; monitor = record only (recommended for rollout); enforce = unverified installs never reward the referrer.">
+          <div className="flex flex-wrap gap-2">
+            {APP_CHECK_MODES.map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => set('referralRequireAppCheck', mode)}
+                className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors font-sans capitalize ${
+                  f.referralRequireAppCheck === mode
+                    ? 'bg-primary/15 border-primary text-primary'
+                    : 'bg-surface-2 border-border text-text-muted hover:border-text-muted'
+                }`}
+              >
+                {mode}
+              </button>
+            ))}
+          </div>
+        </Field>
+        <Field label="Qualify on first prediction" subtitle="On = referrer is paid only when the referred user opens their first prediction (recommended). Off = qualifies at signup.">
+          <Toggle value={f.referralQualifyOnFirstPrediction} onChange={(v) => set('referralQualifyOnFirstPrediction', v)} />
+        </Field>
+        <Field label="Lifetime cap" subtitle="Max qualified referrals that earn the referrer credits (0 = unlimited).">
+          <NumInput value={f.referralMaxRewardedReferrals} onChange={(v) => set('referralMaxRewardedReferrals', v)} min={0} max={100000} />
+        </Field>
+        <Field label="Attribution window (hours)" subtitle="A code can only be attributed within this many hours after the referred user signs up.">
+          <NumInput value={f.referralAttributionWindowHours} onChange={(v) => set('referralAttributionWindowHours', v)} min={1} max={8760} />
         </Field>
       </SectionCard>
       </div>
