@@ -42,6 +42,7 @@ interface SocialConfig {
   prizePodiumCredits: Record<string, number>;
   prizeWeeklyWinnerCredits: number;
   minRealMembersForPrize: number;
+  minParticipationPctForPrize: number;
   dailyPrizeCapPerUser: number;
   maxGroupSizeByTier: Record<string, number>;
   maxActiveGroupsByTier: Record<string, number>;
@@ -318,6 +319,12 @@ function ConfigTab() {
       <SectionCard title="Anti-abuse" subtitle="Defense against prize farming">
         <Field label="Minimum real members" subtitle="Real members required for a group to pay a prize (1–1000)">
           <NumInput value={f.minRealMembersForPrize} onChange={(v) => set('minRealMembersForPrize', v)} min={1} max={MAX_GROUP_SIZE} />
+        </Field>
+        <Field
+          label="Minimum participation %"
+          subtitle="Share of the group that must actually play (submit complete picks) for a prize to pay out. 0–100; 0 disables. Default 60."
+        >
+          <NumInput value={f.minParticipationPctForPrize} onChange={(v) => set('minParticipationPctForPrize', v)} min={0} max={100} />
         </Field>
         <Field label="Daily prize cap per user" subtitle="Max prize credits a user can earn per day (cap: 2000)">
           <NumInput value={f.dailyPrizeCapPerUser} onChange={(v) => set('dailyPrizeCapPerUser', v)} max={MAX_DAILY_CAP} />
