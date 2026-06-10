@@ -583,6 +583,36 @@ function ConfigPageInner() {
     },
   });
 
+  // ── App maintenance mode ──
+  // Lives in credits_config (sibling of the force-update gate). We read/write it
+  // here with a PARTIAL PUT (only the two maintenance fields), so it never
+  // touches the rest of the credits config edited on the Credits page. Toggling
+  // this on makes the app show its blocking maintenance screen — for a controlled
+  // pause while the server stays up. A hard outage is a separate signal the app
+  // detects on its own (the /app-config request failing → offline screen).
+  const { data: maintCfg } = useQuery<{ maintenanceMode: boolean; maintenanceMessage: string | null }>({
+    queryKey: ['credits-config-maintenance'],
+    queryFn: () => api.get('/admin/credits-config'),
+  });
+  const [maintForm, setMaintForm] = useState<{ enabled: boolean; message: string } | null>(null);
+  const [maintMessage, setMaintMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const maintInitial = useMemo(
+    () => (maintCfg ? { enabled: maintCfg.maintenanceMode, message: maintCfg.maintenanceMessage ?? '' } : null),
+    [maintCfg],
+  );
+  const maint = maintForm ?? maintInitial;
+
+  const saveMaintenance = useMutation({
+    mutationFn: (body: { maintenanceMode: boolean; maintenanceMessage: string | null }) =>
+      api.put('/admin/credits-config', body),
+    onSuccess: () => {
+      setMaintForm(null);
+      setMaintMessage({ type: 'success', text: 'Maintenance settings saved.' });
+      qc.invalidateQueries({ queryKey: ['credits-config-maintenance'] });
+    },
+    onError: (err: Error) => setMaintMessage({ type: 'error', text: err.message }),
+  });
+
   const activeForm = form ?? initialForm;
 
   if (!activeForm) return <p className="text-text-muted text-sm">Loading config...</p>;
@@ -1202,6 +1232,51 @@ function ConfigPageInner() {
 
       {/* MAINTENANCE TAB */}
       <div hidden={tab !== 'maintenance'} role="tabpanel" id="tabpanel-maintenance" aria-labelledby="tab-maintenance">
+      {/* App Maintenance Mode (credits_config, partial update) */}
+      <SectionCard title="App Maintenance Mode" subtitle="Blocking maintenance screen for the mobile app. Turn this on for a controlled pause while the server stays up (e.g. fixing a bug). A real backend outage is handled separately — the app detects that on its own and shows the offline screen.">
+        {!maint ? (
+          <p className="text-text-muted text-sm font-sans py-3">Loading…</p>
+        ) : (
+          <>
+            <Field label="Maintenance mode" subtitle="When on, the app shows the blocking maintenance screen to all users on launch and on resume.">
+              <Toggle value={maint.enabled} onChange={(v) => setMaintForm({ ...maint, enabled: v })} />
+            </Field>
+            <Field label="Custom message" subtitle="Optional copy shown on the maintenance screen. Leave empty to use the app's default text.">
+              <textarea
+                maxLength={200}
+                rows={2}
+                value={maint.message}
+                onChange={(e) => setMaintForm({ ...maint, message: e.target.value })}
+                placeholder="Estamos haciendo mejoras. Vuelve en un momento."
+                className="w-full px-3 py-2 rounded-xl text-sm bg-surface-2 border border-border text-text-primary font-sans resize-none"
+              />
+            </Field>
+            <div className="flex items-center gap-3 pt-3">
+              <Button
+                variant="primary"
+                loading={saveMaintenance.isPending}
+                onClick={() =>
+                  saveMaintenance.mutate({
+                    maintenanceMode: maint.enabled,
+                    maintenanceMessage: maint.message.trim() === '' ? null : maint.message,
+                  })
+                }
+              >
+                Save maintenance
+              </Button>
+              {maint.enabled && (
+                <span className="text-xs font-sans text-warning">App is in maintenance mode for users.</span>
+              )}
+              {maintMessage && (
+                <span className={`text-xs font-sans ${maintMessage.type === 'success' ? 'text-success' : 'text-danger'}`}>
+                  {maintMessage.text}
+                </span>
+              )}
+            </div>
+          </>
+        )}
+      </SectionCard>
+
       {/* Data Maintenance */}
       <SectionCard title="Data Maintenance" subtitle="One-time actions for data pipeline health">
         <div className="flex items-center justify-between py-3">
