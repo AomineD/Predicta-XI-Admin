@@ -18,6 +18,7 @@ import {
   Award,
   BarChart3,
   Share2,
+  Bell,
   LogOut,
 } from 'lucide-react';
 
@@ -30,6 +31,7 @@ const NAV_ITEMS = [
   { href: '/config',      label: 'Config',        icon: Settings },
   { href: '/credits',    label: 'Credits',       icon: Coins },
   { href: '/referrals',  label: 'Referrals',     icon: Share2 },
+  { href: '/notifications', label: 'Notifications', icon: Bell },
   { href: '/combinadas', label: 'Combinadas',    icon: Layers },
   { href: '/quinielas', label: 'Quinielas',     icon: Award },
   { href: '/models',     label: 'Models',        icon: BarChart3 },

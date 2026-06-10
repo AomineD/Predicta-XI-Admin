@@ -15,6 +15,7 @@ const CREDITS_TABS = [
   { id: 'combinadas', label: 'Combinadas' },
   { id: 'quiniela', label: 'Quiniela' },
   { id: 'referrals', label: 'Referrals' },
+  { id: 'notifications', label: 'Notifications' },
   { id: 'iap', label: 'IAP Packs' },
   { id: 'proUpsell', label: 'PRO Upsell' },
   { id: 'tiers', label: 'Market Tiers' },
@@ -54,6 +55,9 @@ interface CreditsConfig {
   referralRequireAppCheck: string;
   referralQualifyOnFirstPrediction: boolean;
   referralAttributionWindowHours: number;
+  notificationsEnabled: boolean;
+  minSupportedBuild: number;
+  minSupportedVersion: string | null;
 }
 
 const APP_CHECK_MODES = ['disabled', 'monitor', 'enforce'] as const;
@@ -464,6 +468,31 @@ function CreditsPageInner() {
         </Field>
         <Field label="Attribution window (hours)" subtitle="A code can only be attributed within this many hours after the referred user signs up.">
           <NumInput value={f.referralAttributionWindowHours} onChange={(v) => set('referralAttributionWindowHours', v)} min={1} max={8760} />
+        </Field>
+      </SectionCard>
+      </div>
+
+      {/* NOTIFICATIONS TAB */}
+      <div hidden={tab !== 'notifications'} role="tabpanel" id="tabpanel-notifications" aria-labelledby="tab-notifications">
+      <SectionCard title="Push Notifications" subtitle="Master kill-switch for the whole push system (automated triggers + manual sends). Off by default — turn it on ONLY after validating the device-token round-trip and a real test send end-to-end. Per-type opt-in is governed by each user's own notification settings.">
+        <Field label="Notifications enabled" subtitle="When off, no push of any kind is delivered, even if users are opted in.">
+          <Toggle value={f.notificationsEnabled} onChange={(v) => set('notificationsEnabled', v)} />
+        </Field>
+      </SectionCard>
+
+      <SectionCard title="Force Update Gate" subtitle="When the app's build number is below the minimum, it shows a blocking update screen (the only way to force an update on iOS). Leave the build at 0 to disable the gate. Raise it ONLY after a newer build is live on both stores.">
+        <Field label="Minimum supported build" subtitle="App builds with a buildNumber below this are forced to update (0 = gate off).">
+          <NumInput value={f.minSupportedBuild} onChange={(v) => set('minSupportedBuild', v)} min={0} />
+        </Field>
+        <Field label="Minimum supported version" subtitle='Display-only label shown on the update screen, e.g. "1.4.0". Optional.'>
+          <input
+            type="text"
+            maxLength={20}
+            value={f.minSupportedVersion ?? ''}
+            onChange={(e) => set('minSupportedVersion', e.target.value)}
+            placeholder="1.4.0"
+            className="h-9 w-full px-3 rounded-xl text-sm bg-surface-2 border border-border text-text-primary font-sans"
+          />
         </Field>
       </SectionCard>
       </div>
