@@ -56,6 +56,8 @@ interface CreditsConfig {
   referralQualifyOnFirstPrediction: boolean;
   referralAttributionWindowHours: number;
   notificationsEnabled: boolean;
+  weeklyQuinielaPromoEnabled: boolean;
+  weeklyQuinielaPromoHourUtc: number;
   minSupportedBuild: number;
   minSupportedVersion: string | null;
 }
@@ -477,6 +479,15 @@ function CreditsPageInner() {
       <SectionCard title="Push Notifications" subtitle="Master kill-switch for the whole push system (automated triggers + manual sends). Off by default — turn it on ONLY after validating the device-token round-trip and a real test send end-to-end. Per-type opt-in is governed by each user's own notification settings.">
         <Field label="Notifications enabled" subtitle="When off, no push of any kind is delivered, even if users are opted in.">
           <Toggle value={f.notificationsEnabled} onChange={(v) => set('notificationsEnabled', v)} />
+        </Field>
+      </SectionCard>
+
+      <SectionCard title="Weekly Quiniela Promo" subtitle="Once a week, on Monday at the configured UTC hour, broadcasts a 'new matches for your weekly reta' push when there are eligible weekly matches. Off by default. Honors each user's weeklyQuinielaPromo opt-in.">
+        <Field label="Promo enabled" subtitle="Master switch for the Monday weekly-reta promo broadcast.">
+          <Toggle value={f.weeklyQuinielaPromoEnabled} onChange={(v) => set('weeklyQuinielaPromoEnabled', v)} />
+        </Field>
+        <Field label="Send hour (UTC)" subtitle="UTC hour (0–23) the Monday broadcast fires. Caracas is UTC−4, so 13 ≈ 9:00 AM Caracas.">
+          <NumInput value={f.weeklyQuinielaPromoHourUtc} onChange={(v) => set('weeklyQuinielaPromoHourUtc', v)} min={0} max={23} />
         </Field>
       </SectionCard>
 
