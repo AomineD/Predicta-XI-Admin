@@ -43,6 +43,7 @@ interface SocialConfig {
   prizeWeeklyWinnerCredits: number;
   minRealMembersForPrize: number;
   minParticipationPctForPrize: number;
+  minWeeklyPicksPctForParticipation: number;
   dailyPrizeCapPerUser: number;
   maxGroupSizeByTier: Record<string, number>;
   maxActiveGroupsByTier: Record<string, number>;
@@ -322,9 +323,15 @@ function ConfigTab() {
         </Field>
         <Field
           label="Minimum participation %"
-          subtitle="Share of the group that must actually play (submit complete picks) for a prize to pay out. 0–100; 0 disables. Default 60."
+          subtitle="Share of the group that must actually play to count toward the prize gate. 0–100; 0 disables. Default 60."
         >
           <NumInput value={f.minParticipationPctForPrize} onChange={(v) => set('minParticipationPctForPrize', v)} min={0} max={100} />
+        </Field>
+        <Field
+          label="Weekly: picks % to count as played"
+          subtitle="Weekly groups close one day at a time, so a member counts as having played once they predict this share of the week's matches (“the majority”), not all of them — otherwise missing one day makes the gate unreachable. Floor of 1 pick. Competition still needs every category. 0–100; default 50."
+        >
+          <NumInput value={f.minWeeklyPicksPctForParticipation} onChange={(v) => set('minWeeklyPicksPctForParticipation', v)} min={0} max={100} />
         </Field>
         <Field label="Daily prize cap per user" subtitle="Max prize credits a user can earn per day (cap: 2000)">
           <NumInput value={f.dailyPrizeCapPerUser} onChange={(v) => set('dailyPrizeCapPerUser', v)} max={MAX_DAILY_CAP} />
