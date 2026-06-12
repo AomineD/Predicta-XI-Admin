@@ -590,7 +590,12 @@ function ConfigPageInner() {
   // this on makes the app show its blocking maintenance screen — for a controlled
   // pause while the server stays up. A hard outage is a separate signal the app
   // detects on its own (the /app-config request failing → offline screen).
-  const { data: maintCfg } = useQuery<{ maintenanceMode: boolean; maintenanceMessage: string | null }>({
+  const { data: maintCfg } = useQuery<{
+    maintenanceMode: boolean;
+    maintenanceMessage: string | null;
+    minSupportedBuild: number;
+    minSupportedVersion: string | null;
+  }>({
     queryKey: ['credits-config-maintenance'],
     queryFn: () => api.get('/admin/credits-config'),
   });
@@ -608,6 +613,27 @@ function ConfigPageInner() {
     onSuccess: () => {
       setMaintForm(null);
       setMaintMessage({ type: 'success', text: 'Maintenance settings saved.' });
+      qc.invalidateQueries({ queryKey: ['credits-config-maintenance'] });
+    },
+    onError: (err: Error) => setMaintMessage({ type: 'error', text: err.message }),
+  });
+
+  // Force Update Gate (credits_config, partial update) — twin of the maintenance
+  // gate: both block the mobile app, so they live together in this tab. Partial
+  // PUT of only its two fields, so it never touches the rest of the config.
+  const [forceForm, setForceForm] = useState<{ build: number; version: string } | null>(null);
+  const forceInitial = useMemo(
+    () => (maintCfg ? { build: maintCfg.minSupportedBuild, version: maintCfg.minSupportedVersion ?? '' } : null),
+    [maintCfg],
+  );
+  const force = forceForm ?? forceInitial;
+
+  const saveForceUpdate = useMutation({
+    mutationFn: (body: { minSupportedBuild: number; minSupportedVersion: string | null }) =>
+      api.put('/admin/credits-config', body),
+    onSuccess: () => {
+      setForceForm(null);
+      setMaintMessage({ type: 'success', text: 'Force-update settings saved.' });
       qc.invalidateQueries({ queryKey: ['credits-config-maintenance'] });
     },
     onError: (err: Error) => setMaintMessage({ type: 'error', text: err.message }),
@@ -1271,6 +1297,52 @@ function ConfigPageInner() {
                 <span className={`text-xs font-sans ${maintMessage.type === 'success' ? 'text-success' : 'text-danger'}`}>
                   {maintMessage.text}
                 </span>
+              )}
+            </div>
+          </>
+        )}
+      </SectionCard>
+
+      {/* Force Update Gate (credits_config, partial update) */}
+      <SectionCard title="Force Update Gate" subtitle="When the app's build number is below the minimum, it shows a blocking update screen (the only way to force an update on iOS). Leave the build at 0 to disable the gate. Raise it ONLY after a newer build is live on both stores.">
+        {!force ? (
+          <p className="text-text-muted text-sm font-sans py-3">Loading…</p>
+        ) : (
+          <>
+            <Field label="Minimum supported build" subtitle="App builds with a buildNumber below this are forced to update (0 = gate off).">
+              <input
+                type="number"
+                min={0}
+                value={force.build}
+                onChange={(e) => setForceForm({ ...force, build: Math.max(0, parseInt(e.target.value || '0', 10) || 0) })}
+                className="h-9 w-32 px-3 rounded-xl text-sm bg-surface-2 border border-border text-text-primary font-sans"
+              />
+            </Field>
+            <Field label="Minimum supported version" subtitle='Display-only label shown on the update screen, e.g. "1.4.0". Optional.'>
+              <input
+                type="text"
+                maxLength={20}
+                value={force.version}
+                onChange={(e) => setForceForm({ ...force, version: e.target.value })}
+                placeholder="1.4.0"
+                className="h-9 w-full px-3 rounded-xl text-sm bg-surface-2 border border-border text-text-primary font-sans"
+              />
+            </Field>
+            <div className="flex items-center gap-3 pt-3">
+              <Button
+                variant="primary"
+                loading={saveForceUpdate.isPending}
+                onClick={() =>
+                  saveForceUpdate.mutate({
+                    minSupportedBuild: force.build,
+                    minSupportedVersion: force.version.trim() === '' ? null : force.version.trim(),
+                  })
+                }
+              >
+                Save force-update
+              </Button>
+              {force.build > 0 && (
+                <span className="text-xs font-sans text-warning">Builds below {force.build} are blocked.</span>
               )}
             </div>
           </>
