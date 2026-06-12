@@ -61,6 +61,12 @@ interface CreditsConfig {
   referralRequireAppCheck: string;
   referralQualifyOnFirstPrediction: boolean;
   referralAttributionWindowHours: number;
+  // Referral invite modal (hybrid cadence by credit balance).
+  referralModalEnabled: boolean;
+  referralModalFreqLow: number;
+  referralModalFreqHigh: number;
+  referralModalLowCreditThreshold: number;
+  referralModalCooldownDays: number;
 }
 
 // Fields that USED to live on the Credits page but moved to their own homes:
@@ -516,6 +522,24 @@ function CreditsPageInner() {
         </Field>
         <Field label="Attribution window (hours)" subtitle="A code can only be attributed within this many hours after the referred user signs up.">
           <NumInput value={f.referralAttributionWindowHours} onChange={(v) => set('referralAttributionWindowHours', v)} min={1} max={8760} />
+        </Field>
+      </SectionCard>
+
+      <SectionCard title="Invite Modal" subtitle="Non-aggressive bottom sheet that nudges users to invite friends for free credits. The cadence is hybrid: low-credit users (and non-subscribers) see it more often; subscribers and users with plenty of credits see it less often. It counts both app opens and store/credits-screen entries, shows at most one promo modal per session (the PRO upsell takes priority), and respects the cooldown after a dismissal. Requires the Referral Program above to be enabled.">
+        <Field label="Modal enabled" subtitle="Master switch. When off, the invite modal never shows.">
+          <Toggle value={f.referralModalEnabled} onChange={(v) => set('referralModalEnabled', v)} />
+        </Field>
+        <Field label="Frequency — low credits" subtitle="Show every N attempts to non-subscribers below the credit threshold (the more frequent cadence). Lower = more often.">
+          <NumInput value={f.referralModalFreqLow} onChange={(v) => set('referralModalFreqLow', v)} min={1} max={100} />
+        </Field>
+        <Field label="Frequency — high credits / subscribers" subtitle="Show every N attempts to subscribers and to users at/above the credit threshold (the less frequent cadence). Higher = less often.">
+          <NumInput value={f.referralModalFreqHigh} onChange={(v) => set('referralModalFreqHigh', v)} min={1} max={100} />
+        </Field>
+        <Field label="Low-credit threshold" subtitle="A non-subscriber with fewer credits than this gets the more-frequent cadence. 0 = nobody is 'low-credit' (everyone on the less-frequent cadence).">
+          <NumInput value={f.referralModalLowCreditThreshold} onChange={(v) => set('referralModalLowCreditThreshold', v)} min={0} max={100000} />
+        </Field>
+        <Field label="Cooldown (days)" subtitle="After a dismissal, the modal won't reappear for this many days.">
+          <NumInput value={f.referralModalCooldownDays} onChange={(v) => set('referralModalCooldownDays', v)} min={0} max={365} />
         </Field>
       </SectionCard>
       </div>
