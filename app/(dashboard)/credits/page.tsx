@@ -36,6 +36,13 @@ interface CreditsConfig {
   weeklyActivityMinDays: number;
   combinadaRegularCost: number;
   combinadaPremiumCost: number;
+  // User-built combinadas: fixed create cost (free users only; subscribers free)
+  // + the flexible always-charged opinion formula.
+  userCombinadaCreationCost: number;
+  combinadaOpinionBaseCost: number;
+  combinadaOpinionPerLegCost: number;
+  combinadaOpinionPerExtraMarketCost: number;
+  combinadaOpinionMaxCost: number;
   quinielaAccessCost: number;
   quinielaPhase2RegenerateAllowed: boolean;
   proUpsellModalEnabled: boolean;
@@ -417,6 +424,32 @@ function CreditsPageInner() {
         </Field>
         <Field label="Premium combinada cost" subtitle="Credits deducted for premium combinadas (0 = free for subscribers)">
           <NumInput value={f.combinadaPremiumCost} onChange={(v) => set('combinadaPremiumCost', v)} />
+        </Field>
+      </SectionCard>
+
+      {/* ── User-built combinadas (open model) ── */}
+      <SectionCard title="User Combinadas" subtitle="Parlays the user builds themselves from any week match + their own picks.">
+        <Field label="Create cost (free users)" subtitle="Credits to save a combinada. Subscribers (any tier) create free + unlimited.">
+          <NumInput value={f.userCombinadaCreationCost} onChange={(v) => set('userCombinadaCreationCost', v)} min={0} />
+        </Field>
+      </SectionCard>
+
+      {/* ── Predicta opinion — flexible, always charged (even subscribers) ── */}
+      <SectionCard
+        title="Predicta opinion cost"
+        subtitle="Each opinion is a real LLM call, so it's ALWAYS charged (even PRO/Club). Cost = min(max, base + perLeg×matches + perExtraMarket×extra markets)."
+      >
+        <Field label="Base cost" subtitle="Flat credits added to every opinion">
+          <NumInput value={f.combinadaOpinionBaseCost} onChange={(v) => set('combinadaOpinionBaseCost', v)} min={0} />
+        </Field>
+        <Field label="Per match (leg)" subtitle="Credits per distinct match in the combinada">
+          <NumInput value={f.combinadaOpinionPerLegCost} onChange={(v) => set('combinadaOpinionPerLegCost', v)} min={0} />
+        </Field>
+        <Field label="Per extra market" subtitle="Credits for each 2nd+ market stacked on the same match">
+          <NumInput value={f.combinadaOpinionPerExtraMarketCost} onChange={(v) => set('combinadaOpinionPerExtraMarketCost', v)} min={0} />
+        </Field>
+        <Field label="Max cost (cap)" subtitle="Hard ceiling for a single opinion">
+          <NumInput value={f.combinadaOpinionMaxCost} onChange={(v) => set('combinadaOpinionMaxCost', v)} min={1} />
         </Field>
       </SectionCard>
       </div>

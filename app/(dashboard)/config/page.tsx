@@ -40,6 +40,8 @@ interface PredictionConfig {
   enrichmentQueueMaxRetries: number;
   enrichmentQueueRetryMinutes: number;
   teamRefreshEnabled: boolean;
+  // Kill-switch for the paid "Predicta opinion" on user-built combinadas.
+  userCombinadaOpinionsEnabled: boolean;
   llmTimeoutSeconds: number;
   predictionWindowMinutes: number;
   featuredLeagueIds: number[];
@@ -370,6 +372,7 @@ function ConfigPageInner() {
       enrichmentSyncEnabled: cfg.enrichmentSyncEnabled ?? false,
       enrichmentSyncIntervalMinutes: cfg.enrichmentSyncIntervalMinutes ?? 15,
       teamRefreshEnabled: cfg.teamRefreshEnabled ?? false,
+      userCombinadaOpinionsEnabled: cfg.userCombinadaOpinionsEnabled ?? true,
       llmTimeoutSeconds: cfg.llmTimeoutSeconds ?? 30,
       predictionWindowMinutes: cfg.predictionWindowMinutes ?? 0,
       featuredLeagueIds: cfg.featuredLeagueIds ?? [39, 140, 135],
@@ -926,6 +929,11 @@ function ConfigPageInner() {
 
       {/* COMBINADAS TAB */}
       <div hidden={tab !== 'combinadas'} role="tabpanel" id="tabpanel-combinadas" aria-labelledby="tab-combinadas">
+      <SectionCard title="User combinadas — Predicta opinion" subtitle="Kill-switch for the paid AI opinion on user-built parlays (queued to the worker). Off = the app hides the 'Pedir opinión' button and no opinion can be requested.">
+        <Field label="Opinions enabled" subtitle="When off, users cannot request a Predicta opinion (stops all opinion LLM spend)">
+          <Toggle value={activeForm.userCombinadaOpinionsEnabled ?? true} onChange={(v) => setField('userCombinadaOpinionsEnabled', v)} />
+        </Field>
+      </SectionCard>
       <SectionCard title="Combinadas" subtitle="Multi-match parlay predictions generated daily">
         <Field label="Enabled" subtitle="Generate combinadas automatically each morning">
           <Toggle value={activeForm.combinadasEnabled ?? false} onChange={(v) => setField('combinadasEnabled', v)} />
