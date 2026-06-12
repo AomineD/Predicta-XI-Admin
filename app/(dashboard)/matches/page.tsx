@@ -7,6 +7,7 @@ import { api } from '@/lib/api';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { MatchesSubnav } from '@/components/matches/MatchesSubnav';
 import { Button } from '@/components/ui/Button';
 import { formatDateTime } from '@/lib/utils';
 import { ChevronDown } from 'lucide-react';
@@ -707,6 +708,7 @@ export default function MatchesPage() {
 
   return (
     <div>
+      <MatchesSubnav />
       <PageHeader
         title="Matches"
         description="All matches in the database. Test predictions stay out of production KPIs and stats. Result Queue runs automatically; Result Sweep is a one-time manual check."
