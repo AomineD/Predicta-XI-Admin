@@ -19,6 +19,7 @@ import {
   Award,
   BarChart3,
   Share2,
+  Users,
   Bell,
   Send,
   LogOut,
@@ -60,6 +61,7 @@ const NAV: NavEntry[] = [
     label: 'Business',
     icon: Coins,
     items: [
+      { href: '/users', label: 'Users', icon: Users },
       { href: '/credits', label: 'Credits', icon: Coins },
       { href: '/referrals', label: 'Referrals', icon: Share2 },
     ],
