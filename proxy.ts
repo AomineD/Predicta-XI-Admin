@@ -2,8 +2,6 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { jwtVerify } from 'jose';
 import { adminEnv } from '@/lib/env';
-import type { SessionPayload } from '@/lib/admin-session';
-import { validateSessionPayload } from '@/lib/admin-session';
 
 function getEncodedKey(): Uint8Array {
   return new TextEncoder().encode(adminEnv.SESSION_SECRET);
@@ -22,21 +20,20 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Check session cookie
+  // Gate navigation on a LOCAL JWT check only (signature + expiry) — no network call.
+  // Session revocation (sessionVersion) is still enforced per-request in the API proxy
+  // (verifySession → validateSessionPayload), so a transient backend outage (e.g. during a
+  // redeploy) must never bounce an authenticated admin back to /login and wipe their cookie.
   const session = request.cookies.get('admin_session')?.value;
   if (!session) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
   try {
-    const { payload } = await jwtVerify(session, getEncodedKey(), { algorithms: ['HS256'] });
-    const valid = await validateSessionPayload(payload as unknown as SessionPayload);
-    if (!valid) {
-      throw new Error('Session revoked');
-    }
+    await jwtVerify(session, getEncodedKey(), { algorithms: ['HS256'] });
     return NextResponse.next();
   } catch {
-    // Invalid or expired session
+    // Malformed, tampered or expired session token
     const response = NextResponse.redirect(new URL('/login', request.url));
     response.cookies.delete('admin_session');
     return response;
