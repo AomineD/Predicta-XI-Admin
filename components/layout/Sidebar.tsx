@@ -20,11 +20,13 @@ import {
   BarChart3,
   Share2,
   Users,
+  DollarSign,
   Bell,
   Send,
   LogOut,
   ChevronDown,
   HeartPulse,
+  Database,
 } from 'lucide-react';
 
 type IconType = ComponentType<{ size?: number; className?: string }>;
@@ -55,6 +57,7 @@ const NAV: NavEntry[] = [
     items: [
       { href: '/competitions', label: 'Competitions', icon: Trophy },
       { href: '/teams', label: 'Teams', icon: Shield },
+      { href: '/data', label: 'Data viewer', icon: Database },
     ],
   },
   {
@@ -62,6 +65,7 @@ const NAV: NavEntry[] = [
     icon: Coins,
     items: [
       { href: '/users', label: 'Users', icon: Users },
+      { href: '/monetization', label: 'Monetization', icon: DollarSign },
       { href: '/credits', label: 'Credits', icon: Coins },
       { href: '/referrals', label: 'Referrals', icon: Share2 },
     ],
