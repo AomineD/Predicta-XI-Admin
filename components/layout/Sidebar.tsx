@@ -27,6 +27,7 @@ import {
   ChevronDown,
   HeartPulse,
   Database,
+  Megaphone,
 } from 'lucide-react';
 
 type IconType = ComponentType<{ size?: number; className?: string }>;
@@ -77,6 +78,7 @@ const NAV: NavEntry[] = [
     icon: Settings,
     items: [
       { href: '/config', label: 'Config', icon: Settings },
+      { href: '/changelog', label: 'Changelog', icon: Megaphone },
       { href: '/jobs', label: 'Jobs', icon: ClockIcon },
       { href: '/health', label: 'Health', icon: HeartPulse },
     ],

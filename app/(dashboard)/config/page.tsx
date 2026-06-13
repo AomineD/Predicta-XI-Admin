@@ -598,6 +598,8 @@ function ConfigPageInner() {
     maintenanceMessage: string | null;
     minSupportedBuild: number;
     minSupportedVersion: string | null;
+    minRecommendedBuild: number;
+    recommendedVersion: string | null;
   }>({
     queryKey: ['credits-config-maintenance'],
     queryFn: () => api.get('/admin/credits-config'),
@@ -637,6 +639,28 @@ function ConfigPageInner() {
     onSuccess: () => {
       setForceForm(null);
       setMaintMessage({ type: 'success', text: 'Force-update settings saved.' });
+      qc.invalidateQueries({ queryKey: ['credits-config-maintenance'] });
+    },
+    onError: (err: Error) => setMaintMessage({ type: 'error', text: err.message }),
+  });
+
+  // Recommended Update (credits_config, partial update) — soft, NON-blocking
+  // sibling of the force gate: shows a dismissible "new version available" modal
+  // when the app build is below minRecommendedBuild. Partial PUT of only its two
+  // fields. The force gate wins when both thresholds apply.
+  const [recForm, setRecForm] = useState<{ build: number; version: string } | null>(null);
+  const recInitial = useMemo(
+    () => (maintCfg ? { build: maintCfg.minRecommendedBuild, version: maintCfg.recommendedVersion ?? '' } : null),
+    [maintCfg],
+  );
+  const rec = recForm ?? recInitial;
+
+  const saveRecommended = useMutation({
+    mutationFn: (body: { minRecommendedBuild: number; recommendedVersion: string | null }) =>
+      api.put('/admin/credits-config', body),
+    onSuccess: () => {
+      setRecForm(null);
+      setMaintMessage({ type: 'success', text: 'Recommended-update settings saved.' });
       qc.invalidateQueries({ queryKey: ['credits-config-maintenance'] });
     },
     onError: (err: Error) => setMaintMessage({ type: 'error', text: err.message }),
@@ -1351,6 +1375,52 @@ function ConfigPageInner() {
               </Button>
               {force.build > 0 && (
                 <span className="text-xs font-sans text-warning">Builds below {force.build} are blocked.</span>
+              )}
+            </div>
+          </>
+        )}
+      </SectionCard>
+
+      {/* Recommended Update (credits_config, partial update) — soft, non-blocking */}
+      <SectionCard title="Recommended Update" subtitle="Shows a DISMISSIBLE 'a new version is available' modal when the app's build number is below this — it never blocks the app, just nudges. Leave the build at 0 to disable. The force-update gate above always wins when both thresholds apply.">
+        {!rec ? (
+          <p className="text-text-muted text-sm font-sans py-3">Loading…</p>
+        ) : (
+          <>
+            <Field label="Minimum recommended build" subtitle="App builds with a buildNumber below this see a dismissible update modal (0 = off).">
+              <input
+                type="number"
+                min={0}
+                value={rec.build}
+                onChange={(e) => setRecForm({ ...rec, build: Math.max(0, parseInt(e.target.value || '0', 10) || 0) })}
+                className="h-9 w-32 px-3 rounded-xl text-sm bg-surface-2 border border-border text-text-primary font-sans"
+              />
+            </Field>
+            <Field label="Recommended version" subtitle='Display-only label shown on the modal, e.g. "1.4.0". Optional.'>
+              <input
+                type="text"
+                maxLength={20}
+                value={rec.version}
+                onChange={(e) => setRecForm({ ...rec, version: e.target.value })}
+                placeholder="1.4.0"
+                className="h-9 w-full px-3 rounded-xl text-sm bg-surface-2 border border-border text-text-primary font-sans"
+              />
+            </Field>
+            <div className="flex items-center gap-3 pt-3">
+              <Button
+                variant="primary"
+                loading={saveRecommended.isPending}
+                onClick={() =>
+                  saveRecommended.mutate({
+                    minRecommendedBuild: rec.build,
+                    recommendedVersion: rec.version.trim() === '' ? null : rec.version.trim(),
+                  })
+                }
+              >
+                Save recommended-update
+              </Button>
+              {rec.build > 0 && (
+                <span className="text-xs font-sans text-text-muted">Builds below {rec.build} see the dismissible modal.</span>
               )}
             </div>
           </>
