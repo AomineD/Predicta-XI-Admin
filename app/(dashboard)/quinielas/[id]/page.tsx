@@ -13,7 +13,7 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { MetricCard } from '@/components/ui/MetricCard';
 import { Tabs } from '@/components/ui/Tabs';
 import { ActionMenu, type ActionMenuSection } from '@/components/ui/ActionMenu';
-import { formatDateTime } from '@/lib/utils';
+import { formatDateTime, isCountryFlagUrl } from '@/lib/utils';
 import { TeamNewsManager } from '@/components/team-news/TeamNewsManager';
 import {
   categoryLabel, categoryIcon, formatPickValue, confidenceTone, MANUAL_ONLY_CATEGORIES,
@@ -991,7 +991,13 @@ function PickRow({ pick, quinielaId }: { pick: QuinielaPick; quinielaId: string 
             alt=""
             width={40}
             height={40}
-            className={`shrink-0 object-contain bg-black/20 ${isPlayerCategory ? 'rounded-full object-cover' : 'rounded-md p-0.5'}`}
+            className={`shrink-0 bg-black/20 ${
+              isPlayerCategory
+                ? 'rounded-full object-cover'
+                : isCountryFlagUrl(thumbUrl)
+                  ? 'rounded-md object-cover'
+                  : 'rounded-md p-0.5 object-contain'
+            }`}
             style={{ width: 40, height: 40 }}
           />
         )}
@@ -1692,7 +1698,7 @@ function TeamNewsPickerModal({
                   <img
                     src={t.logo}
                     alt={t.name}
-                    className="w-8 h-8 object-contain shrink-0"
+                    className={`w-8 h-8 ${isCountryFlagUrl(t.logo) ? 'object-cover rounded-[3px]' : 'object-contain'} shrink-0`}
                     onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                   />
                 ) : (

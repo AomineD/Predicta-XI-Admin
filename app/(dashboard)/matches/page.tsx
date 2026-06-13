@@ -9,7 +9,7 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { MatchesSubnav } from '@/components/matches/MatchesSubnav';
 import { Button } from '@/components/ui/Button';
-import { formatDateTime } from '@/lib/utils';
+import { formatDateTime, isCountryFlagUrl } from '@/lib/utils';
 import { ChevronDown } from 'lucide-react';
 import Link from 'next/link';
 
@@ -142,12 +142,15 @@ function ChevronIcon({ expanded }: { expanded: boolean }) {
 
 function TeamLogo({ url, name }: { url?: string; name?: string }) {
   const [error, setError] = useState(false);
-  const src = (!error && url) ? url : '/team-placeholder.svg';
+  const ok = !error && url;
+  const src = ok ? url! : '/team-placeholder.svg';
+  // Banderas de selección con object-cover (huella uniforme); escudos contain.
+  const fit = ok && isCountryFlagUrl(url) ? 'object-cover rounded-[3px]' : 'object-contain';
   return (
     <img
       src={src}
       alt={name ?? 'Team'}
-      className="w-5 h-5 object-contain flex-none"
+      className={`w-5 h-5 ${fit} flex-none`}
       onError={() => setError(true)}
     />
   );

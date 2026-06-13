@@ -32,6 +32,21 @@ export function formatPct(value: number | null | undefined): string {
 }
 
 /**
+ * ¿La URL de un logo es una **bandera de selección** (no un escudo de club)?
+ *
+ * Las banderas enriquecidas viven en nuestro bucket B2 bajo `flags/<código>.svg`
+ * y las aún sin enriquecer vienen de flagcdn; los escudos de club viven bajo
+ * `crests/`. Distinguir por la URL deja unificar el render de banderas a un
+ * rectángulo fijo con `object-cover` (igual que la app), para que todas ocupen
+ * la misma huella sin importar el país.
+ */
+export function isCountryFlagUrl(url: string | null | undefined): boolean {
+  if (!url) return false;
+  const u = url.toLowerCase();
+  return u.includes('/flags/') || u.includes('flagcdn');
+}
+
+/**
  * Flatten a bilingual field to a plain string safe to render as a React child.
  *
  * Backend may return a pick's `reasoning`/`summary`/`dataQualityNote` as:

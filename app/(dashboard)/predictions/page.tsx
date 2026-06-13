@@ -141,16 +141,18 @@ export default function PredictionsPage() {
           const pct = Math.round((row.wonMarkets / row.settledMarkets) * 100);
           let label: string;
           let colorClass: string;
-          if (pct === 100) {
-            label = 'WON'; colorClass = 'bg-success/15 text-success';
-          } else if (pct >= 76) {
-            label = 'HIGH'; colorClass = 'bg-success/15 text-success';
-          } else if (pct >= 51) {
-            label = 'GREAT'; colorClass = 'bg-secondary/15 text-secondary';
-          } else if (pct >= 20) {
-            label = 'MEDIUM'; colorClass = 'bg-warning/15 text-warning';
+          // Escala única compartida con la app (prediction_grade.dart): mismos
+          // umbrales, mismos nombres, mismos colores.
+          if (pct >= 100) {
+            label = 'PLENO'; colorClass = 'bg-success/15 text-success';
+          } else if (pct >= 75) {
+            label = 'ALTO'; colorClass = 'bg-success/15 text-success';
+          } else if (pct >= 50) {
+            label = 'BUENO'; colorClass = 'bg-secondary/15 text-secondary';
+          } else if (pct >= 25) {
+            label = 'MEDIO'; colorClass = 'bg-warning/15 text-warning';
           } else {
-            label = 'LOW'; colorClass = 'bg-danger/15 text-danger';
+            label = 'BAJO'; colorClass = 'bg-danger/15 text-danger';
           }
           return (
             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium font-sans uppercase tracking-wide w-fit ${colorClass}`}>

@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 
+import { isCountryFlagUrl } from '@/lib/utils';
+
 interface CrestProps {
   team: string;
   size?: number;
@@ -35,6 +37,9 @@ export function Crest({ team, size = 28, variant = 0, logo }: CrestProps) {
   const [bg, fg] = PALETTES[Math.abs(variant) % PALETTES.length];
 
   if (logo && !imgFailed) {
+    // Las banderas de selección se llenan con object-cover (huella uniforme país
+    // a país); los escudos de club siguen con object-contain.
+    const isFlag = isCountryFlagUrl(logo);
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
@@ -44,7 +49,7 @@ export function Crest({ team, size = 28, variant = 0, logo }: CrestProps) {
         width={size}
         height={size}
         onError={() => setImgFailed(true)}
-        className="shrink-0 object-contain bg-white/[0.04] border border-[rgba(255,255,255,0.08)]"
+        className={`shrink-0 ${isFlag ? 'object-cover' : 'object-contain'} bg-white/[0.04] border border-[rgba(255,255,255,0.08)]`}
         style={{ width: size, height: size, borderRadius: size / 2 }}
       />
     );
