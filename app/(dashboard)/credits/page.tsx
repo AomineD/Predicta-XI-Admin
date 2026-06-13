@@ -12,6 +12,7 @@ import { Trash2, Pencil, Plus, Infinity } from 'lucide-react';
 
 const CREDITS_TABS = [
   { id: 'general', label: 'General' },
+  { id: 'rewards', label: 'Rewards' },
   { id: 'combinadas', label: 'Combinadas' },
   { id: 'quiniela', label: 'Quiniela' },
   { id: 'referrals', label: 'Referrals' },
@@ -67,6 +68,20 @@ interface CreditsConfig {
   referralModalFreqHigh: number;
   referralModalLowCreditThreshold: number;
   referralModalCooldownDays: number;
+  // Daily login reward (escalating by daily streak; non-subscribers; UTC reset).
+  dailyLoginRewardEnabled: boolean;
+  dailyLoginRewardCredits: number;
+  dailyLoginRewardMaxCredits: number;
+  dailyLoginStreakDays: number;
+  // Earn-credits hints (link in gates + "Cómo ganar créditos" hub).
+  earnCreditsHintsEnabled: boolean;
+  // One-time action rewards.
+  actionRewardNotificationsEnabled: boolean;
+  actionRewardNotificationsCredits: number;
+  actionRewardShareEnabled: boolean;
+  actionRewardShareCredits: number;
+  actionRewardProfileEnabled: boolean;
+  actionRewardProfileCredits: number;
 }
 
 // Fields that USED to live on the Credits page but moved to their own homes:
@@ -417,6 +432,54 @@ function CreditsPageInner() {
         </Field>
         <Field label="Minimum active days" subtitle="Consecutive days the user must open the app to qualify (1–7)">
           <NumInput value={f.weeklyActivityMinDays} onChange={(v) => set('weeklyActivityMinDays', v)} min={1} />
+        </Field>
+      </SectionCard>
+      </div>
+
+      {/* REWARDS TAB */}
+      <div hidden={tab !== 'rewards'} role="tabpanel" id="tabpanel-rewards" aria-labelledby="tab-rewards">
+      {/* ── Daily login reward ── */}
+      <SectionCard title="Daily Login Reward" subtitle="A small credit once per UTC day just for opening the app — non-subscribers only (server-gated). SEPARATE from the weekly bonus; both coexist. The amount escalates with a daily streak: day d grants min(base + (d-1), max), resetting to day 1 after a missed day. Off by default.">
+        <Field label="Enabled" subtitle="Master switch. When off, no daily reward is granted and the welcome-back modal never shows.">
+          <Toggle value={f.dailyLoginRewardEnabled} onChange={(v) => set('dailyLoginRewardEnabled', v)} />
+        </Field>
+        <Field label="Base credits (day 1)" subtitle="Credits granted on the first day of a streak.">
+          <NumInput value={f.dailyLoginRewardCredits} onChange={(v) => set('dailyLoginRewardCredits', v)} min={0} max={50} />
+        </Field>
+        <Field label="Max credits (streak cap)" subtitle="Ceiling the escalating amount tops out at on long streaks.">
+          <NumInput value={f.dailyLoginRewardMaxCredits} onChange={(v) => set('dailyLoginRewardMaxCredits', v)} min={0} max={50} />
+        </Field>
+        <Field label="Streak length (days)" subtitle="How many days the streak counter climbs before holding at the cap.">
+          <NumInput value={f.dailyLoginStreakDays} onChange={(v) => set('dailyLoginStreakDays', v)} min={1} max={60} />
+        </Field>
+      </SectionCard>
+
+      {/* ── Earn-credits hints ── */}
+      <SectionCard title="Earn-credits Hints" subtitle='Shows a "more ways to earn free credits" link at the friction points (insufficient-credits gate + credits sheet) that opens the "Cómo ganar créditos" hub listing every active way to earn. On by default (purely informational).'>
+        <Field label="Enabled" subtitle="When on, the app surfaces the earn-credits link + hub.">
+          <Toggle value={f.earnCreditsHintsEnabled} onChange={(v) => set('earnCreditsHintsEnabled', v)} />
+        </Field>
+      </SectionCard>
+
+      {/* ── One-time action rewards ── */}
+      <SectionCard title="Action Rewards (one-time)" subtitle="Credits granted ONCE per action (enforced server-side). Eligibility is verified on claim: notifications need a registered push token; profile needs at least one favourite team or league; share has no precondition. Each off by default.">
+        <Field label="Enable notifications — enabled" subtitle="Reward for turning on push notifications.">
+          <Toggle value={f.actionRewardNotificationsEnabled} onChange={(v) => set('actionRewardNotificationsEnabled', v)} />
+        </Field>
+        <Field label="Enable notifications — credits" subtitle="Credits granted once when push is enabled.">
+          <NumInput value={f.actionRewardNotificationsCredits} onChange={(v) => set('actionRewardNotificationsCredits', v)} min={0} max={50} />
+        </Field>
+        <Field label="Share the app — enabled" subtitle="Reward for sharing the app.">
+          <Toggle value={f.actionRewardShareEnabled} onChange={(v) => set('actionRewardShareEnabled', v)} />
+        </Field>
+        <Field label="Share the app — credits" subtitle="Credits granted once for sharing.">
+          <NumInput value={f.actionRewardShareCredits} onChange={(v) => set('actionRewardShareCredits', v)} min={0} max={50} />
+        </Field>
+        <Field label="Complete profile — enabled" subtitle="Reward for setting favourite teams/leagues.">
+          <Toggle value={f.actionRewardProfileEnabled} onChange={(v) => set('actionRewardProfileEnabled', v)} />
+        </Field>
+        <Field label="Complete profile — credits" subtitle="Credits granted once when the profile has a favourite.">
+          <NumInput value={f.actionRewardProfileCredits} onChange={(v) => set('actionRewardProfileCredits', v)} min={0} max={50} />
         </Field>
       </SectionCard>
       </div>
