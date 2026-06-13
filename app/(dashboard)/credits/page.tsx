@@ -8,16 +8,13 @@ import { Button } from '@/components/ui/Button';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Tabs } from '@/components/ui/Tabs';
 import { SectionCard, Field, Toggle, NumInput } from '@/components/ui/form-controls';
-import { Trash2, Pencil, Plus, Infinity } from 'lucide-react';
+import { Trash2, Pencil, Plus } from 'lucide-react';
 
 const CREDITS_TABS = [
   { id: 'general', label: 'General' },
   { id: 'rewards', label: 'Rewards' },
   { id: 'combinadas', label: 'Combinadas' },
   { id: 'quiniela', label: 'Quiniela' },
-  { id: 'referrals', label: 'Referrals' },
-  { id: 'iap', label: 'IAP Packs' },
-  { id: 'proUpsell', label: 'PRO Upsell' },
   { id: 'tiers', label: 'Market Tiers' },
 ] as const;
 type CreditsTabId = typeof CREDITS_TABS[number]['id'];
@@ -29,10 +26,6 @@ interface CreditsConfig {
   predictionCost: number;
   signupBonus: number;
   adRewardCredits: number;
-  iapCredits5: number;
-  iapCredits10: number;
-  iapCredits25: number;
-  iapCredits50: number;
   weeklyActivityBonus: number;
   weeklyActivityMinDays: number;
   combinadaRegularCost: number;
@@ -46,28 +39,6 @@ interface CreditsConfig {
   combinadaOpinionMaxCost: number;
   quinielaAccessCost: number;
   quinielaPhase2RegenerateAllowed: boolean;
-  proUpsellModalEnabled: boolean;
-  proUpsellFrequency: number;
-  proUpsellCooldownDays: number;
-  proOfferActive: boolean;
-  proOfferBadgeText: string | null;
-  proTrialEnabled: boolean;
-  proTrialLabel: string | null;
-  referralEnabled: boolean;
-  referralCreditsPerReferral: number;
-  referralMilestoneSize: number;
-  referralMilestoneBonus: number;
-  referralWelcomeCredits: number;
-  referralMaxRewardedReferrals: number;
-  referralRequireAppCheck: string;
-  referralQualifyOnFirstPrediction: boolean;
-  referralAttributionWindowHours: number;
-  // Referral invite modal (hybrid cadence by credit balance).
-  referralModalEnabled: boolean;
-  referralModalFreqLow: number;
-  referralModalFreqHigh: number;
-  referralModalLowCreditThreshold: number;
-  referralModalCooldownDays: number;
   // Daily login reward (escalating by daily streak; non-subscribers; UTC reset).
   dailyLoginRewardEnabled: boolean;
   dailyLoginRewardCredits: number;
@@ -84,17 +55,47 @@ interface CreditsConfig {
   actionRewardProfileCredits: number;
 }
 
-// Fields that USED to live on the Credits page but moved to their own homes:
-// the push master switch + weekly promo → Notifications page (Configuración),
-// the force-update gate → Config → Maintenance. They still come back on the
-// GET (same credits_config row), so we strip them from this page's PUT to avoid
-// clobbering a value edited on the other page with a stale copy.
+// Fields that live on the GET /admin/credits-config row but are EDITED on other
+// admin pages, not here. They still come back on the GET (same row), so we strip
+// them from this page's PUT to avoid clobbering a value edited elsewhere with a
+// stale copy. Homes:
+//   · push master switch + weekly promo → Notifications (Configuración)
+//   · force-update gate                  → Config → Maintenance
+//   · referral program + invite modal    → Referrals (Configuración)
+//   · PRO upsell + IAP packs             → Monetization (PRO Upsell / IAP & Suscripciones)
 const FIELDS_OWNED_ELSEWHERE = [
   'notificationsEnabled',
   'weeklyQuinielaPromoEnabled',
   'weeklyQuinielaPromoHourUtc',
   'minSupportedBuild',
   'minSupportedVersion',
+  // Referral program + invite modal (Referrals page → Configuración)
+  'referralEnabled',
+  'referralCreditsPerReferral',
+  'referralWelcomeCredits',
+  'referralMilestoneSize',
+  'referralMilestoneBonus',
+  'referralMaxRewardedReferrals',
+  'referralRequireAppCheck',
+  'referralQualifyOnFirstPrediction',
+  'referralAttributionWindowHours',
+  'referralModalEnabled',
+  'referralModalFreqLow',
+  'referralModalFreqHigh',
+  'referralModalLowCreditThreshold',
+  'referralModalCooldownDays',
+  // PRO upsell + IAP packs (Monetization page)
+  'proUpsellModalEnabled',
+  'proUpsellFrequency',
+  'proUpsellCooldownDays',
+  'proOfferActive',
+  'proOfferBadgeText',
+  'proTrialEnabled',
+  'proTrialLabel',
+  'iapCredits5',
+  'iapCredits10',
+  'iapCredits25',
+  'iapCredits50',
 ] as const;
 
 function stripForeignFields(cfg: CreditsConfig): Record<string, unknown> {
@@ -102,8 +103,6 @@ function stripForeignFields(cfg: CreditsConfig): Record<string, unknown> {
   for (const k of FIELDS_OWNED_ELSEWHERE) delete out[k];
   return out;
 }
-
-const APP_CHECK_MODES = ['disabled', 'monitor', 'enforce'] as const;
 
 interface Tier {
   id: string;
@@ -531,158 +530,6 @@ function CreditsPageInner() {
         </Field>
         <Field label="Allow phase 2 regeneration" subtitle="Let users regenerate their picks when the second phase opens, without paying again">
           <Toggle value={f.quinielaPhase2RegenerateAllowed} onChange={(v) => set('quinielaPhase2RegenerateAllowed', v)} />
-        </Field>
-      </SectionCard>
-      </div>
-
-      {/* REFERRALS TAB */}
-      <div hidden={tab !== 'referrals'} role="tabpanel" id="tabpanel-referrals" aria-labelledby="tab-referrals">
-      <SectionCard title="Referral Program" subtitle="Reward users with credits for inviting new, real users. A referral 'qualifies' the referrer only when the invited user signs up on a unique device (App Check) and opens their first prediction. Credits are an engagement currency — the anti-abuse gates below are what matter.">
-        <Field label="Enabled" subtitle="Master switch. When off, no codes are attributed and no credits are paid.">
-          <Toggle value={f.referralEnabled} onChange={(v) => set('referralEnabled', v)} />
-        </Field>
-        <Field label="Credits per referral" subtitle="Paid to the referrer for each qualified referral.">
-          <NumInput value={f.referralCreditsPerReferral} onChange={(v) => set('referralCreditsPerReferral', v)} min={0} max={1000} />
-        </Field>
-        <Field label="Welcome credits" subtitle="Bonus to the NEW (referred) user on attribution. 0 = single-sided (only the referrer earns).">
-          <NumInput value={f.referralWelcomeCredits} onChange={(v) => set('referralWelcomeCredits', v)} min={0} max={1000} />
-        </Field>
-      </SectionCard>
-
-      <SectionCard title="Milestone Bonus" subtitle="An extra bonus every N qualified referrals (e.g. every 5). Set size or bonus to 0 to disable.">
-        <Field label="Milestone size" subtitle="Grant the bonus on every multiple of this many qualified referrals.">
-          <NumInput value={f.referralMilestoneSize} onChange={(v) => set('referralMilestoneSize', v)} min={0} max={1000} />
-        </Field>
-        <Field label="Milestone bonus" subtitle="Extra credits granted to the referrer at each milestone.">
-          <NumInput value={f.referralMilestoneBonus} onChange={(v) => set('referralMilestoneBonus', v)} min={0} max={1000} />
-        </Field>
-      </SectionCard>
-
-      <SectionCard title="Anti-abuse" subtitle="Guardrails that protect ad/IAP revenue from credit farming. Device dedupe and the activation gate always apply; App Check enforcement is staged below.">
-        <Field label="App Check enforcement" subtitle="disabled = ignore; monitor = record only (recommended for rollout); enforce = unverified installs never reward the referrer.">
-          <div className="flex flex-wrap gap-2">
-            {APP_CHECK_MODES.map((mode) => (
-              <button
-                key={mode}
-                type="button"
-                onClick={() => set('referralRequireAppCheck', mode)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors font-sans capitalize ${
-                  f.referralRequireAppCheck === mode
-                    ? 'bg-primary/15 border-primary text-primary'
-                    : 'bg-surface-2 border-border text-text-muted hover:border-text-muted'
-                }`}
-              >
-                {mode}
-              </button>
-            ))}
-          </div>
-        </Field>
-        <Field label="Qualify on first prediction" subtitle="On = referrer is paid only when the referred user opens their first prediction (recommended). Off = qualifies at signup.">
-          <Toggle value={f.referralQualifyOnFirstPrediction} onChange={(v) => set('referralQualifyOnFirstPrediction', v)} />
-        </Field>
-        <Field label="Lifetime cap" subtitle="Max qualified referrals that earn the referrer credits (0 = unlimited).">
-          <NumInput value={f.referralMaxRewardedReferrals} onChange={(v) => set('referralMaxRewardedReferrals', v)} min={0} max={100000} />
-        </Field>
-        <Field label="Attribution window (hours)" subtitle="A code can only be attributed within this many hours after the referred user signs up.">
-          <NumInput value={f.referralAttributionWindowHours} onChange={(v) => set('referralAttributionWindowHours', v)} min={1} max={8760} />
-        </Field>
-      </SectionCard>
-
-      <SectionCard title="Invite Modal" subtitle="Non-aggressive bottom sheet that nudges users to invite friends for free credits. The cadence is hybrid: low-credit users (and non-subscribers) see it more often; subscribers and users with plenty of credits see it less often. It counts both app opens and store/credits-screen entries, shows at most one promo modal per session (the PRO upsell takes priority), and respects the cooldown after a dismissal. Requires the Referral Program above to be enabled.">
-        <Field label="Modal enabled" subtitle="Master switch. When off, the invite modal never shows.">
-          <Toggle value={f.referralModalEnabled} onChange={(v) => set('referralModalEnabled', v)} />
-        </Field>
-        <Field label="Frequency — low credits" subtitle="Show every N attempts to non-subscribers below the credit threshold (the more frequent cadence). Lower = more often.">
-          <NumInput value={f.referralModalFreqLow} onChange={(v) => set('referralModalFreqLow', v)} min={1} max={100} />
-        </Field>
-        <Field label="Frequency — high credits / subscribers" subtitle="Show every N attempts to subscribers and to users at/above the credit threshold (the less frequent cadence). Higher = less often.">
-          <NumInput value={f.referralModalFreqHigh} onChange={(v) => set('referralModalFreqHigh', v)} min={1} max={100} />
-        </Field>
-        <Field label="Low-credit threshold" subtitle="A non-subscriber with fewer credits than this gets the more-frequent cadence. 0 = nobody is 'low-credit' (everyone on the less-frequent cadence).">
-          <NumInput value={f.referralModalLowCreditThreshold} onChange={(v) => set('referralModalLowCreditThreshold', v)} min={0} max={100000} />
-        </Field>
-        <Field label="Cooldown (days)" subtitle="After a dismissal, the modal won't reappear for this many days.">
-          <NumInput value={f.referralModalCooldownDays} onChange={(v) => set('referralModalCooldownDays', v)} min={0} max={365} />
-        </Field>
-      </SectionCard>
-      </div>
-
-      {/* IAP PACKS TAB */}
-      <div hidden={tab !== 'iap'} role="tabpanel" id="tabpanel-iap" aria-labelledby="tab-iap">
-      {/* ── Section B: IAP Pack Credits ── */}
-      <SectionCard title="IAP Pack Credits" subtitle="Credits granted per in-app purchase pack">
-        <Field label="Pack 5">
-          <NumInput value={f.iapCredits5} onChange={(v) => set('iapCredits5', v)} min={1} />
-        </Field>
-        <Field label="Pack 10">
-          <NumInput value={f.iapCredits10} onChange={(v) => set('iapCredits10', v)} min={1} />
-        </Field>
-        <Field label="Pack 25">
-          <NumInput value={f.iapCredits25} onChange={(v) => set('iapCredits25', v)} min={1} />
-        </Field>
-        <Field label="Pack 50">
-          <NumInput value={f.iapCredits50} onChange={(v) => set('iapCredits50', v)} min={1} />
-        </Field>
-      </SectionCard>
-
-      {/* ── Section C: Subscriptions ── */}
-      <SectionCard title="Subscriptions" subtitle="Subscription plans overview">
-        <div className="flex items-center gap-3 py-3">
-          <span className="text-sm text-text-primary font-sans flex-1">Monthly Pro</span>
-          <span className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-primary/15 text-primary font-sans">
-            <Infinity size={14} /> Unlimited
-          </span>
-        </div>
-        <p className="text-xs text-text-muted/50 font-sans">Monthly subscribers have unlimited prediction access regardless of credits.</p>
-      </SectionCard>
-      </div>
-
-      {/* PRO UPSELL TAB */}
-      <div hidden={tab !== 'proUpsell'} role="tabpanel" id="tabpanel-proUpsell" aria-labelledby="tab-proUpsell">
-      {/* ── Modal toggle + cadence ── */}
-      <SectionCard title="PRO Upsell Modal" subtitle="Non-aggressive modal that invites non-subscribers to PRO/Club. Shown only to users without an active subscription, every N app opens, with a cooldown after dismissal. Subscribers never see it.">
-        <Field label="Modal enabled" subtitle="Master switch. When off, the modal never shows.">
-          <Toggle value={f.proUpsellModalEnabled} onChange={(v) => set('proUpsellModalEnabled', v)} />
-        </Field>
-        <Field label="Frequency (app opens)" subtitle="Show the modal once every N eligible app opens (minimum 1).">
-          <NumInput value={f.proUpsellFrequency} onChange={(v) => set('proUpsellFrequency', v)} min={1} max={100} />
-        </Field>
-        <Field label="Cooldown (days)" subtitle="After it shows or is dismissed, don't show it again for this many days (0 = no cooldown).">
-          <NumInput value={f.proUpsellCooldownDays} onChange={(v) => set('proUpsellCooldownDays', v)} min={0} max={365} />
-        </Field>
-      </SectionCard>
-
-      {/* ── Price offer ── */}
-      <SectionCard title="Price Offer" subtitle="Surface a Google Play / App Store price promotion. The discount itself is configured in the store; this only controls the in-app badge. The app always shows the real localized store price.">
-        <Field label="Offer active" subtitle="Show an offer badge on the modal.">
-          <Toggle value={f.proOfferActive} onChange={(v) => set('proOfferActive', v)} />
-        </Field>
-        <Field label="Offer badge text" subtitle='Short label for the badge, e.g. "-40%" or "Summer offer". Leave blank to use a default "Offer" badge.'>
-          <input
-            type="text"
-            maxLength={60}
-            value={f.proOfferBadgeText ?? ''}
-            onChange={(e) => set('proOfferBadgeText', e.target.value)}
-            placeholder="-40%"
-            className="h-9 w-full px-3 rounded-xl text-sm bg-surface-2 border border-border text-text-primary font-sans"
-          />
-        </Field>
-      </SectionCard>
-
-      {/* ── Free trial ── */}
-      <SectionCard title="Free Trial" subtitle="Message a free-trial offer (e.g. 1 month). The trial is granted by Google Play / App Store on the subscription product — this only controls the in-app messaging.">
-        <Field label="Trial enabled" subtitle="Show the trial message on the subscribe CTA.">
-          <Toggle value={f.proTrialEnabled} onChange={(v) => set('proTrialEnabled', v)} />
-        </Field>
-        <Field label="Trial label" subtitle='CTA text when the trial is active, e.g. "Try 1 month free".'>
-          <input
-            type="text"
-            maxLength={60}
-            value={f.proTrialLabel ?? ''}
-            onChange={(e) => set('proTrialLabel', e.target.value)}
-            placeholder="Try 1 month free"
-            className="h-9 w-full px-3 rounded-xl text-sm bg-surface-2 border border-border text-text-primary font-sans"
-          />
         </Field>
       </SectionCard>
       </div>

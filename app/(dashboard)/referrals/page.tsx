@@ -1,21 +1,43 @@
 'use client';
 
-import { Suspense, useState, useEffect } from 'react';
+import { Suspense, useState, useEffect, useMemo } from 'react';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Tabs } from '@/components/ui/Tabs';
 import { Button } from '@/components/ui/Button';
-import { SectionCard } from '@/components/ui/form-controls';
+import { SectionCard, Field, Toggle, NumInput } from '@/components/ui/form-controls';
 
 const REF_TABS = [
   { id: 'overview', label: 'Overview' },
   { id: 'list', label: 'Referrals' },
   { id: 'abuse', label: 'Anti-abuse' },
+  { id: 'config', label: 'Configuración' },
 ] as const;
 type RefTabId = typeof REF_TABS[number]['id'];
 const DEFAULT_TAB: RefTabId = 'overview';
+
+const APP_CHECK_MODES = ['disabled', 'monitor', 'enforce'] as const;
+
+/* ── referral config (subset of credits-config; edited here, partial PUT) ────── */
+
+interface RefConfig {
+  referralEnabled: boolean;
+  referralCreditsPerReferral: number;
+  referralWelcomeCredits: number;
+  referralMilestoneSize: number;
+  referralMilestoneBonus: number;
+  referralRequireAppCheck: string;
+  referralQualifyOnFirstPrediction: boolean;
+  referralMaxRewardedReferrals: number;
+  referralAttributionWindowHours: number;
+  referralModalEnabled: boolean;
+  referralModalFreqLow: number;
+  referralModalFreqHigh: number;
+  referralModalLowCreditThreshold: number;
+  referralModalCooldownDays: number;
+}
 
 /* ── types ────────────────────────────────────────────────────────────────── */
 
@@ -131,11 +153,71 @@ function ReferralsInner() {
 
   const [voidTarget, setVoidTarget] = useState<ReferralRow | null>(null);
 
+  /* ── referral config (program + invite modal) — partial PUT of credits-config ── */
+  const cfgQ = useQuery<RefConfig>({
+    queryKey: ['referrals-config'],
+    queryFn: () => api.get('/admin/credits-config'),
+    enabled: tab === 'config',
+  });
+  const [cfgForm, setCfgForm] = useState<RefConfig | null>(null);
+  const cfgInitial = useMemo<RefConfig | null>(
+    () =>
+      cfgQ.data
+        ? {
+            referralEnabled: cfgQ.data.referralEnabled,
+            referralCreditsPerReferral: cfgQ.data.referralCreditsPerReferral,
+            referralWelcomeCredits: cfgQ.data.referralWelcomeCredits,
+            referralMilestoneSize: cfgQ.data.referralMilestoneSize,
+            referralMilestoneBonus: cfgQ.data.referralMilestoneBonus,
+            referralRequireAppCheck: cfgQ.data.referralRequireAppCheck,
+            referralQualifyOnFirstPrediction: cfgQ.data.referralQualifyOnFirstPrediction,
+            referralMaxRewardedReferrals: cfgQ.data.referralMaxRewardedReferrals,
+            referralAttributionWindowHours: cfgQ.data.referralAttributionWindowHours,
+            referralModalEnabled: cfgQ.data.referralModalEnabled,
+            referralModalFreqLow: cfgQ.data.referralModalFreqLow,
+            referralModalFreqHigh: cfgQ.data.referralModalFreqHigh,
+            referralModalLowCreditThreshold: cfgQ.data.referralModalLowCreditThreshold,
+            referralModalCooldownDays: cfgQ.data.referralModalCooldownDays,
+          }
+        : null,
+    [cfgQ.data],
+  );
+  const cfg = cfgForm ?? cfgInitial;
+  const cfgDirty = !!cfg && !!cfgInitial && JSON.stringify(cfg) !== JSON.stringify(cfgInitial);
+  const setCfg = <K extends keyof RefConfig>(key: K, val: RefConfig[K]) =>
+    setCfgForm({ ...(cfg as RefConfig), [key]: val });
+
+  const saveCfg = useMutation({
+    mutationFn: (body: RefConfig) => api.put('/admin/credits-config', body),
+    onSuccess: () => {
+      setCfgForm(null);
+      qc.invalidateQueries({ queryKey: ['referrals-config'] });
+      // Keep the Credits page (same credits_config row) coherent after the move.
+      qc.invalidateQueries({ queryKey: ['credits-config'] });
+    },
+  });
+
   const o = overviewQ.data;
 
   return (
     <div className="p-8 max-w-4xl">
-      <PageHeader title="Referrals" description="Monitor the referral program and moderate abuse. Configure amounts in Credits → Referrals." />
+      <PageHeader
+        title="Referrals"
+        description="Monitor the referral program, configure its rewards & anti-abuse, and moderate abuse."
+        action={
+          tab === 'config' ? (
+            <Button
+              variant="primary"
+              size="sm"
+              loading={saveCfg.isPending}
+              disabled={!cfgDirty}
+              onClick={() => cfg && saveCfg.mutate(cfg)}
+            >
+              Save Config
+            </Button>
+          ) : undefined
+        }
+      />
 
       <Tabs value={tab} onChange={(v) => setTab(v as RefTabId)} items={REF_TABS as unknown as { id: string; label: string }[]} />
 
@@ -233,6 +315,84 @@ function ReferralsInner() {
                   ))}
                 </div>
               )}
+            </SectionCard>
+          </>
+        )}
+      </div>
+
+      {/* CONFIG */}
+      <div hidden={tab !== 'config'} role="tabpanel" id="tabpanel-config" aria-labelledby="tab-config">
+        {!cfg ? (
+          <p className="text-sm text-text-muted font-sans py-3">Loading…</p>
+        ) : (
+          <>
+            <SectionCard title="Referral Program" subtitle="Reward users with credits for inviting new, real users. A referral 'qualifies' the referrer only when the invited user signs up on a unique device (App Check) and opens their first prediction. Credits are an engagement currency — the anti-abuse gates below are what matter.">
+              <Field label="Enabled" subtitle="Master switch. When off, no codes are attributed and no credits are paid.">
+                <Toggle value={cfg.referralEnabled} onChange={(v) => setCfg('referralEnabled', v)} />
+              </Field>
+              <Field label="Credits per referral" subtitle="Paid to the referrer for each qualified referral.">
+                <NumInput value={cfg.referralCreditsPerReferral} onChange={(v) => setCfg('referralCreditsPerReferral', v)} min={0} max={1000} />
+              </Field>
+              <Field label="Welcome credits" subtitle="Bonus to the NEW (referred) user on attribution. 0 = single-sided (only the referrer earns).">
+                <NumInput value={cfg.referralWelcomeCredits} onChange={(v) => setCfg('referralWelcomeCredits', v)} min={0} max={1000} />
+              </Field>
+            </SectionCard>
+
+            <SectionCard title="Milestone Bonus" subtitle="An extra bonus every N qualified referrals (e.g. every 5). Set size or bonus to 0 to disable.">
+              <Field label="Milestone size" subtitle="Grant the bonus on every multiple of this many qualified referrals.">
+                <NumInput value={cfg.referralMilestoneSize} onChange={(v) => setCfg('referralMilestoneSize', v)} min={0} max={1000} />
+              </Field>
+              <Field label="Milestone bonus" subtitle="Extra credits granted to the referrer at each milestone.">
+                <NumInput value={cfg.referralMilestoneBonus} onChange={(v) => setCfg('referralMilestoneBonus', v)} min={0} max={1000} />
+              </Field>
+            </SectionCard>
+
+            <SectionCard title="Anti-abuse" subtitle="Guardrails that protect ad/IAP revenue from credit farming. Device dedupe and the activation gate always apply; App Check enforcement is staged below.">
+              <Field label="App Check enforcement" subtitle="disabled = ignore; monitor = record only (recommended for rollout); enforce = unverified installs never reward the referrer.">
+                <div className="flex flex-wrap gap-2">
+                  {APP_CHECK_MODES.map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => setCfg('referralRequireAppCheck', mode)}
+                      className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors font-sans capitalize ${
+                        cfg.referralRequireAppCheck === mode
+                          ? 'bg-primary/15 border-primary text-primary'
+                          : 'bg-surface-2 border-border text-text-muted hover:border-text-muted'
+                      }`}
+                    >
+                      {mode}
+                    </button>
+                  ))}
+                </div>
+              </Field>
+              <Field label="Qualify on first prediction" subtitle="On = referrer is paid only when the referred user opens their first prediction (recommended). Off = qualifies at signup.">
+                <Toggle value={cfg.referralQualifyOnFirstPrediction} onChange={(v) => setCfg('referralQualifyOnFirstPrediction', v)} />
+              </Field>
+              <Field label="Lifetime cap" subtitle="Max qualified referrals that earn the referrer credits (0 = unlimited).">
+                <NumInput value={cfg.referralMaxRewardedReferrals} onChange={(v) => setCfg('referralMaxRewardedReferrals', v)} min={0} max={100000} />
+              </Field>
+              <Field label="Attribution window (hours)" subtitle="A code can only be attributed within this many hours after the referred user signs up.">
+                <NumInput value={cfg.referralAttributionWindowHours} onChange={(v) => setCfg('referralAttributionWindowHours', v)} min={1} max={8760} />
+              </Field>
+            </SectionCard>
+
+            <SectionCard title="Invite Modal" subtitle="Non-aggressive bottom sheet that nudges users to invite friends for free credits. The cadence is hybrid: low-credit users (and non-subscribers) see it more often; subscribers and users with plenty of credits see it less often. It counts both app opens and store/credits-screen entries, shows at most one promo modal per session (the PRO upsell takes priority), and respects the cooldown after a dismissal. Requires the Referral Program above to be enabled.">
+              <Field label="Modal enabled" subtitle="Master switch. When off, the invite modal never shows.">
+                <Toggle value={cfg.referralModalEnabled} onChange={(v) => setCfg('referralModalEnabled', v)} />
+              </Field>
+              <Field label="Frequency — low credits" subtitle="Show every N attempts to non-subscribers below the credit threshold (the more frequent cadence). Lower = more often.">
+                <NumInput value={cfg.referralModalFreqLow} onChange={(v) => setCfg('referralModalFreqLow', v)} min={1} max={100} />
+              </Field>
+              <Field label="Frequency — high credits / subscribers" subtitle="Show every N attempts to subscribers and to users at/above the credit threshold (the less frequent cadence). Higher = less often.">
+                <NumInput value={cfg.referralModalFreqHigh} onChange={(v) => setCfg('referralModalFreqHigh', v)} min={1} max={100} />
+              </Field>
+              <Field label="Low-credit threshold" subtitle="A non-subscriber with fewer credits than this gets the more-frequent cadence. 0 = nobody is 'low-credit' (everyone on the less-frequent cadence).">
+                <NumInput value={cfg.referralModalLowCreditThreshold} onChange={(v) => setCfg('referralModalLowCreditThreshold', v)} min={0} max={100000} />
+              </Field>
+              <Field label="Cooldown (days)" subtitle="After a dismissal, the modal won't reappear for this many days.">
+                <NumInput value={cfg.referralModalCooldownDays} onChange={(v) => setCfg('referralModalCooldownDays', v)} min={0} max={365} />
+              </Field>
             </SectionCard>
           </>
         )}
