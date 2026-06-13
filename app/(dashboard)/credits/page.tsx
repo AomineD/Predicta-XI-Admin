@@ -59,16 +59,18 @@ interface CreditsConfig {
 // admin pages, not here. They still come back on the GET (same row), so we strip
 // them from this page's PUT to avoid clobbering a value edited elsewhere with a
 // stale copy. Homes:
-//   · push master switch + weekly promo → Notifications (Configuración)
-//   · force-update gate                  → Config → Maintenance
-//   · referral program + invite modal    → Referrals (Configuración)
-//   · PRO upsell + IAP packs             → Monetization (PRO Upsell / IAP & Suscripciones)
+//   · push master switch + weekly promo  → Notifications (Configuración)
+//   · force-update + maintenance gate     → Config → Maintenance
+//   · referral program + invite modal     → Referrals (Configuración)
+//   · PRO upsell + IAP packs              → Monetization (PRO Upsell / IAP & Suscripciones)
 const FIELDS_OWNED_ELSEWHERE = [
   'notificationsEnabled',
   'weeklyQuinielaPromoEnabled',
   'weeklyQuinielaPromoHourUtc',
   'minSupportedBuild',
   'minSupportedVersion',
+  'maintenanceMode',
+  'maintenanceMessage',
   // Referral program + invite modal (Referrals page → Configuración)
   'referralEnabled',
   'referralCreditsPerReferral',
