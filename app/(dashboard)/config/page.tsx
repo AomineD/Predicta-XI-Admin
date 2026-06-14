@@ -783,6 +783,31 @@ function ConfigPageInner() {
     onError: (err: Error) => setSportiumMessage({ type: 'error', text: err.message }),
   });
 
+  // Auto-detect coupons: scrapes Sportium's competition list and proposes a slug
+  // per V1 competition (by country + name). Fills the editor; the admin reviews
+  // and Saves. Read-only on the backend — it never writes the config.
+  const [detectMessage, setDetectMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const detectCoupons = useMutation({
+    mutationFn: () =>
+      api.post('/admin/sportium/detect-coupons', {}) as Promise<{
+        proposals: Array<{ competitionId: number; competitionName: string; sportiumName: string; slug: string; confidence: number }>;
+        unmatched: string[];
+      }>,
+    onSuccess: (data) => {
+      const base = sportium ?? sportiumInitial;
+      if (!base) return;
+      const byId = new Map(base.couponUrls.map((c) => [c.competitionId, { ...c }]));
+      for (const p of data.proposals) byId.set(p.competitionId, { competitionId: p.competitionId, url: p.slug });
+      setSportiumForm({ ...base, couponUrls: [...byId.values()] });
+      const um = data.unmatched.length ? ` No match (likely off-season): ${data.unmatched.join(', ')}.` : '';
+      setDetectMessage({
+        type: 'success',
+        text: `Detected ${data.proposals.length} coupon(s) — applied below. Review & Save.${um}`,
+      });
+    },
+    onError: (err: Error) => setDetectMessage({ type: 'error', text: err.message }),
+  });
+
   const activeForm = form ?? initialForm;
 
   if (!activeForm) return <p className="text-text-muted text-sm">Loading config...</p>;
@@ -1117,11 +1142,26 @@ function ConfigPageInner() {
               />
             </Field>
             <Field label="Coupons per competition" subtitle="Explicit map: each competition → its Sportium coupon (slug soccer-<cc>-sb_type_<id> or full URL). Empty = nothing scraped. World Cup 2026: soccer-int2-sb_type_296772.">
-              <CouponUrlsEditor
-                competitions={competitions ?? []}
-                value={sportium.couponUrls}
-                onChange={(v) => setSportiumForm({ ...sportium, couponUrls: v })}
-              />
+              <div className="space-y-2 w-full">
+                <div className="flex items-center gap-3">
+                  <Button variant="secondary" size="sm" loading={detectCoupons.isPending} onClick={() => detectCoupons.mutate()}>
+                    Auto-detect
+                  </Button>
+                  <span className="text-xs text-text-muted/60 font-sans">
+                    Scrapes Sportium and fills the rows by country + name. Off-season leagues won&apos;t be found.
+                  </span>
+                </div>
+                {detectMessage && (
+                  <p className={`text-xs font-sans ${detectMessage.type === 'success' ? 'text-success' : 'text-danger'}`}>
+                    {detectMessage.text}
+                  </p>
+                )}
+                <CouponUrlsEditor
+                  competitions={competitions ?? []}
+                  value={sportium.couponUrls}
+                  onChange={(v) => setSportiumForm({ ...sportium, couponUrls: v })}
+                />
+              </div>
             </Field>
             <div className="flex items-center gap-3 pt-3">
               <Button variant="primary" loading={saveSportium.isPending} onClick={() => saveSportium.mutate(sportium)}>
