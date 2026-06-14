@@ -67,6 +67,16 @@ interface PredictionConfig {
   llmMaxTokens?: Record<string, number>;
 }
 
+interface SportiumConfig {
+  enabled: boolean;
+  influencePredictions: boolean;
+  matchConfidenceMin: number;
+  couponUrls: Array<{ competitionId: number; url: string }>;
+  captureV1: boolean;
+  captureV2: boolean;
+  requestTimeoutMs: number;
+}
+
 interface TeamLite {
   id: number;
   name: string;
@@ -313,6 +323,63 @@ function TeamBlacklistPicker({
   );
 }
 
+function CouponUrlsEditor({
+  competitions,
+  value,
+  onChange,
+}: {
+  competitions: Array<{ id: number; name: string }>;
+  value: Array<{ competitionId: number; url: string }>;
+  onChange: (v: Array<{ competitionId: number; url: string }>) => void;
+}) {
+  const setRow = (i: number, patch: Partial<{ competitionId: number; url: string }>) =>
+    onChange(value.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+  const remove = (i: number) => onChange(value.filter((_, idx) => idx !== i));
+  const add = () => onChange([...value, { competitionId: competitions[0]?.id ?? 0, url: '' }]);
+
+  return (
+    <div className="space-y-2 w-full">
+      {value.length === 0 && (
+        <p className="text-xs text-text-muted/60 font-sans">No coupons set — the module scrapes nothing.</p>
+      )}
+      {value.map((row, i) => (
+        <div key={i} className="flex items-center gap-2">
+          <select
+            value={row.competitionId}
+            onChange={(e) => setRow(i, { competitionId: Number(e.target.value) })}
+            className="h-9 w-44 flex-none px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
+          >
+            {!competitions.some((c) => c.id === row.competitionId) && (
+              <option value={row.competitionId}>#{row.competitionId}</option>
+            )}
+            {competitions.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+          <input
+            type="text"
+            value={row.url}
+            onChange={(e) => setRow(i, { url: e.target.value })}
+            placeholder="soccer-int2-sb_type_296772"
+            className="h-9 flex-1 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none placeholder:text-text-muted"
+          />
+          <button
+            type="button"
+            onClick={() => remove(i)}
+            className="text-text-muted hover:text-danger px-2"
+            aria-label="Remove coupon"
+          >
+            ×
+          </button>
+        </div>
+      ))}
+      <Button variant="secondary" size="sm" onClick={add} disabled={competitions.length === 0}>
+        Add coupon
+      </Button>
+    </div>
+  );
+}
+
 export default function ConfigPage() {
   return (
     <Suspense fallback={<p className="text-text-muted text-sm">Loading config...</p>}>
@@ -352,7 +419,7 @@ function ConfigPageInner() {
     queryFn: () => api.get('/admin/api-keys'),
   });
 
-  const { data: competitions } = useQuery<Array<{ apiFootballId: number; name: string }>>({
+  const { data: competitions } = useQuery<Array<{ id: number; apiFootballId: number; name: string }>>({
     queryKey: ['competitions'],
     queryFn: () => api.get('/admin/competitions'),
     staleTime: 60_000,
@@ -669,6 +736,53 @@ function ConfigPageInner() {
     onError: (err: Error) => setMaintMessage({ type: 'error', text: err.message }),
   });
 
+  // ── Sportium odds (separate sportium_config table, own GET/PUT) ──
+  // Lives in the Automations tab alongside the other scheduled tasks. The PUT is
+  // a full upsert of the row's editable fields (the backend merges partials).
+  const { data: sportiumCfg } = useQuery<{ config: SportiumConfig | null }>({
+    queryKey: ['sportium-config'],
+    queryFn: () => api.get('/admin/sportium/config'),
+  });
+  const [sportiumForm, setSportiumForm] = useState<SportiumConfig | null>(null);
+  const [sportiumMessage, setSportiumMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const sportiumInitial = useMemo<SportiumConfig | null>(() => {
+    const c = sportiumCfg?.config;
+    if (!c) return null;
+    return {
+      enabled: c.enabled ?? false,
+      influencePredictions: c.influencePredictions ?? false,
+      // numeric column arrives as a string from the API
+      matchConfidenceMin: Number(c.matchConfidenceMin ?? 0.85),
+      couponUrls: Array.isArray(c.couponUrls) ? c.couponUrls : [],
+      captureV1: c.captureV1 ?? true,
+      captureV2: c.captureV2 ?? true,
+      requestTimeoutMs: c.requestTimeoutMs ?? 15000,
+    };
+  }, [sportiumCfg]);
+  const sportium = sportiumForm ?? sportiumInitial;
+
+  const saveSportium = useMutation({
+    mutationFn: (body: SportiumConfig) =>
+      api.put('/admin/sportium/config', {
+        enabled: body.enabled,
+        influencePredictions: body.influencePredictions,
+        matchConfidenceMin: body.matchConfidenceMin,
+        captureV1: body.captureV1,
+        captureV2: body.captureV2,
+        requestTimeoutMs: body.requestTimeoutMs,
+        // drop blank rows; the backend requires a non-empty url per entry
+        couponUrls: body.couponUrls
+          .filter((c) => c.url.trim() !== '' && Number.isInteger(c.competitionId))
+          .map((c) => ({ competitionId: c.competitionId, url: c.url.trim() })),
+      }),
+    onSuccess: () => {
+      setSportiumForm(null);
+      setSportiumMessage({ type: 'success', text: 'Sportium settings saved.' });
+      qc.invalidateQueries({ queryKey: ['sportium-config'] });
+    },
+    onError: (err: Error) => setSportiumMessage({ type: 'error', text: err.message }),
+  });
+
   const activeForm = form ?? initialForm;
 
   if (!activeForm) return <p className="text-text-muted text-sm">Loading config...</p>;
@@ -957,6 +1071,76 @@ function ConfigPageInner() {
         <Field label="Enabled" subtitle="Re-sync team form, squad, and league standings after each settled match">
           <Toggle value={activeForm.teamRefreshEnabled ?? false} onChange={(v) => setField('teamRefreshEnabled', v)} />
         </Field>
+      </SectionCard>
+
+      {/* Sportium odds (sportium_config, own GET/PUT) */}
+      <SectionCard
+        title="Sportium odds (scraping)"
+        subtitle="Scrapes Sportium Colombia odds during enrichment (V1/V2) and uses them as the PRIMARY odds source (Flashscore fallback). Also requires SPORTIUM_ENABLED in the Backend + Worker environment. Inert until the master switch below is on and at least one coupon is set."
+      >
+        {!sportium ? (
+          <p className="text-text-muted text-sm font-sans py-3">Loading…</p>
+        ) : (
+          <>
+            <Field label="Module enabled" subtitle="Master switch. Off = nothing is scraped or matched. With the env flag on too, captures start resolving + snapshotting.">
+              <Toggle value={sportium.enabled} onChange={(v) => setSportiumForm({ ...sportium, enabled: v })} />
+            </Field>
+            <Field label="Influence predictions" subtitle="Off (recommended at first): only snapshots odds so you can validate the matching. On: Sportium odds enter the prediction context (primary, Flashscore fallback).">
+              <Toggle value={sportium.influencePredictions} onChange={(v) => setSportiumForm({ ...sportium, influencePredictions: v })} />
+            </Field>
+            <Field label="Capture at V1" subtitle="Capture during early enrichment (no lineups yet).">
+              <Toggle value={sportium.captureV1} onChange={(v) => setSportiumForm({ ...sportium, captureV1: v })} />
+            </Field>
+            <Field label="Capture at V2" subtitle="Capture during lineup enrichment (gives V1→V2 line movement).">
+              <Toggle value={sportium.captureV2} onChange={(v) => setSportiumForm({ ...sportium, captureV2: v })} />
+            </Field>
+            <Field label="Min match confidence" subtitle="0–1. At or above = auto-linked; just below = sent to the review queue. Default 0.85.">
+              <input
+                type="number"
+                min={0}
+                max={1}
+                step={0.01}
+                value={sportium.matchConfidenceMin}
+                onChange={(e) => setSportiumForm({ ...sportium, matchConfidenceMin: Math.min(1, Math.max(0, Number(e.target.value) || 0)) })}
+                className="h-9 w-24 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
+              />
+            </Field>
+            <Field label="Scrape timeout (ms)" subtitle="Short per-scrape cap so a slow Sportium degrades to Flashscore fast (2000–60000).">
+              <input
+                type="number"
+                min={2000}
+                max={60000}
+                step={500}
+                value={sportium.requestTimeoutMs}
+                onChange={(e) => setSportiumForm({ ...sportium, requestTimeoutMs: Math.min(60000, Math.max(2000, Number(e.target.value) || 15000)) })}
+                className="h-9 w-28 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
+              />
+            </Field>
+            <Field label="Coupons per competition" subtitle="Explicit map: each competition → its Sportium coupon (slug soccer-<cc>-sb_type_<id> or full URL). Empty = nothing scraped. World Cup 2026: soccer-int2-sb_type_296772.">
+              <CouponUrlsEditor
+                competitions={competitions ?? []}
+                value={sportium.couponUrls}
+                onChange={(v) => setSportiumForm({ ...sportium, couponUrls: v })}
+              />
+            </Field>
+            <div className="flex items-center gap-3 pt-3">
+              <Button variant="primary" loading={saveSportium.isPending} onClick={() => saveSportium.mutate(sportium)}>
+                Save Sportium
+              </Button>
+              {sportium.enabled && !sportium.influencePredictions && (
+                <span className="text-xs font-sans text-warning">Enabled in validation mode (does not affect predictions yet).</span>
+              )}
+              {sportium.enabled && sportium.influencePredictions && (
+                <span className="text-xs font-sans text-success">Enabled and influencing predictions.</span>
+              )}
+              {sportiumMessage && (
+                <span className={`text-xs font-sans ${sportiumMessage.type === 'success' ? 'text-success' : 'text-danger'}`}>
+                  {sportiumMessage.text}
+                </span>
+              )}
+            </div>
+          </>
+        )}
       </SectionCard>
       </div>
 
