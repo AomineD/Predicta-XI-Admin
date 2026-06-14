@@ -42,6 +42,8 @@ interface PredictionConfig {
   teamRefreshEnabled: boolean;
   // Kill-switch for the paid "Predicta opinion" on user-built combinadas.
   userCombinadaOpinionsEnabled: boolean;
+  // Anchors correct_score to the odds-derived Poisson/Dixon-Coles distribution.
+  correctScoreModelEnabled: boolean;
   llmTimeoutSeconds: number;
   predictionWindowMinutes: number;
   featuredLeagueIds: number[];
@@ -373,6 +375,7 @@ function ConfigPageInner() {
       enrichmentSyncIntervalMinutes: cfg.enrichmentSyncIntervalMinutes ?? 15,
       teamRefreshEnabled: cfg.teamRefreshEnabled ?? false,
       userCombinadaOpinionsEnabled: cfg.userCombinadaOpinionsEnabled ?? true,
+      correctScoreModelEnabled: cfg.correctScoreModelEnabled ?? false,
       llmTimeoutSeconds: cfg.llmTimeoutSeconds ?? 30,
       predictionWindowMinutes: cfg.predictionWindowMinutes ?? 0,
       featuredLeagueIds: cfg.featuredLeagueIds ?? [39, 140, 135],
@@ -785,6 +788,12 @@ function ConfigPageInner() {
 
       <SectionCard title="Output Markets" subtitle="Betting markets included in each generated prediction">
         <MultiCheckbox options={MARKETS} value={activeForm.outputMarkets} onChange={(v) => setField('outputMarkets', v)} />
+      </SectionCard>
+
+      <SectionCard title="Correct score — statistical model" subtitle="Anchors the correct_score market to an odds-derived Poisson/Dixon-Coles distribution. Corrects the LLM's bias toward inflating the favorite's scoreline. Backtested on 368 settled matches: exact-score hit rate 8.7% → 14.9%. Affects the scheduler, bridge and skill at once; only active when correct_score is in Output Markets.">
+        <Field label="Model enabled" subtitle="Injects the suggested score distribution into the payload and the anchoring rules into the prompt">
+          <Toggle value={activeForm.correctScoreModelEnabled ?? false} onChange={(v) => setField('correctScoreModelEnabled', v)} />
+        </Field>
       </SectionCard>
 
       <SectionCard title="Input Data Fields" subtitle="Data sources the model receives to generate predictions">
