@@ -49,6 +49,9 @@ interface SocialConfig {
   maxActiveGroupsByTier: Record<string, number>;
   weeklyMinMatches: number;
   weeklyMaxMatches: number;
+  weeklyExactScorePoints: number;
+  weeklyExactDrawPoints: number;
+  weeklyCorrectOutcomePoints: number;
   maxGroupsPerCompetition: number;
   joinInterstitialEnabled: boolean;
   appCheckEnforcementMode: 'disabled' | 'monitor' | 'enforce';
@@ -370,6 +373,21 @@ function ConfigTab() {
         </Field>
         <Field label="Maximum matches">
           <NumInput value={f.weeklyMaxMatches} onChange={(v) => set('weeklyMaxMatches', v)} min={1} max={50} />
+        </Field>
+      </SectionCard>
+
+      <SectionCard
+        title="Weekly scoring (points)"
+        subtitle="Layered “marcador por capas” points for weekly groups. A wrong 1X2 is always 0 (not configurable). The app shows these in its “Cómo se puntúa” legend (read from /app-config). Range 0–100."
+      >
+        <Field label="Exact scoreline (winner)" subtitle="Exact result with a winner, e.g. 2-1">
+          <NumInput value={f.weeklyExactScorePoints} onChange={(v) => set('weeklyExactScorePoints', v)} min={0} max={100} />
+        </Field>
+        <Field label="Exact draw" subtitle="Exact tied scoreline, e.g. 1-1 or 0-0. Set higher than the exact win to reward it as a draw bonus.">
+          <NumInput value={f.weeklyExactDrawPoints} onChange={(v) => set('weeklyExactDrawPoints', v)} min={0} max={100} />
+        </Field>
+        <Field label="Correct outcome (1X2 only)" subtitle="Right 1X2 but wrong scoreline">
+          <NumInput value={f.weeklyCorrectOutcomePoints} onChange={(v) => set('weeklyCorrectOutcomePoints', v)} min={0} max={100} />
         </Field>
       </SectionCard>
 
