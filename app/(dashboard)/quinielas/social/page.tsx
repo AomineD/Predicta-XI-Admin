@@ -52,6 +52,8 @@ interface SocialConfig {
   weeklyExactScorePoints: number;
   weeklyExactDrawPoints: number;
   weeklyCorrectOutcomePoints: number;
+  weeklyProximityPoints: number;
+  weeklyProximityMaxGoalError: number;
   maxGroupsPerCompetition: number;
   joinInterstitialEnabled: boolean;
   appCheckEnforcementMode: 'disabled' | 'monitor' | 'enforce';
@@ -388,6 +390,12 @@ function ConfigTab() {
         </Field>
         <Field label="Correct outcome (1X2 only)" subtitle="Right 1X2 but wrong scoreline">
           <NumInput value={f.weeklyCorrectOutcomePoints} onChange={(v) => set('weeklyCorrectOutcomePoints', v)} min={0} max={100} />
+        </Field>
+        <Field label="Proximity bonus (points)" subtitle="Extra points when the 1X2 is right but the scoreline is off by at most the goal-error below. 0 disables the bonus. The app shows a “Cerca +N” chip.">
+          <NumInput value={f.weeklyProximityPoints} onChange={(v) => set('weeklyProximityPoints', v)} min={0} max={100} />
+        </Field>
+        <Field label="Proximity max goal error" subtitle="Max total goal error (|Δhome| + |Δaway|) that still earns the bonus. 1 = off by exactly one goal (real 4-1: both 3-1 and 5-1 qualify; 2-1 does not).">
+          <NumInput value={f.weeklyProximityMaxGoalError} onChange={(v) => set('weeklyProximityMaxGoalError', v)} min={0} max={20} />
         </Field>
       </SectionCard>
 
