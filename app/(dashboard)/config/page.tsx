@@ -44,6 +44,8 @@ interface PredictionConfig {
   userCombinadaOpinionsEnabled: boolean;
   // Anchors correct_score to the odds-derived Poisson/Dixon-Coles distribution.
   correctScoreModelEnabled: boolean;
+  // Injects fair (devig) market_probabilities and anchors pick confidence to them.
+  marketProbabilityAnchoringEnabled: boolean;
   llmTimeoutSeconds: number;
   predictionWindowMinutes: number;
   featuredLeagueIds: number[];
@@ -443,6 +445,7 @@ function ConfigPageInner() {
       teamRefreshEnabled: cfg.teamRefreshEnabled ?? false,
       userCombinadaOpinionsEnabled: cfg.userCombinadaOpinionsEnabled ?? true,
       correctScoreModelEnabled: cfg.correctScoreModelEnabled ?? false,
+      marketProbabilityAnchoringEnabled: cfg.marketProbabilityAnchoringEnabled ?? false,
       llmTimeoutSeconds: cfg.llmTimeoutSeconds ?? 30,
       predictionWindowMinutes: cfg.predictionWindowMinutes ?? 0,
       featuredLeagueIds: cfg.featuredLeagueIds ?? [39, 140, 135],
@@ -932,6 +935,12 @@ function ConfigPageInner() {
       <SectionCard title="Correct score — statistical model" subtitle="Anchors the correct_score market to an odds-derived Poisson/Dixon-Coles distribution. Corrects the LLM's bias toward inflating the favorite's scoreline. Backtested on 368 settled matches: exact-score hit rate 8.7% → 14.9%. Affects the scheduler, bridge and skill at once; only active when correct_score is in Output Markets.">
         <Field label="Model enabled" subtitle="Injects the suggested score distribution into the payload and the anchoring rules into the prompt">
           <Toggle value={activeForm.correctScoreModelEnabled ?? false} onChange={(v) => setField('correctScoreModelEnabled', v)} />
+        </Field>
+      </SectionCard>
+
+      <SectionCard title="Market probability anchoring" subtitle="Injects fair (devig) market probabilities from the odds into the payload, with prompt rules that anchor each pick's confidence to the market and stop the model ignoring the draw. Corrects ~15 pts of systemic overconfidence and the anti-draw bias (draw predicted 8.6% vs 26.1% real). Affects the scheduler, bridge and skill at once. Best paired with Sportium influence_predictions for richer, fresher odds.">
+        <Field label="Anchoring enabled" subtitle="Injects market_probabilities into the payload and the anchoring rules into the prompt">
+          <Toggle value={activeForm.marketProbabilityAnchoringEnabled ?? false} onChange={(v) => setField('marketProbabilityAnchoringEnabled', v)} />
         </Field>
       </SectionCard>
 
