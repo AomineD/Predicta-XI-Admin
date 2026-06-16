@@ -22,6 +22,10 @@ interface NotifConfig {
   notificationsEnabled: boolean;
   weeklyQuinielaPromoEnabled: boolean;
   weeklyQuinielaPromoHourUtc: number;
+  topPredictionMissedEnabled: boolean;
+  topPredictionMissedMinHitRate: number;
+  topPredictionMissedMinMarkets: number;
+  topPredictionMissedSendHourUtc: number;
 }
 
 /* ── send contract (mirrors backend adminSendNotificationSchema) ────────────── */
@@ -143,6 +147,10 @@ export default function NotificationsPage() {
             notificationsEnabled: cfgQ.data.notificationsEnabled,
             weeklyQuinielaPromoEnabled: cfgQ.data.weeklyQuinielaPromoEnabled,
             weeklyQuinielaPromoHourUtc: cfgQ.data.weeklyQuinielaPromoHourUtc,
+            topPredictionMissedEnabled: cfgQ.data.topPredictionMissedEnabled,
+            topPredictionMissedMinHitRate: cfgQ.data.topPredictionMissedMinHitRate,
+            topPredictionMissedMinMarkets: cfgQ.data.topPredictionMissedMinMarkets,
+            topPredictionMissedSendHourUtc: cfgQ.data.topPredictionMissedSendHourUtc,
           }
         : null,
     [cfgQ.data],
@@ -262,6 +270,21 @@ export default function NotificationsPage() {
               </Field>
               <Field label="Send hour (UTC)" subtitle="UTC hour (0–23) the Monday broadcast fires. Caracas is UTC−4, so 13 ≈ 9:00 AM Caracas.">
                 <NumInput value={cfg.weeklyQuinielaPromoHourUtc} onChange={(v) => setCfgForm({ ...cfg, weeklyQuinielaPromoHourUtc: v })} min={0} max={23} />
+              </Field>
+            </SectionCard>
+
+            <SectionCard title="Acierto del día (te lo perdiste)" subtitle="Once a day, picks the day's prediction with the highest hit rate and notifies users who did NOT open it (non-buyers), so they see the hit they missed. Tapping opens the post-match analysis. Off by default. Honors each user's topPredictionMissed opt-in.">
+              <Field label="Enabled" subtitle="Master switch for the daily 'best hit of the day' engagement push.">
+                <Toggle value={cfg.topPredictionMissedEnabled} onChange={(v) => setCfgForm({ ...cfg, topPredictionMissedEnabled: v })} />
+              </Field>
+              <Field label="Min hit rate (%)" subtitle="Only matches whose prediction hit at least this percentage of markets qualify (e.g. 80).">
+                <NumInput value={cfg.topPredictionMissedMinHitRate} onChange={(v) => setCfgForm({ ...cfg, topPredictionMissedMinHitRate: v })} min={1} max={100} />
+              </Field>
+              <Field label="Min settled markets" subtitle="Requires at least this many settled markets, so a trivial 1/1 = 100% never wins (e.g. 6).">
+                <NumInput value={cfg.topPredictionMissedMinMarkets} onChange={(v) => setCfgForm({ ...cfg, topPredictionMissedMinMarkets: v })} min={1} max={20} />
+              </Field>
+              <Field label="Send hour (UTC)" subtitle="UTC hour (0–23) the daily push fires. Caracas is UTC−4, so 2 ≈ 10:00 PM Caracas.">
+                <NumInput value={cfg.topPredictionMissedSendHourUtc} onChange={(v) => setCfgForm({ ...cfg, topPredictionMissedSendHourUtc: v })} min={0} max={23} />
               </Field>
             </SectionCard>
           </>
