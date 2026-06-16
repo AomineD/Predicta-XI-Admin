@@ -1,10 +1,21 @@
 'use client';
 
-import type { ReactNode } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useState, type ReactNode } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import { Button } from '@/components/ui/Button';
 import { cn, formatDateTime } from '@/lib/utils';
 import { X } from 'lucide-react';
+
+interface Subscription {
+  tier: string;
+  status: string;
+  platform: string | null;
+  productId: string | null;
+  source: string;
+  expiresAt: string | null;
+  createdAt: string | null;
+}
 
 interface UserDetail {
   profile: {
@@ -21,9 +32,7 @@ interface UserDetail {
     referredBy: string | null;
     updatedAt: string | null;
   };
-  subscription:
-    | { tier: string; status: string; platform: string; productId: string; expiresAt: string | null; createdAt: string | null }
-    | null;
+  subscription: Subscription | null;
   creditTransactions: Array<{ type: string; amount: number; reason: string; balanceAfter: number | null; createdAt: string | null }>;
   purchases: Array<{ platform: string; productId: string; creditsAdded: number; createdAt: string | null }>;
   accessCounts: { predictions: number; combinadas: number; quinielas: number };
@@ -44,6 +53,124 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
       <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">{title}</h3>
       {children}
     </div>
+  );
+}
+
+function sourceLabel(source: string): string {
+  if (source === 'admin_comp') return 'Cortesía (admin)';
+  if (source === 'iap') return 'Compra (IAP)';
+  return source;
+}
+
+const selectClass =
+  'h-9 w-full px-3 rounded-xl text-sm text-text-primary outline-none bg-surface-2 border border-border';
+
+const DURATION_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: 'permanent', label: 'Permanente' },
+  { value: '7', label: '7 días' },
+  { value: '30', label: '30 días' },
+  { value: '90', label: '90 días' },
+  { value: '365', label: '1 año' },
+];
+
+/**
+ * Otorga o revoca una suscripción de cortesía (comp) — un tier premium/club sin
+ * compra IAP. La app lee el mismo camino plan/tier que un suscriptor real, así
+ * que sirve para staff, testers y soporte.
+ */
+function CompSection({ userId, subscription }: { userId: string; subscription: Subscription | null }) {
+  const qc = useQueryClient();
+  const [tier, setTier] = useState<'premium' | 'club'>('club');
+  const [duration, setDuration] = useState<string>('permanent');
+  const [error, setError] = useState<string | null>(null);
+
+  const invalidate = () => {
+    void qc.invalidateQueries({ queryKey: ['user-detail', userId] });
+    void qc.invalidateQueries({ queryKey: ['users-kpis'] });
+    void qc.invalidateQueries({ queryKey: ['users-list'] });
+  };
+
+  const grant = useMutation({
+    mutationFn: () =>
+      api.post(`/admin/users/${userId}/subscription`, {
+        tier,
+        durationDays: duration === 'permanent' ? null : Number(duration),
+      }),
+    onSuccess: () => {
+      setError(null);
+      invalidate();
+    },
+    onError: (e: Error) => setError(e.message),
+  });
+
+  const revoke = useMutation({
+    mutationFn: () => api.delete(`/admin/users/${userId}/subscription`),
+    onSuccess: () => {
+      setError(null);
+      invalidate();
+    },
+    onError: (e: Error) => setError(e.message),
+  });
+
+  const activeComp =
+    subscription?.source === 'admin_comp' &&
+    (subscription.status === 'active' || subscription.status === 'grace_period');
+
+  const busy = grant.isPending || revoke.isPending;
+
+  return (
+    <Section title="Suscripción de cortesía">
+      {activeComp && (
+        <p className="text-xs text-success mb-3">
+          Cortesía activa ({subscription?.tier}
+          {subscription?.expiresAt ? ` · expira ${formatDateTime(subscription.expiresAt)}` : ' · permanente'}).
+        </p>
+      )}
+
+      <div className="grid grid-cols-2 gap-3 mb-3">
+        <div>
+          <p className="text-xs text-text-muted mb-1">Tier</p>
+          <select className={selectClass} value={tier} onChange={(e) => setTier(e.target.value as 'premium' | 'club')}>
+            <option value="club">CLUB</option>
+            <option value="premium">PRO (premium)</option>
+          </select>
+        </div>
+        <div>
+          <p className="text-xs text-text-muted mb-1">Duración</p>
+          <select className={selectClass} value={duration} onChange={(e) => setDuration(e.target.value)}>
+            {DURATION_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <Button variant="primary" size="sm" loading={grant.isPending} disabled={busy} onClick={() => grant.mutate()}>
+          {activeComp ? 'Actualizar cortesía' : 'Otorgar cortesía'}
+        </Button>
+        {activeComp && (
+          <Button
+            variant="danger"
+            size="sm"
+            loading={revoke.isPending}
+            disabled={busy}
+            onClick={() => {
+              if (window.confirm('¿Revocar la suscripción de cortesía de este usuario?')) revoke.mutate();
+            }}
+          >
+            Revocar
+          </Button>
+        )}
+      </div>
+
+      {error && <p className="text-xs text-danger mt-2">{error}</p>}
+      <p className="text-[11px] text-text-muted/60 mt-2 leading-tight">
+        No cobra nada ni pasa por la tienda. El usuario ve exactamente las features del tier elegido.
+      </p>
+    </Section>
   );
 }
 
@@ -93,13 +220,16 @@ export function UserDetailDrawer({ id, onClose }: { id: string; onClose: () => v
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <Field label="Tier" value={data.subscription.tier} />
                   <Field label="Estado" value={data.subscription.status} />
-                  <Field label="Plataforma" value={data.subscription.platform} />
-                  <Field label="Expira" value={data.subscription.expiresAt ? formatDateTime(data.subscription.expiresAt) : '—'} />
+                  <Field label="Origen" value={sourceLabel(data.subscription.source)} />
+                  <Field label="Plataforma" value={data.subscription.platform ?? '—'} />
+                  <Field label="Expira" value={data.subscription.expiresAt ? formatDateTime(data.subscription.expiresAt) : 'Permanente'} />
                 </div>
               ) : (
                 <p className="text-sm text-text-muted">Sin suscripción.</p>
               )}
             </Section>
+
+            <CompSection userId={data.profile.id} subscription={data.subscription} />
 
             <Section title="Accesos">
               <div className="grid grid-cols-3 gap-3 text-sm">

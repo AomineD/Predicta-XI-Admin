@@ -21,6 +21,7 @@ interface UsersKpis {
   referred: number;
   activeSubscribers: number;
   subscribersByTier: Array<{ tier: string; count: number }>;
+  compSubscribers: number;
   creditBuyers: number;
   newByDay: Array<{ day: string; count: number }>;
 }
@@ -138,7 +139,13 @@ export default function UsersPage() {
         <MetricCard
           label="Suscriptores"
           value={kpis?.activeSubscribers ?? '—'}
-          sub={kpis && kpis.subscribersByTier.length > 0 ? kpis.subscribersByTier.map((t) => `${t.count} ${t.tier}`).join(' · ') : 'sin suscriptores aún'}
+          sub={
+            kpis && kpis.subscribersByTier.length > 0
+              ? `${kpis.subscribersByTier.map((t) => `${t.count} ${t.tier}`).join(' · ')}${kpis.compSubscribers > 0 ? ` · +${kpis.compSubscribers} cortesía` : ''}`
+              : kpis && kpis.compSubscribers > 0
+                ? `${kpis.compSubscribers} cortesía`
+                : 'sin suscriptores aún'
+          }
         />
         <MetricCard label="Compradores créditos" value={kpis?.creditBuyers ?? '—'} sub="vía IAP" />
         <MetricCard label="Referidos" value={kpis?.referred ?? '—'} sub="atribuidos" />
