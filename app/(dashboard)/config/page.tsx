@@ -46,6 +46,8 @@ interface PredictionConfig {
   correctScoreModelEnabled: boolean;
   // Injects fair (devig) market_probabilities and anchors pick confidence to them.
   marketProbabilityAnchoringEnabled: boolean;
+  // Strength-of-schedule baselines + home/away splits used to enrich deep_stats.
+  statBaselinesEnabled: boolean;
   llmTimeoutSeconds: number;
   predictionWindowMinutes: number;
   featuredLeagueIds: number[];
@@ -446,6 +448,7 @@ function ConfigPageInner() {
       userCombinadaOpinionsEnabled: cfg.userCombinadaOpinionsEnabled ?? true,
       correctScoreModelEnabled: cfg.correctScoreModelEnabled ?? false,
       marketProbabilityAnchoringEnabled: cfg.marketProbabilityAnchoringEnabled ?? false,
+      statBaselinesEnabled: cfg.statBaselinesEnabled ?? false,
       llmTimeoutSeconds: cfg.llmTimeoutSeconds ?? 30,
       predictionWindowMinutes: cfg.predictionWindowMinutes ?? 0,
       featuredLeagueIds: cfg.featuredLeagueIds ?? [39, 140, 135],
@@ -673,6 +676,8 @@ function ConfigPageInner() {
     minSupportedVersion: string | null;
     minRecommendedBuild: number;
     recommendedVersion: string | null;
+    socialEnabled: boolean;
+    combinadaSharesEnabled: boolean;
   }>({
     queryKey: ['credits-config-maintenance'],
     queryFn: () => api.get('/admin/credits-config'),
@@ -737,6 +742,33 @@ function ConfigPageInner() {
       qc.invalidateQueries({ queryKey: ['credits-config-maintenance'] });
     },
     onError: (err: Error) => setMaintMessage({ type: 'error', text: err.message }),
+  });
+
+  // ── Social features (credits_config, partial update) ──
+  // Master switch for the whole social structure (friends, quiniela invites) plus
+  // combinada sharing. They live on the credits_config row but are NOT credit
+  // economy, so they're edited here (not on the Credits page). Partial PUT of only
+  // these two fields, so it never touches the rest of the config.
+  const [socialForm, setSocialForm] = useState<{ socialEnabled: boolean; combinadaSharesEnabled: boolean } | null>(null);
+  const [socialMessage, setSocialMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const socialInitial = useMemo(
+    () =>
+      maintCfg
+        ? { socialEnabled: maintCfg.socialEnabled, combinadaSharesEnabled: maintCfg.combinadaSharesEnabled }
+        : null,
+    [maintCfg],
+  );
+  const social = socialForm ?? socialInitial;
+
+  const saveSocial = useMutation({
+    mutationFn: (body: { socialEnabled: boolean; combinadaSharesEnabled: boolean }) =>
+      api.put('/admin/credits-config', body),
+    onSuccess: () => {
+      setSocialForm(null);
+      setSocialMessage({ type: 'success', text: 'Social settings saved.' });
+      qc.invalidateQueries({ queryKey: ['credits-config-maintenance'] });
+    },
+    onError: (err: Error) => setSocialMessage({ type: 'error', text: err.message }),
   });
 
   // ── Sportium odds (separate sportium_config table, own GET/PUT) ──
@@ -941,6 +973,12 @@ function ConfigPageInner() {
       <SectionCard title="Market probability anchoring" subtitle="Injects fair (devig) market probabilities from the odds into the payload, with prompt rules that anchor each pick's confidence to the market and stop the model ignoring the draw. Corrects ~15 pts of systemic overconfidence and the anti-draw bias (draw predicted 8.6% vs 26.1% real). Affects the scheduler, bridge and skill at once. Best paired with Sportium influence_predictions for richer, fresher odds.">
         <Field label="Anchoring enabled" subtitle="Injects market_probabilities into the payload and the anchoring rules into the prompt">
           <Toggle value={activeForm.marketProbabilityAnchoringEnabled ?? false} onChange={(v) => setField('marketProbabilityAnchoringEnabled', v)} />
+        </Field>
+      </SectionCard>
+
+      <SectionCard title="Stat baselines — opponent-adjusted" subtitle="Enables the strength-of-schedule adjustment and home/away splits in deep_stats (league/team baselines weighted by how strong each opponent was). The consumer is data-driven, so it stays inert until this is on AND the baseline tables are populated (run the backfill in Data Maintenance). Enriches the shots, clear chances, possession, corners and cards the model receives.">
+        <Field label="Baselines enabled" subtitle="Gates the baseline writes + the opponent/venue adjustment used to enrich deep_stats">
+          <Toggle value={activeForm.statBaselinesEnabled ?? false} onChange={(v) => setField('statBaselinesEnabled', v)} />
         </Field>
       </SectionCard>
 
@@ -1663,6 +1701,44 @@ function ConfigPageInner() {
               </Button>
               {rec.build > 0 && (
                 <span className="text-xs font-sans text-text-muted">Builds below {rec.build} see the dismissible modal.</span>
+              )}
+            </div>
+          </>
+        )}
+      </SectionCard>
+
+      {/* Social features (credits_config, partial update) */}
+      <SectionCard title="Social" subtitle="Feature flags for the social layer. The code ships in the app build but stays hidden until turned on here. Turn these on only once the build that contains the social screens is live in the stores — otherwise users on an older build read about features they don't have.">
+        {!social ? (
+          <p className="text-text-muted text-sm font-sans py-3">Loading…</p>
+        ) : (
+          <>
+            <Field label="Social enabled (master)" subtitle="Master switch for the whole social structure: friends (add / accept / block) and inviting a friend straight into a quiniela. Off = the app hides every social entry point and the endpoints respond 403.">
+              <Toggle value={social.socialEnabled} onChange={(v) => setSocialForm({ ...social, socialEnabled: v })} />
+            </Field>
+            <Field label="Combinada sharing" subtitle="Lets a user share a combinada with friends (each friend gets their own copy to compete). Off = the app hides the share CTA and the endpoints respond 403. Needs the master switch on to be useful.">
+              <Toggle value={social.combinadaSharesEnabled} onChange={(v) => setSocialForm({ ...social, combinadaSharesEnabled: v })} />
+            </Field>
+            <div className="flex items-center gap-3 pt-3">
+              <Button
+                variant="primary"
+                loading={saveSocial.isPending}
+                onClick={() =>
+                  saveSocial.mutate({
+                    socialEnabled: social.socialEnabled,
+                    combinadaSharesEnabled: social.combinadaSharesEnabled,
+                  })
+                }
+              >
+                Save social
+              </Button>
+              {social.socialEnabled && (
+                <span className="text-xs font-sans text-success">Social is live for users on a build that includes it.</span>
+              )}
+              {socialMessage && (
+                <span className={`text-xs font-sans ${socialMessage.type === 'success' ? 'text-success' : 'text-danger'}`}>
+                  {socialMessage.text}
+                </span>
               )}
             </div>
           </>
