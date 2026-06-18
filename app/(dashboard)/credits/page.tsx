@@ -33,6 +33,9 @@ interface CreditsConfig {
   // User-built combinadas: fixed create cost (free users only; subscribers free)
   // + the flexible always-charged opinion formula.
   userCombinadaCreationCost: number;
+  // Master switch for sharing a combinada with friends (idea #6B). When off, the
+  // app hides the "Compartir con amigos" CTA and the endpoints respond 403.
+  combinadaSharesEnabled: boolean;
   combinadaOpinionBaseCost: number;
   combinadaOpinionPerLegCost: number;
   combinadaOpinionPerExtraMarketCost: number;
@@ -501,6 +504,9 @@ function CreditsPageInner() {
       <SectionCard title="User Combinadas" subtitle="Parlays the user builds themselves from any week match + their own picks.">
         <Field label="Create cost (free users)" subtitle="Credits to save a combinada. Subscribers (any tier) create free + unlimited.">
           <NumInput value={f.userCombinadaCreationCost} onChange={(v) => set('userCombinadaCreationCost', v)} min={0} />
+        </Field>
+        <Field label="Share with friends (idea #6B)" subtitle="Master switch for sharing a combinada with friends (each friend gets their own copy to compete + can pay credits to join). When off, the app hides the share CTA and the endpoints respond 403. Off by default.">
+          <Toggle value={f.combinadaSharesEnabled} onChange={(v) => set('combinadaSharesEnabled', v)} />
         </Field>
       </SectionCard>
 
