@@ -49,6 +49,7 @@ interface SocialConfig {
   maxActiveGroupsByTier: Record<string, number>;
   weeklyMinMatches: number;
   weeklyMaxMatches: number;
+  weeklyMaxMatchesByTier: Record<string, number>;
   weeklyExactScorePoints: number;
   weeklyExactDrawPoints: number;
   weeklyCorrectOutcomePoints: number;
@@ -373,7 +374,16 @@ function ConfigTab() {
         <Field label="Minimum matches">
           <NumInput value={f.weeklyMinMatches} onChange={(v) => set('weeklyMinMatches', v)} min={1} max={50} />
         </Field>
-        <Field label="Maximum matches">
+        <Field
+          label="Maximum matches by tier"
+          subtitle="Cap per owner tier (free / PRO / Club). -1 = unlimited (the only ceiling is how many eligible matches the week has). A finite cap must not be below the minimum above."
+        >
+          <TierMap value={f.weeklyMaxMatchesByTier} onChange={(v) => set('weeklyMaxMatchesByTier', v)} max={50} allowUnlimited />
+        </Field>
+        <Field
+          label="Maximum matches (legacy fallback)"
+          subtitle="Used only when a tier is missing from the per-tier map above. New apps read the per-tier map; this stays as a safety net."
+        >
           <NumInput value={f.weeklyMaxMatches} onChange={(v) => set('weeklyMaxMatches', v)} min={1} max={50} />
         </Field>
       </SectionCard>
