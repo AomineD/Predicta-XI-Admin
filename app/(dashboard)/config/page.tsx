@@ -678,6 +678,7 @@ function ConfigPageInner() {
     recommendedVersion: string | null;
     socialEnabled: boolean;
     combinadaSharesEnabled: boolean;
+    liveTrackerEnabled: boolean;
   }>({
     queryKey: ['credits-config-maintenance'],
     queryFn: () => api.get('/admin/credits-config'),
@@ -769,6 +770,29 @@ function ConfigPageInner() {
       qc.invalidateQueries({ queryKey: ['credits-config-maintenance'] });
     },
     onError: (err: Error) => setSocialMessage({ type: 'error', text: err.message }),
+  });
+
+  // ── Live match tracker (credits_config, partial update) ──
+  // "En Vivo" flag (idea #8): the animated live pitch (STATSCORE widget loaded in
+  // a webview) on the match detail. Lives on the credits_config row but it's a UI
+  // feature, not credit economy, so it's edited here with a partial PUT of just
+  // this field.
+  const [liveTrackerForm, setLiveTrackerForm] = useState<{ liveTrackerEnabled: boolean } | null>(null);
+  const [liveTrackerMessage, setLiveTrackerMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const liveTrackerInitial = useMemo(
+    () => (maintCfg ? { liveTrackerEnabled: maintCfg.liveTrackerEnabled } : null),
+    [maintCfg],
+  );
+  const liveTracker = liveTrackerForm ?? liveTrackerInitial;
+
+  const saveLiveTracker = useMutation({
+    mutationFn: (body: { liveTrackerEnabled: boolean }) => api.put('/admin/credits-config', body),
+    onSuccess: () => {
+      setLiveTrackerForm(null);
+      setLiveTrackerMessage({ type: 'success', text: 'Live tracker setting saved.' });
+      qc.invalidateQueries({ queryKey: ['credits-config-maintenance'] });
+    },
+    onError: (err: Error) => setLiveTrackerMessage({ type: 'error', text: err.message }),
   });
 
   // ── Sportium odds (separate sportium_config table, own GET/PUT) ──
@@ -1738,6 +1762,36 @@ function ConfigPageInner() {
               {socialMessage && (
                 <span className={`text-xs font-sans ${socialMessage.type === 'success' ? 'text-success' : 'text-danger'}`}>
                   {socialMessage.text}
+                </span>
+              )}
+            </div>
+          </>
+        )}
+      </SectionCard>
+
+      {/* Live match tracker (credits_config, partial update) */}
+      <SectionCard title="Live match tracker" subtitle="The 'Live' animated pitch on the match detail (idea #8). The code ships in the app build but stays hidden until turned on here. POC: keep it OFF until the legal decision on showing the source's branding.">
+        {!liveTracker ? (
+          <p className="text-text-muted text-sm font-sans py-3">Loading…</p>
+        ) : (
+          <>
+            <Field label="Live tracker enabled" subtitle="Shows the animated live pitch (loaded in a webview) under the scoreboard while a match is live and has live coverage. Off = the app never shows the Live block. The endpoint also gates by live state + Sportium coverage, so turning this on only reveals it where available.">
+              <Toggle value={liveTracker.liveTrackerEnabled} onChange={(v) => setLiveTrackerForm({ liveTrackerEnabled: v })} />
+            </Field>
+            <div className="flex items-center gap-3 pt-3">
+              <Button
+                variant="primary"
+                loading={saveLiveTracker.isPending}
+                onClick={() => saveLiveTracker.mutate({ liveTrackerEnabled: liveTracker.liveTrackerEnabled })}
+              >
+                Save live tracker
+              </Button>
+              {liveTracker.liveTrackerEnabled && (
+                <span className="text-xs font-sans text-success">Live tracker is on for users on a build that includes it.</span>
+              )}
+              {liveTrackerMessage && (
+                <span className={`text-xs font-sans ${liveTrackerMessage.type === 'success' ? 'text-success' : 'text-danger'}`}>
+                  {liveTrackerMessage.text}
                 </span>
               )}
             </div>
