@@ -58,11 +58,17 @@ interface SocialConfig {
   maxGroupsPerCompetition: number;
   joinInterstitialEnabled: boolean;
   appCheckEnforcementMode: 'disabled' | 'monitor' | 'enforce';
+  // Team quinielas (idea #9) — Club-only group type.
+  teamQuinielasEnabled: boolean;
+  teamMaxTeams: number;
+  teamMaxMembersPerTeam: number;
+  teamCreateCost: number;
+  teamPrizeWinnerCredits: number;
 }
 
 interface GroupRow {
   id: string;
-  type: 'competition' | 'weekly';
+  type: 'competition' | 'weekly' | 'team';
   name: string;
   status: string;
   maxMembers: number;
@@ -409,6 +415,27 @@ function ConfigTab() {
         </Field>
       </SectionCard>
 
+      <SectionCard
+        title="Team quinielas (idea #9)"
+        subtitle="Club-only group type: members predict scorelines and the score is aggregated per team, with phase-by-phase elimination until a champion. Off by default (inert until enabled). The app gates the “create teams quiniela” option on this flag + Club tier."
+      >
+        <Field label="Team quinielas enabled" subtitle="Master flag (teamQuinielasEnabled). Only Club owners can create.">
+          <Toggle value={f.teamQuinielasEnabled} onChange={(v) => set('teamQuinielasEnabled', v)} />
+        </Field>
+        <Field label="Max teams" subtitle="Upper bound on teams per quiniela (2–8).">
+          <NumInput value={f.teamMaxTeams} onChange={(v) => set('teamMaxTeams', v)} min={2} max={8} />
+        </Field>
+        <Field label="Max members per team" subtitle="Upper bound on the per-team size the creator can choose (1–100).">
+          <NumInput value={f.teamMaxMembersPerTeam} onChange={(v) => set('teamMaxMembersPerTeam', v)} min={1} max={100} />
+        </Field>
+        <Field label="Creation cost (credits)" subtitle="Charged to create one (premium+ exempt, so Club creates free). 0 = free.">
+          <NumInput value={f.teamCreateCost} onChange={(v) => set('teamCreateCost', v)} min={0} max={MAX_CREATE_COST} />
+        </Field>
+        <Field label="Champion prize (credits)" subtitle="House-funded credits paid to each member of the winning team. Per-prize cap: 500.">
+          <NumInput value={f.teamPrizeWinnerCredits} onChange={(v) => set('teamPrizeWinnerCredits', v)} min={0} max={MAX_PRIZE} />
+        </Field>
+      </SectionCard>
+
       {mut.error && <p className="text-sm text-danger font-sans mt-2">{(mut.error as Error).message}</p>}
     </>
   );
@@ -417,7 +444,7 @@ function ConfigTab() {
 /* ── tab: group moderation ─────────────────────────────────────────────────── */
 
 const STATUS_FILTERS = ['', 'open', 'locked', 'settling', 'settled', 'cancelled'];
-const TYPE_FILTERS = ['', 'weekly', 'competition'];
+const TYPE_FILTERS = ['', 'weekly', 'competition', 'team'];
 
 function GroupsTab() {
   const [status, setStatus] = useState('');
