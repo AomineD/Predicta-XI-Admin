@@ -64,11 +64,19 @@ interface SocialConfig {
   teamMaxMembersPerTeam: number;
   teamCreateCost: number;
   teamPrizeWinnerCredits: number;
+  // Running pools (idea #10) — continuous multi-week pool (PRO/Club create).
+  runningQuinielasEnabled: boolean;
+  createCostRunning: number;
+  runningMaxWeeks: number;
+  runningBasePrizeCredits: number;
+  runningPerWeekPrizeCredits: number;
+  runningMaxPrizeCredits: number;
+  runningDefaultPodiumBonus: Record<string, number>;
 }
 
 interface GroupRow {
   id: string;
-  type: 'competition' | 'weekly' | 'team';
+  type: 'competition' | 'weekly' | 'team' | 'running';
   name: string;
   status: string;
   maxMembers: number;
@@ -433,6 +441,43 @@ function ConfigTab() {
         </Field>
         <Field label="Champion prize (credits)" subtitle="House-funded credits paid to each member of the winning team. Per-prize cap: 500.">
           <NumInput value={f.teamPrizeWinnerCredits} onChange={(v) => set('teamPrizeWinnerCredits', v)} min={0} max={MAX_PRIZE} />
+        </Field>
+      </SectionCard>
+
+      <SectionCard
+        title="Running pools (idea #10)"
+        subtitle="Continuous multi-week pool: the creator (PRO/Club) picks competitions and each week their matches auto-enter as a new week of the same group. Two tables (weekly + accumulated overall); the weekly podium adds bonus points to the overall. One scaled final prize goes to the overall champion when the run ends. Off by default (inert until enabled). The app gates the “create running pool” option on this flag + PRO/Club tier."
+      >
+        <Field label="Running pools enabled" subtitle="Master flag (runningQuinielasEnabled). PRO and Club can create; Free can only join.">
+          <Toggle value={f.runningQuinielasEnabled} onChange={(v) => set('runningQuinielasEnabled', v)} />
+        </Field>
+        <Field label="Creation cost (credits)" subtitle="Charged to create one (premium+ exempt, so PRO/Club create free). 0 = free.">
+          <NumInput value={f.createCostRunning} onChange={(v) => set('createCostRunning', v)} min={0} max={MAX_CREATE_COST} />
+        </Field>
+        <Field label="Max weeks" subtitle="Upper bound on how long a run can last (the end date can't exceed this from now). 1–52.">
+          <NumInput value={f.runningMaxWeeks} onChange={(v) => set('runningMaxWeeks', v)} min={1} max={52} />
+        </Field>
+        <Field
+          label="Final prize: base (credits)"
+          subtitle="Scaled final prize to the overall champion = min(max, base + perWeek × weeks lived). Per-prize cap: 500."
+        >
+          <NumInput value={f.runningBasePrizeCredits} onChange={(v) => set('runningBasePrizeCredits', v)} min={0} max={MAX_PRIZE} />
+        </Field>
+        <Field label="Final prize: per week (credits)" subtitle="Added per settled week to the base, before the max cap.">
+          <NumInput value={f.runningPerWeekPrizeCredits} onChange={(v) => set('runningPerWeekPrizeCredits', v)} min={0} max={MAX_PRIZE} />
+        </Field>
+        <Field label="Final prize: max (credits)" subtitle="Ceiling on the scaled final prize. Per-prize cap: 500.">
+          <NumInput value={f.runningMaxPrizeCredits} onChange={(v) => set('runningMaxPrizeCredits', v)} min={0} max={MAX_PRIZE} />
+        </Field>
+        <Field
+          label="Default weekly podium bonus"
+          subtitle="Bonus points the weekly podium adds to the overall table, for PRO-created runs (Club creators set their own per pool). Points, not credits."
+        >
+          <div className="flex gap-2">
+            <NumInput value={f.runningDefaultPodiumBonus['1'] ?? 0} onChange={(v) => set('runningDefaultPodiumBonus', { ...f.runningDefaultPodiumBonus, '1': v })} min={0} max={MAX_PRIZE} />
+            <NumInput value={f.runningDefaultPodiumBonus['2'] ?? 0} onChange={(v) => set('runningDefaultPodiumBonus', { ...f.runningDefaultPodiumBonus, '2': v })} min={0} max={MAX_PRIZE} />
+            <NumInput value={f.runningDefaultPodiumBonus['3'] ?? 0} onChange={(v) => set('runningDefaultPodiumBonus', { ...f.runningDefaultPodiumBonus, '3': v })} min={0} max={MAX_PRIZE} />
+          </div>
         </Field>
       </SectionCard>
 
