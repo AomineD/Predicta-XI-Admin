@@ -1770,12 +1770,12 @@ function ConfigPageInner() {
       </SectionCard>
 
       {/* Live match tracker (credits_config, partial update) */}
-      <SectionCard title="Live match tracker" subtitle="The 'Live' animated pitch on the match detail (idea #8). The code ships in the app build but stays hidden until turned on here. POC: keep it OFF until the legal decision on showing the source's branding.">
+      <SectionCard title="Live match tracker" subtitle="The 'Live' animated pitch on the match detail (idea #8). The widget is resolved live from aiscore/TheSports and shown de-branded. The code ships in the app build but stays hidden until turned on here. POC: keep it OFF until the legal decision is made.">
         {!liveTracker ? (
           <p className="text-text-muted text-sm font-sans py-3">Loading…</p>
         ) : (
           <>
-            <Field label="Live tracker enabled" subtitle="Shows the animated live pitch (loaded in a webview) under the scoreboard while a match is live and has live coverage. Off = the app never shows the Live block. The endpoint also gates by live state + Sportium coverage, so turning this on only reveals it where available.">
+            <Field label="Live tracker enabled" subtitle="Shows the animated live pitch (loaded in a webview) under the scoreboard while a match is live. Off = the app never shows the Live block. The endpoint also gates by live state + whether the match resolves to a tracker, so turning this on only reveals it where available.">
               <Toggle value={liveTracker.liveTrackerEnabled} onChange={(v) => setLiveTrackerForm({ liveTrackerEnabled: v })} />
             </Field>
             <div className="flex items-center gap-3 pt-3">
