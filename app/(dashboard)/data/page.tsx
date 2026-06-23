@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -161,8 +161,25 @@ function CompetitionsTab() {
 
 function TeamsTab() {
   const [id, setId] = useState<number | null>(null);
-  const { data: teams } = useQuery({ queryKey: ['teams-list'], queryFn: () => api.get('/admin/teams') });
-  const list = asArray<TeamLite>(teams);
+  const [selectedName, setSelectedName] = useState('');
+  const [query, setQuery] = useState('');
+  const [debounced, setDebounced] = useState('');
+
+  // Debounce the search box so we don't hit /admin/teams on every keystroke.
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(query.trim()), 300);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  // Type-ahead search. The endpoint is paginated ({ items, total, … }) and
+  // capped at pageSize 100, so a plain "list all" dropdown would silently
+  // truncate with 8 leagues + national teams. Searching avoids that entirely.
+  const { data: searchResp, isFetching } = useQuery<{ items: TeamLite[] }>({
+    queryKey: ['teams-search', debounced],
+    queryFn: () => api.get(`/admin/teams?search=${encodeURIComponent(debounced)}&pageSize=50`),
+    enabled: id == null && debounced.length >= 2,
+  });
+  const results = searchResp?.items ?? [];
 
   const { data, isLoading } = useQuery<TeamSquad>({
     queryKey: ['team-squad', id],
@@ -172,23 +189,64 @@ function TeamsTab() {
 
   return (
     <div>
-      <select
-        aria-label="Equipo"
-        value={id ?? ''}
-        onChange={(e) => setId(e.target.value ? Number(e.target.value) : null)}
-        className="mb-4 w-full max-w-md rounded-xl px-3 py-2 text-sm text-text-primary outline-none"
-        style={SELECT_STYLE}
-      >
-        <option value="">Selecciona un equipo…</option>
-        {list.map((t) => (
-          <option key={t.id} value={t.id}>
-            {t.name}
-          </option>
-        ))}
-      </select>
+      <div className="relative mb-4 w-full max-w-md">
+        <input
+          type="text"
+          aria-label="Buscar equipo"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Busca un equipo por nombre…"
+          className="w-full rounded-xl px-3 py-2 text-sm text-text-primary outline-none"
+          style={SELECT_STYLE}
+        />
+        {id == null && debounced.length >= 2 && results.length > 0 && (
+          <ul
+            className="absolute z-10 mt-1 max-h-72 w-full overflow-auto rounded-xl py-1"
+            style={{ background: '#121A2B', border: '1px solid rgba(255,255,255,0.12)' }}
+          >
+            {results.map((t) => (
+              <li key={t.id}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setId(t.id);
+                    setSelectedName(t.name);
+                    setQuery('');
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-text-secondary hover:bg-surface-2 hover:text-text-primary"
+                >
+                  {t.logo && <img src={t.logo} alt="" className="h-5 w-5 object-contain" loading="lazy" />}
+                  <span>{t.name}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {id != null && (
+        <div className="mb-3 flex items-center gap-2">
+          <span className="text-sm font-semibold text-text-primary">{selectedName}</span>
+          <button
+            type="button"
+            onClick={() => {
+              setId(null);
+              setSelectedName('');
+              setQuery('');
+            }}
+            className="text-xs text-text-muted hover:text-text-primary"
+          >
+            ← Cambiar de equipo
+          </button>
+        </div>
+      )}
 
       {id == null ? (
-        <p className="text-sm text-text-muted">Elige un equipo para ver su plantilla.</p>
+        debounced.length >= 2 && !isFetching && results.length === 0 ? (
+          <p className="text-sm text-text-muted">Sin equipos que coincidan con “{debounced}”.</p>
+        ) : (
+          <p className="text-sm text-text-muted">Escribe al menos 2 letras para buscar un equipo.</p>
+        )
       ) : isLoading ? (
         <p className="text-sm text-text-muted">Cargando…</p>
       ) : data && data.players.length === 0 ? (

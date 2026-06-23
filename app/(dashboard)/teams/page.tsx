@@ -30,6 +30,13 @@ interface TeamsResponse {
   total: number;
 }
 
+interface TeamNewsSyncResult {
+  scraped: number;
+  inserted: number;
+  alreadyKnown: number;
+  skippedNoSlug?: boolean;
+}
+
 function TeamEditor({
   team,
   onSave,
@@ -46,6 +53,13 @@ function TeamEditor({
   const [logo, setLogo] = useState(team.logo ?? '');
   const [country, setCountry] = useState(team.country ?? '');
   const [flashscoreSlug, setFlashscoreSlug] = useState(team.flashscoreSlug ?? '');
+
+  // Quick per-team Flashscore news sync — same endpoint as the "Sync from
+  // Flashscore" button inside Manage News, surfaced here so the admin doesn't
+  // have to open the news manager first.
+  const syncNews = useMutation<TeamNewsSyncResult, Error, void>({
+    mutationFn: () => api.post(`/admin/teams/${team.id}/news/sync`),
+  });
 
   return (
     <div
@@ -119,7 +133,7 @@ function TeamEditor({
           />
         </label>
 
-        <div className="flex gap-2 pt-2 items-center">
+        <div className="flex flex-wrap gap-2 pt-2 items-center">
           <button
             type="button"
             onClick={() => onSave({ name, shortName, logo: logo || undefined, country: country || undefined, flashscoreSlug: flashscoreSlug || undefined })}
@@ -134,15 +148,37 @@ function TeamEditor({
           >
             Cancel
           </button>
-          <button
-            type="button"
-            onClick={onManageNews}
-            title="Manage team news (injuries, suspensions, etc.) — injected manually into the quiniela payload"
-            className="ml-auto px-4 py-2 rounded-xl text-sm font-sans font-medium border border-border text-text-secondary hover:text-text-primary hover:bg-surface-2"
-          >
-            📰 Manage news
-          </button>
+          <div className="ml-auto flex gap-2">
+            <button
+              type="button"
+              onClick={() => syncNews.mutate()}
+              disabled={syncNews.isPending || !flashscoreSlug}
+              title={flashscoreSlug ? 'Sincronizar las últimas noticias de Flashscore de este equipo' : 'Define un Flashscore slug primero'}
+              className="px-4 py-2 rounded-xl text-sm font-sans font-medium border border-border text-text-secondary hover:text-text-primary hover:bg-surface-2 disabled:opacity-50 disabled:hover:bg-transparent"
+            >
+              {syncNews.isPending ? '⏳ Sincronizando…' : '🔄 Sincronizar noticias'}
+            </button>
+            <button
+              type="button"
+              onClick={onManageNews}
+              title="Manage team news (injuries, suspensions, etc.) — injected manually into the quiniela payload"
+              className="px-4 py-2 rounded-xl text-sm font-sans font-medium border border-border text-text-secondary hover:text-text-primary hover:bg-surface-2"
+            >
+              📰 Manage news
+            </button>
+          </div>
         </div>
+
+        {syncNews.isSuccess && (
+          <p className="text-xs text-text-muted font-sans">
+            {syncNews.data.skippedNoSlug
+              ? 'Sin slug de Flashscore: no se pudo sincronizar.'
+              : `Listo: ${syncNews.data.inserted} noticia(s) nueva(s) de ${syncNews.data.scraped} encontrada(s).`}
+          </p>
+        )}
+        {syncNews.isError && (
+          <p className="text-xs text-danger font-sans">{syncNews.error.message}</p>
+        )}
       </div>
     </div>
   );

@@ -72,7 +72,7 @@ const NAV: NavEntry[] = [
     ],
   },
   { href: '/notifications', label: 'Notifications', icon: Bell },
-  { href: '/home-announcements', label: 'Home announcements', icon: Megaphone },
+  { href: '/home-announcements', label: 'Announcements', icon: Megaphone },
   { href: '/telegram', label: 'Telegram', icon: Send },
   {
     label: 'System',

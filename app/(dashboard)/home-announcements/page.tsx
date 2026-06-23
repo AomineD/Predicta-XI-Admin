@@ -82,11 +82,31 @@ const areaCls = `${inputCls} resize-none`;
 const selectCls =
   'h-9 px-3 rounded-xl text-sm bg-surface-2 border border-border text-text-primary font-sans';
 
+// Same catalogue the Config page exposes. '' = use the globally active model.
+const MODELS = [
+  'deepseek-v4-flash', 'deepseek-v4-pro', 'gpt-5.4-mini', 'gpt-5.4',
+  'gpt-5.4-think', 'gemini-3.1-pro', 'gemini-3.1-flash-lite-preview',
+  'glm-5', 'kimi-k2.5',
+];
+
+interface GeneratedDraft {
+  titleEs: string;
+  titleEn: string;
+  bodyEs: string;
+  bodyEn: string;
+}
+
 export default function HomeAnnouncementsPage() {
   const qc = useQueryClient();
   const [draft, setDraft] = useState<Draft | null>(null);
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // ── AI generator modal state ──
+  const [genOpen, setGenOpen] = useState(false);
+  const [genBrief, setGenBrief] = useState('');
+  const [genToday, setGenToday] = useState(true);
+  const [genModel, setGenModel] = useState(''); // '' = active model
 
   const { data: entries, isLoading } = useQuery<HomeAnnouncement[]>({
     queryKey: ['admin-home-announcements'],
@@ -170,6 +190,31 @@ export default function HomeAnnouncementsPage() {
     onError: (err: Error) => setMsg({ type: 'error', text: err.message }),
   });
 
+  // Generate an ephemeral bilingual draft with the active LLM, then drop it into
+  // the editor as an unpublished draft. Nothing is published automatically.
+  const generate = useMutation<GeneratedDraft, Error, void>({
+    mutationFn: () =>
+      api.post('/admin/home-announcements/generate', {
+        brief: genBrief.trim() || undefined,
+        includeTodayMatches: genToday,
+        model: genModel || undefined,
+      }),
+    onSuccess: (d) => {
+      setDraft({
+        ...EMPTY_DRAFT,
+        titleEs: d.titleEs,
+        titleEn: d.titleEn,
+        bodyEs: d.bodyEs,
+        bodyEn: d.bodyEn,
+        isPublished: false,
+      });
+      setGenOpen(false);
+      setGenBrief('');
+      setMsg({ type: 'success', text: 'Borrador generado. Revísalo, edita si quieres y guárdalo.' });
+    },
+    onError: (err: Error) => setMsg({ type: 'error', text: err.message }),
+  });
+
   const canSave = useMemo(() => {
     if (!draft) return false;
     if (draft.titleEs.trim() === '' || draft.titleEn.trim() === '') return false;
@@ -184,11 +229,74 @@ export default function HomeAnnouncementsPage() {
         title="Home announcements"
         description="Manage the Home carousel announcements (bilingual, image-capable). The app shows the last 5 published, highest priority first."
         action={
-          <Button variant="primary" onClick={() => setDraft({ ...EMPTY_DRAFT })}>
-            New announcement
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" onClick={() => setGenOpen(true)}>
+              ✨ Generar con IA
+            </Button>
+            <Button variant="primary" onClick={() => setDraft({ ...EMPTY_DRAFT })}>
+              New announcement
+            </Button>
+          </div>
         }
       />
+
+      {genOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+          onClick={(e) => { if (e.target === e.currentTarget) setGenOpen(false); }}
+        >
+          <div
+            className="w-full max-w-lg rounded-2xl p-5 space-y-4"
+            style={{ background: '#121A2B', border: '1px solid rgba(255,255,255,0.12)' }}
+          >
+            <div>
+              <h2 className="text-sm font-semibold text-text-primary font-sans">Generar anuncio con IA</h2>
+              <p className="text-xs text-text-muted font-sans mt-1">
+                El modelo redacta un borrador bilingüe. Lo revisas y editas en el formulario antes de guardarlo; nada se publica automáticamente.
+              </p>
+            </div>
+
+            <label className="block">
+              <span className="text-xs text-text-muted font-sans">Tema / brief (opcional)</span>
+              <textarea
+                rows={3}
+                value={genBrief}
+                onChange={(e) => setGenBrief(e.target.value)}
+                placeholder="Ej.: anuncia las combinadas compartidas con amigos. Si lo dejas vacío, la IA propone una idea."
+                className={`${areaCls} mt-1`}
+              />
+            </label>
+
+            <label className="flex items-center justify-between gap-3">
+              <span className="text-xs text-text-muted font-sans">Basar en los partidos de hoy</span>
+              <Toggle value={genToday} onChange={setGenToday} />
+            </label>
+
+            <label className="block">
+              <span className="text-xs text-text-muted font-sans">Modelo (opcional)</span>
+              <select
+                value={genModel}
+                onChange={(e) => setGenModel(e.target.value)}
+                className={`${selectCls} mt-1 w-full`}
+              >
+                <option value="">Modelo activo</option>
+                {MODELS.map((m) => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+            </label>
+
+            <div className="flex items-center gap-3 pt-1">
+              <Button variant="primary" loading={generate.isPending} onClick={() => generate.mutate()}>
+                Generar
+              </Button>
+              <Button variant="secondary" onClick={() => setGenOpen(false)}>
+                Cancelar
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {msg && (
         <p className={`text-xs font-sans mb-3 ${msg.type === 'success' ? 'text-success' : 'text-danger'}`}>
