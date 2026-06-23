@@ -48,6 +48,10 @@ interface PredictionConfig {
   marketProbabilityAnchoringEnabled: boolean;
   // Strength-of-schedule baselines + home/away splits used to enrich deep_stats.
   statBaselinesEnabled: boolean;
+  // Market-independent probability (attack/defense goal model) + value axis.
+  independentModelEnabled: boolean;
+  // Remaps declared confidence to the empirical (calibrated) value.
+  calibrationEnabled: boolean;
   llmTimeoutSeconds: number;
   predictionWindowMinutes: number;
   featuredLeagueIds: number[];
@@ -449,6 +453,8 @@ function ConfigPageInner() {
       correctScoreModelEnabled: cfg.correctScoreModelEnabled ?? false,
       marketProbabilityAnchoringEnabled: cfg.marketProbabilityAnchoringEnabled ?? false,
       statBaselinesEnabled: cfg.statBaselinesEnabled ?? false,
+      independentModelEnabled: cfg.independentModelEnabled ?? false,
+      calibrationEnabled: cfg.calibrationEnabled ?? false,
       llmTimeoutSeconds: cfg.llmTimeoutSeconds ?? 30,
       predictionWindowMinutes: cfg.predictionWindowMinutes ?? 0,
       featuredLeagueIds: cfg.featuredLeagueIds ?? [39, 140, 135],
@@ -1003,6 +1009,18 @@ function ConfigPageInner() {
       <SectionCard title="Stat baselines — opponent-adjusted" subtitle="Enables the strength-of-schedule adjustment and home/away splits in deep_stats (league/team baselines weighted by how strong each opponent was). The consumer is data-driven, so it stays inert until this is on AND the baseline tables are populated (run the backfill in Data Maintenance). Enriches the shots, clear chances, possession, corners and cards the model receives.">
         <Field label="Baselines enabled" subtitle="Gates the baseline writes + the opponent/venue adjustment used to enrich deep_stats">
           <Toggle value={activeForm.statBaselinesEnabled ?? false} onChange={(v) => setField('statBaselinesEnabled', v)} />
+        </Field>
+      </SectionCard>
+
+      <SectionCard title="Independent probability model" subtitle="Injects a market-INDEPENDENT probability (own attack/defense goal model → Poisson/Dixon-Coles) for the LLM to contrast against the odds, and computes the value edge (p × best odds − 1) attached to each pick. The `p` that the value axis needs (the odds devig alone gives ~0 edge). Inert until populated — run the Goal Strength backfill in Data Maintenance, then enable. Currently wired into the bridge path.">
+        <Field label="Independent model enabled" subtitle="Gates the goal-strength fit writes (settlement + backfill), the independent_model_probability in the payload, and the value edge on picks">
+          <Toggle value={activeForm.independentModelEnabled ?? false} onChange={(v) => setField('independentModelEnabled', v)} />
+        </Field>
+      </SectionCard>
+
+      <SectionCard title="Confidence calibration" subtitle="Remaps the LLM's declared confidence to the empirical winrate (per market and per model) using the calibration map built from settled picks. Corrects the systemic over-confidence. Conservative: only ever lowers confidence, never raises it. Inert until the map is built — run the Calibration rebuild in Data Maintenance, then enable.">
+        <Field label="Calibration enabled" subtitle="Remaps confidence to the calibrated value at predict time (min of raw and calibrated)">
+          <Toggle value={activeForm.calibrationEnabled ?? false} onChange={(v) => setField('calibrationEnabled', v)} />
         </Field>
       </SectionCard>
 
