@@ -685,6 +685,7 @@ function ConfigPageInner() {
     socialEnabled: boolean;
     combinadaSharesEnabled: boolean;
     liveTrackerEnabled: boolean;
+    homeAnnouncementsEnabled: boolean;
   }>({
     queryKey: ['credits-config-maintenance'],
     queryFn: () => api.get('/admin/credits-config'),
@@ -799,6 +800,30 @@ function ConfigPageInner() {
       qc.invalidateQueries({ queryKey: ['credits-config-maintenance'] });
     },
     onError: (err: Error) => setLiveTrackerMessage({ type: 'error', text: err.message }),
+  });
+
+  // ── Home announcements (credits_config, partial update) ──
+  // Master switch for the Home carousel (idea #11). Lives on the credits_config
+  // row but it's a UI feature, not credit economy, so it's edited here with a
+  // partial PUT of just this field. Content (the actual announcements) is managed
+  // on the Home announcements page; this flag gates whether the carousel shows at
+  // all — with it off, published announcements still never reach the app.
+  const [homeAnnouncementsForm, setHomeAnnouncementsForm] = useState<{ homeAnnouncementsEnabled: boolean } | null>(null);
+  const [homeAnnouncementsMessage, setHomeAnnouncementsMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const homeAnnouncementsInitial = useMemo(
+    () => (maintCfg ? { homeAnnouncementsEnabled: maintCfg.homeAnnouncementsEnabled } : null),
+    [maintCfg],
+  );
+  const homeAnnouncements = homeAnnouncementsForm ?? homeAnnouncementsInitial;
+
+  const saveHomeAnnouncements = useMutation({
+    mutationFn: (body: { homeAnnouncementsEnabled: boolean }) => api.put('/admin/credits-config', body),
+    onSuccess: () => {
+      setHomeAnnouncementsForm(null);
+      setHomeAnnouncementsMessage({ type: 'success', text: 'Home announcements setting saved.' });
+      qc.invalidateQueries({ queryKey: ['credits-config-maintenance'] });
+    },
+    onError: (err: Error) => setHomeAnnouncementsMessage({ type: 'error', text: err.message }),
   });
 
   // ── Sportium odds (separate sportium_config table, own GET/PUT) ──
@@ -1810,6 +1835,36 @@ function ConfigPageInner() {
               {liveTrackerMessage && (
                 <span className={`text-xs font-sans ${liveTrackerMessage.type === 'success' ? 'text-success' : 'text-danger'}`}>
                   {liveTrackerMessage.text}
+                </span>
+              )}
+            </div>
+          </>
+        )}
+      </SectionCard>
+
+      {/* Home announcements (credits_config, partial update) */}
+      <SectionCard title="Home announcements" subtitle="Master switch for the Home carousel (idea #11). The carousel ships in the app build but stays hidden until turned on here. Content is managed on the Home announcements page — but with this flag off, even published announcements never reach the app.">
+        {!homeAnnouncements ? (
+          <p className="text-text-muted text-sm font-sans py-3">Loading…</p>
+        ) : (
+          <>
+            <Field label="Home announcements enabled" subtitle="Shows the announcements carousel on Home. Off = the app never shows it, regardless of how many announcements are published. Turn this on AND publish at least one announcement for the carousel to appear.">
+              <Toggle value={homeAnnouncements.homeAnnouncementsEnabled} onChange={(v) => setHomeAnnouncementsForm({ homeAnnouncementsEnabled: v })} />
+            </Field>
+            <div className="flex items-center gap-3 pt-3">
+              <Button
+                variant="primary"
+                loading={saveHomeAnnouncements.isPending}
+                onClick={() => saveHomeAnnouncements.mutate({ homeAnnouncementsEnabled: homeAnnouncements.homeAnnouncementsEnabled })}
+              >
+                Save home announcements
+              </Button>
+              {homeAnnouncements.homeAnnouncementsEnabled && (
+                <span className="text-xs font-sans text-success">Home announcements are on for users on a build that includes the carousel.</span>
+              )}
+              {homeAnnouncementsMessage && (
+                <span className={`text-xs font-sans ${homeAnnouncementsMessage.type === 'success' ? 'text-success' : 'text-danger'}`}>
+                  {homeAnnouncementsMessage.text}
                 </span>
               )}
             </div>
