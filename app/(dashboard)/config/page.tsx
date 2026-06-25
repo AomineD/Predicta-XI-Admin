@@ -52,6 +52,9 @@ interface PredictionConfig {
   independentModelEnabled: boolean;
   // Remaps declared confidence to the empirical (calibrated) value.
   calibrationEnabled: boolean;
+  // Neutral-venue & host awareness (World Cup): no false home/away at neutral
+  // sites; real home advantage for a host nation playing in its own country.
+  neutralVenueAwarenessEnabled: boolean;
   llmTimeoutSeconds: number;
   predictionWindowMinutes: number;
   featuredLeagueIds: number[];
@@ -197,6 +200,135 @@ function MultiCheckbox({
           {opt.replace(/_/g, ' ')}
         </button>
       ))}
+    </div>
+  );
+}
+
+// All toggles below map to a `boolean` field on PredictionConfig, so indexing
+// PredictionConfig[EngineLayerKey] collapses to `boolean` and setField stays typed.
+type EngineLayerKey =
+  | 'marketProbabilityAnchoringEnabled'
+  | 'calibrationEnabled'
+  | 'correctScoreModelEnabled'
+  | 'statBaselinesEnabled'
+  | 'independentModelEnabled'
+  | 'neutralVenueAwarenessEnabled';
+
+// The long descriptions used to live inline; they now sit behind the (i) button.
+const ENGINE_LAYERS: Array<{ key: EngineLayerKey; title: string; info: string }> = [
+  {
+    key: 'marketProbabilityAnchoringEnabled',
+    title: 'Market probability anchoring',
+    info: "Injects fair (devig) market probabilities from the odds into the payload, with prompt rules that anchor each pick's confidence to the market and stop the model ignoring the draw. Corrects ~15 pts of systemic overconfidence and the anti-draw bias (draw predicted 8.6% vs 26.1% real). Affects the scheduler, bridge and skill at once. Best paired with Sportium influence_predictions for richer, fresher odds.",
+  },
+  {
+    key: 'calibrationEnabled',
+    title: 'Confidence calibration',
+    info: "Remaps the LLM's declared confidence to the empirical winrate (per market and per model) using the calibration map built from settled picks. Corrects the systemic over-confidence. Conservative: only ever lowers confidence, never raises it. Inert until the map is built — run the Calibration rebuild in Data Maintenance, then enable.",
+  },
+  {
+    key: 'correctScoreModelEnabled',
+    title: 'Correct score — statistical model',
+    info: "Anchors the correct_score market to an odds-derived Poisson/Dixon-Coles distribution. Corrects the LLM's bias toward inflating the favorite's scoreline. Backtested on 368 settled matches: exact-score hit rate 8.7% → 14.9%. Affects the scheduler, bridge and skill at once; only active when correct_score is in Output Markets.",
+  },
+  {
+    key: 'statBaselinesEnabled',
+    title: 'Stat baselines — opponent-adjusted',
+    info: 'Enables the strength-of-schedule adjustment and home/away splits in deep_stats (league/team baselines weighted by how strong each opponent was). The consumer is data-driven, so it stays inert until this is on AND the baseline tables are populated (run the backfill in Data Maintenance). Enriches the shots, clear chances, possession, corners and cards the model receives.',
+  },
+  {
+    key: 'independentModelEnabled',
+    title: 'Independent probability model',
+    info: 'Injects a market-INDEPENDENT probability (own attack/defense goal model → Poisson/Dixon-Coles) for the LLM to contrast against the odds, and computes the value edge (p × best odds − 1) attached to each pick. The `p` that the value axis needs (the odds devig alone gives ~0 edge). Inert until populated — run the Goal Strength backfill in Data Maintenance, then enable. Currently wired into the bridge path.',
+  },
+  {
+    key: 'neutralVenueAwarenessEnabled',
+    title: 'Neutral venue & host awareness',
+    info: 'Tells the model when a match is played at a neutral venue (e.g. the World Cup): no false home/away advantage at neutral sites, and real home advantage for a host nation playing in its own country. Threaded into the payload + prompt across the scheduler and bridge.',
+  },
+];
+
+// Unified, collapsible card for every calibrated-engine layer. The big toggle
+// enables/disables all layers at once; each layer keeps its own toggle, and its
+// long description is hidden behind an (i) button. Collapsed by default.
+function PredictionEngineCard({
+  form,
+  setField,
+}: {
+  form: PredictionConfig;
+  setField: <K extends keyof PredictionConfig>(key: K, value: PredictionConfig[K]) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [openInfo, setOpenInfo] = useState<EngineLayerKey | null>(null);
+
+  const enabledCount = ENGINE_LAYERS.filter((l) => form[l.key]).length;
+  const allOn = enabledCount === ENGINE_LAYERS.length;
+
+  const toggleAll = (target: boolean) => {
+    for (const l of ENGINE_LAYERS) setField(l.key, target);
+  };
+
+  return (
+    <div className="rounded-2xl mb-4" style={{ background: '#121A2B', border: '1px solid rgba(255,255,255,0.08)' }}>
+      <div className="flex items-center gap-3 p-5">
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          aria-expanded={expanded}
+          className="flex items-center gap-3 flex-1 text-left"
+        >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            className="flex-none text-text-muted transition-transform"
+            style={{ transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)' }}
+          >
+            <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          <div>
+            <h2 className="text-sm font-semibold text-text-primary font-sans">Motor Predicta calibrado</h2>
+            <p className="text-xs text-text-muted/60 font-sans mt-0.5">
+              {enabledCount}/{ENGINE_LAYERS.length} capas activas · el interruptor enciende o apaga todas
+            </p>
+          </div>
+        </button>
+        <Toggle value={allOn} onChange={toggleAll} />
+      </div>
+
+      {expanded && (
+        <div className="px-5 pb-2 border-t" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+          {ENGINE_LAYERS.map((layer) => (
+            <div
+              key={layer.key}
+              className="py-3 border-b last:border-0"
+              style={{ borderColor: 'rgba(255,255,255,0.06)' }}
+            >
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-text-secondary font-sans flex-1">{layer.title}</span>
+                <button
+                  type="button"
+                  onClick={() => setOpenInfo((cur) => (cur === layer.key ? null : layer.key))}
+                  aria-label={`What does "${layer.title}" do?`}
+                  aria-expanded={openInfo === layer.key}
+                  className={`flex h-5 w-5 flex-none items-center justify-center rounded-full border text-[11px] font-semibold transition-colors ${
+                    openInfo === layer.key
+                      ? 'border-primary text-primary'
+                      : 'border-border text-text-muted hover:text-text-primary'
+                  }`}
+                >
+                  i
+                </button>
+                <Toggle value={form[layer.key]} onChange={(v) => setField(layer.key, v)} />
+              </div>
+              {openInfo === layer.key && (
+                <p className="text-xs text-text-muted/70 font-sans mt-2 leading-relaxed">{layer.info}</p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -455,6 +587,7 @@ function ConfigPageInner() {
       statBaselinesEnabled: cfg.statBaselinesEnabled ?? false,
       independentModelEnabled: cfg.independentModelEnabled ?? false,
       calibrationEnabled: cfg.calibrationEnabled ?? false,
+      neutralVenueAwarenessEnabled: cfg.neutralVenueAwarenessEnabled ?? false,
       llmTimeoutSeconds: cfg.llmTimeoutSeconds ?? 30,
       predictionWindowMinutes: cfg.predictionWindowMinutes ?? 0,
       featuredLeagueIds: cfg.featuredLeagueIds ?? [39, 140, 135],
@@ -1019,35 +1152,7 @@ function ConfigPageInner() {
         <MultiCheckbox options={MARKETS} value={activeForm.outputMarkets} onChange={(v) => setField('outputMarkets', v)} />
       </SectionCard>
 
-      <SectionCard title="Correct score — statistical model" subtitle="Anchors the correct_score market to an odds-derived Poisson/Dixon-Coles distribution. Corrects the LLM's bias toward inflating the favorite's scoreline. Backtested on 368 settled matches: exact-score hit rate 8.7% → 14.9%. Affects the scheduler, bridge and skill at once; only active when correct_score is in Output Markets.">
-        <Field label="Model enabled" subtitle="Injects the suggested score distribution into the payload and the anchoring rules into the prompt">
-          <Toggle value={activeForm.correctScoreModelEnabled ?? false} onChange={(v) => setField('correctScoreModelEnabled', v)} />
-        </Field>
-      </SectionCard>
-
-      <SectionCard title="Market probability anchoring" subtitle="Injects fair (devig) market probabilities from the odds into the payload, with prompt rules that anchor each pick's confidence to the market and stop the model ignoring the draw. Corrects ~15 pts of systemic overconfidence and the anti-draw bias (draw predicted 8.6% vs 26.1% real). Affects the scheduler, bridge and skill at once. Best paired with Sportium influence_predictions for richer, fresher odds.">
-        <Field label="Anchoring enabled" subtitle="Injects market_probabilities into the payload and the anchoring rules into the prompt">
-          <Toggle value={activeForm.marketProbabilityAnchoringEnabled ?? false} onChange={(v) => setField('marketProbabilityAnchoringEnabled', v)} />
-        </Field>
-      </SectionCard>
-
-      <SectionCard title="Stat baselines — opponent-adjusted" subtitle="Enables the strength-of-schedule adjustment and home/away splits in deep_stats (league/team baselines weighted by how strong each opponent was). The consumer is data-driven, so it stays inert until this is on AND the baseline tables are populated (run the backfill in Data Maintenance). Enriches the shots, clear chances, possession, corners and cards the model receives.">
-        <Field label="Baselines enabled" subtitle="Gates the baseline writes + the opponent/venue adjustment used to enrich deep_stats">
-          <Toggle value={activeForm.statBaselinesEnabled ?? false} onChange={(v) => setField('statBaselinesEnabled', v)} />
-        </Field>
-      </SectionCard>
-
-      <SectionCard title="Independent probability model" subtitle="Injects a market-INDEPENDENT probability (own attack/defense goal model → Poisson/Dixon-Coles) for the LLM to contrast against the odds, and computes the value edge (p × best odds − 1) attached to each pick. The `p` that the value axis needs (the odds devig alone gives ~0 edge). Inert until populated — run the Goal Strength backfill in Data Maintenance, then enable. Currently wired into the bridge path.">
-        <Field label="Independent model enabled" subtitle="Gates the goal-strength fit writes (settlement + backfill), the independent_model_probability in the payload, and the value edge on picks">
-          <Toggle value={activeForm.independentModelEnabled ?? false} onChange={(v) => setField('independentModelEnabled', v)} />
-        </Field>
-      </SectionCard>
-
-      <SectionCard title="Confidence calibration" subtitle="Remaps the LLM's declared confidence to the empirical winrate (per market and per model) using the calibration map built from settled picks. Corrects the systemic over-confidence. Conservative: only ever lowers confidence, never raises it. Inert until the map is built — run the Calibration rebuild in Data Maintenance, then enable.">
-        <Field label="Calibration enabled" subtitle="Remaps confidence to the calibrated value at predict time (min of raw and calibrated)">
-          <Toggle value={activeForm.calibrationEnabled ?? false} onChange={(v) => setField('calibrationEnabled', v)} />
-        </Field>
-      </SectionCard>
+      <PredictionEngineCard form={activeForm} setField={setField} />
 
       <SectionCard title="Input Data Fields" subtitle="Data sources the model receives to generate predictions">
         <MultiCheckbox options={DATA_FIELDS} value={activeForm.inputDataFields} onChange={(v) => setField('inputDataFields', v)} />
