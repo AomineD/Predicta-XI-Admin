@@ -1,6 +1,7 @@
 'use client';
 
 import { Suspense, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
@@ -10,7 +11,7 @@ import { Tabs } from '@/components/ui/Tabs';
 import { SectionCard, Field, Toggle, NumInput } from '@/components/ui/form-controls';
 import { QuinielaSubnav } from '@/components/quinielas/QuinielaSubnav';
 import { formatDateTime } from '@/lib/utils';
-import { Ban, Trophy, Users, XCircle } from 'lucide-react';
+import { Ban, ListChecks, Trophy, Users, XCircle } from 'lucide-react';
 
 /* ── bounds (mirror of quiniela-groups.constants.ts in the backend) ────────── */
 
@@ -645,9 +646,17 @@ function GroupDetailModal({ id, onClose }: { id: string; onClose: () => void }) 
                   )}
                 </div>
               </div>
-              <button type="button" onClick={onClose} className="p-1 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-3">
-                <XCircle size={20} />
-              </button>
+              <div className="flex items-center gap-2 flex-none">
+                <Link
+                  href={`/quinielas/social/groups/${g.id}`}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-sans text-primary hover:bg-primary/10 transition-colors"
+                >
+                  <ListChecks size={14} /> Ver picks
+                </Link>
+                <button type="button" onClick={onClose} className="p-1 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-3">
+                  <XCircle size={20} />
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3 text-sm">
