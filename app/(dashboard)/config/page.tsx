@@ -817,6 +817,14 @@ function ConfigPageInner() {
     recommendedVersion: string | null;
     socialEnabled: boolean;
     combinadaSharesEnabled: boolean;
+    socialXEnabled: boolean;
+    socialXUrl: string;
+    socialFacebookEnabled: boolean;
+    socialFacebookUrl: string;
+    socialTelegramEnabled: boolean;
+    socialTelegramUrl: string;
+    socialInstagramEnabled: boolean;
+    socialInstagramUrl: string;
     liveTrackerEnabled: boolean;
     homeAnnouncementsEnabled: boolean;
   }>({
@@ -887,23 +895,46 @@ function ConfigPageInner() {
 
   // ── Social features (credits_config, partial update) ──
   // Master switch for the whole social structure (friends, quiniela invites) plus
-  // combinada sharing. They live on the credits_config row but are NOT credit
-  // economy, so they're edited here (not on the Credits page). Partial PUT of only
-  // these two fields, so it never touches the rest of the config.
-  const [socialForm, setSocialForm] = useState<{ socialEnabled: boolean; combinadaSharesEnabled: boolean } | null>(null);
+  // combinada sharing AND the social-media links (X / Facebook / Telegram /
+  // Instagram) shown in the app's Settings → Support. They live on the
+  // credits_config row but are NOT credit economy, so they're edited here.
+  // Partial PUT of only these fields, so it never touches the rest of the config.
+  type SocialForm = {
+    socialEnabled: boolean;
+    combinadaSharesEnabled: boolean;
+    socialXEnabled: boolean;
+    socialXUrl: string;
+    socialFacebookEnabled: boolean;
+    socialFacebookUrl: string;
+    socialTelegramEnabled: boolean;
+    socialTelegramUrl: string;
+    socialInstagramEnabled: boolean;
+    socialInstagramUrl: string;
+  };
+  const [socialForm, setSocialForm] = useState<SocialForm | null>(null);
   const [socialMessage, setSocialMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const socialInitial = useMemo(
+  const socialInitial = useMemo<SocialForm | null>(
     () =>
       maintCfg
-        ? { socialEnabled: maintCfg.socialEnabled, combinadaSharesEnabled: maintCfg.combinadaSharesEnabled }
+        ? {
+            socialEnabled: maintCfg.socialEnabled,
+            combinadaSharesEnabled: maintCfg.combinadaSharesEnabled,
+            socialXEnabled: maintCfg.socialXEnabled,
+            socialXUrl: maintCfg.socialXUrl ?? '',
+            socialFacebookEnabled: maintCfg.socialFacebookEnabled,
+            socialFacebookUrl: maintCfg.socialFacebookUrl ?? '',
+            socialTelegramEnabled: maintCfg.socialTelegramEnabled,
+            socialTelegramUrl: maintCfg.socialTelegramUrl ?? '',
+            socialInstagramEnabled: maintCfg.socialInstagramEnabled,
+            socialInstagramUrl: maintCfg.socialInstagramUrl ?? '',
+          }
         : null,
     [maintCfg],
   );
   const social = socialForm ?? socialInitial;
 
   const saveSocial = useMutation({
-    mutationFn: (body: { socialEnabled: boolean; combinadaSharesEnabled: boolean }) =>
-      api.put('/admin/credits-config', body),
+    mutationFn: (body: SocialForm) => api.put('/admin/credits-config', body),
     onSuccess: () => {
       setSocialForm(null);
       setSocialMessage({ type: 'success', text: 'Social settings saved.' });
@@ -1891,16 +1922,38 @@ function ConfigPageInner() {
             <Field label="Combinada sharing" subtitle="Lets a user share a combinada with friends (each friend gets their own copy to compete). Off = the app hides the share CTA and the endpoints respond 403. Needs the master switch on to be useful.">
               <Toggle value={social.combinadaSharesEnabled} onChange={(v) => setSocialForm({ ...social, combinadaSharesEnabled: v })} />
             </Field>
+
+            {/* Social-media links (app Settings → Support). Each network: a
+                visibility toggle + its URL. The app shows a link only when the
+                master switch is on, the network is enabled and its URL is set. */}
+            <div className="pt-2 border-t border-border mt-1">
+              <p className="text-sm font-sans text-text-primary font-medium">Social links (Settings → Support)</p>
+              <p className="text-xs font-sans text-text-muted mb-2">Per-network access shown in the app. Needs the master switch on. URL must be http(s); blank hides it.</p>
+              {([
+                { key: 'x', label: 'X (Twitter)', enabledKey: 'socialXEnabled', urlKey: 'socialXUrl', placeholder: 'https://x.com/predictaxi' },
+                { key: 'facebook', label: 'Facebook', enabledKey: 'socialFacebookEnabled', urlKey: 'socialFacebookUrl', placeholder: 'https://facebook.com/predictaxi' },
+                { key: 'telegram', label: 'Telegram', enabledKey: 'socialTelegramEnabled', urlKey: 'socialTelegramUrl', placeholder: 'https://t.me/predictaxi' },
+                { key: 'instagram', label: 'Instagram', enabledKey: 'socialInstagramEnabled', urlKey: 'socialInstagramUrl', placeholder: 'https://instagram.com/predictaxi' },
+              ] as const).map((net) => (
+                <div key={net.key} className="flex items-center gap-3 py-2">
+                  <span className="w-28 shrink-0 text-sm font-sans text-text-primary">{net.label}</span>
+                  <Toggle value={social[net.enabledKey]} onChange={(v) => setSocialForm({ ...social, [net.enabledKey]: v })} />
+                  <input
+                    type="text"
+                    value={social[net.urlKey]}
+                    onChange={(e) => setSocialForm({ ...social, [net.urlKey]: e.target.value })}
+                    placeholder={net.placeholder}
+                    className="h-9 flex-1 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none placeholder:text-text-muted"
+                  />
+                </div>
+              ))}
+            </div>
+
             <div className="flex items-center gap-3 pt-3">
               <Button
                 variant="primary"
                 loading={saveSocial.isPending}
-                onClick={() =>
-                  saveSocial.mutate({
-                    socialEnabled: social.socialEnabled,
-                    combinadaSharesEnabled: social.combinadaSharesEnabled,
-                  })
-                }
+                onClick={() => saveSocial.mutate(social)}
               >
                 Save social
               </Button>
