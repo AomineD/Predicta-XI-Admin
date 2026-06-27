@@ -60,6 +60,10 @@ interface PredictionConfig {
   totalsUnifiedEnabled: boolean;
   // Selector floors (round-tripped; tuned via API). Optional in the admin form.
   totalsSelector?: { confFloor: number; confCeiling: number; oddsFloor: number };
+  // Quiniela IA: master switch + motor para la generación de llaves de eliminatoria
+  // ronda por ronda (automatización de la quiniela de la IA).
+  quinielaKnockoutAutomationEnabled: boolean;
+  quinielaKnockoutEngine: 'llm' | 'claude_routine';
   llmTimeoutSeconds: number;
   predictionWindowMinutes: number;
   featuredLeagueIds: number[];
@@ -600,6 +604,8 @@ function ConfigPageInner() {
       calibrationEnabled: cfg.calibrationEnabled ?? false,
       neutralVenueAwarenessEnabled: cfg.neutralVenueAwarenessEnabled ?? false,
       totalsUnifiedEnabled: cfg.totalsUnifiedEnabled ?? false,
+      quinielaKnockoutAutomationEnabled: cfg.quinielaKnockoutAutomationEnabled ?? false,
+      quinielaKnockoutEngine: cfg.quinielaKnockoutEngine ?? 'claude_routine',
       llmTimeoutSeconds: cfg.llmTimeoutSeconds ?? 30,
       predictionWindowMinutes: cfg.predictionWindowMinutes ?? 0,
       featuredLeagueIds: cfg.featuredLeagueIds ?? [39, 140, 135],
@@ -1357,6 +1363,29 @@ function ConfigPageInner() {
 
         <Field label="Enabled" subtitle="Re-sync team form, squad, and league standings after each settled match">
           <Toggle value={activeForm.teamRefreshEnabled ?? false} onChange={(v) => setField('teamRefreshEnabled', v)} />
+        </Field>
+      </SectionCard>
+
+      {/* Quiniela IA — knockout automation (prediction_config) */}
+      <SectionCard
+        title="Quiniela IA — llaves de eliminatoria"
+        subtitle="Genera las picks de eliminatorias de la quiniela de la IA ronda por ronda, de forma automática."
+      >
+        <Field label="Automatización de llaves (quiniela IA)" subtitle="Genera las picks de eliminatorias ronda por ronda automáticamente.">
+          <Toggle
+            value={activeForm.quinielaKnockoutAutomationEnabled}
+            onChange={(v) => setField('quinielaKnockoutAutomationEnabled', v)}
+          />
+        </Field>
+        <Field label="Motor de generación de llaves" subtitle="Quién genera cada ronda: el routine de Claude (recomendado) o el modelo LLM configurado.">
+          <select
+            value={activeForm.quinielaKnockoutEngine}
+            onChange={(e) => setField('quinielaKnockoutEngine', e.target.value as 'llm' | 'claude_routine')}
+            className="h-9 w-44 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
+          >
+            <option value="claude_routine">Routine de Claude</option>
+            <option value="llm">LLM configurado</option>
+          </select>
         </Field>
       </SectionCard>
 
