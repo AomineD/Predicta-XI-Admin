@@ -55,6 +55,11 @@ interface PredictionConfig {
   // Neutral-venue & host awareness (World Cup): no false home/away at neutral
   // sites; real home advantage for a host nation playing in its own country.
   neutralVenueAwarenessEnabled: boolean;
+  // Unified totals (idea #2): replaces the fixed over/under 2.5 + 1.5 markets with
+  // a single `total_goals` whose line the engine picks (Poisson selector + calibration).
+  totalsUnifiedEnabled: boolean;
+  // Selector floors (round-tripped; tuned via API). Optional in the admin form.
+  totalsSelector?: { confFloor: number; confCeiling: number; oddsFloor: number };
   llmTimeoutSeconds: number;
   predictionWindowMinutes: number;
   featuredLeagueIds: number[];
@@ -212,7 +217,8 @@ type EngineLayerKey =
   | 'correctScoreModelEnabled'
   | 'statBaselinesEnabled'
   | 'independentModelEnabled'
-  | 'neutralVenueAwarenessEnabled';
+  | 'neutralVenueAwarenessEnabled'
+  | 'totalsUnifiedEnabled';
 
 // The long descriptions used to live inline; they now sit behind the (i) button.
 const ENGINE_LAYERS: Array<{ key: EngineLayerKey; title: string; info: string }> = [
@@ -245,6 +251,11 @@ const ENGINE_LAYERS: Array<{ key: EngineLayerKey; title: string; info: string }>
     key: 'neutralVenueAwarenessEnabled',
     title: 'Neutral venue & host awareness',
     info: 'Tells the model when a match is played at a neutral venue (e.g. the World Cup): no false home/away advantage at neutral sites, and real home advantage for a host nation playing in its own country. Threaded into the payload + prompt across the scheduler and bridge.',
+  },
+  {
+    key: 'totalsUnifiedEnabled',
+    title: 'Totales unificados (1 mercado de goles)',
+    info: 'Reemplaza los mercados fijos over/under 2.5 + 1.5 por UN solo mercado total_goals cuya línea+lado elige el motor (selector Poisson sobre las cuotas multi-línea + calibración), no el LLM. Backtest 707 partidos: 70.3% de acierto a cuota media 1.35, le gana al fijo-2.5 (59.9%) y diversifica líneas. Antes de encenderlo en serio: agrega total_goals a los markets de los tiers (si no, queda bloqueado hasta el settlement) y publica un AAB con el render nuevo. Afecta scheduler y bridge a la vez; reversible (con OFF, comportamiento actual sin cambios).',
   },
 ];
 
@@ -588,6 +599,7 @@ function ConfigPageInner() {
       independentModelEnabled: cfg.independentModelEnabled ?? false,
       calibrationEnabled: cfg.calibrationEnabled ?? false,
       neutralVenueAwarenessEnabled: cfg.neutralVenueAwarenessEnabled ?? false,
+      totalsUnifiedEnabled: cfg.totalsUnifiedEnabled ?? false,
       llmTimeoutSeconds: cfg.llmTimeoutSeconds ?? 30,
       predictionWindowMinutes: cfg.predictionWindowMinutes ?? 0,
       featuredLeagueIds: cfg.featuredLeagueIds ?? [39, 140, 135],
