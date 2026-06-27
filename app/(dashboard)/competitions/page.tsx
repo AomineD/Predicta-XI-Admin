@@ -20,6 +20,9 @@ interface Competition {
   currentSeasonYear: string | null;
   supportsQuiniela: boolean;
   quinielaFormat: 'group_then_knockout' | 'league_then_knockout' | 'single_phase' | null;
+  // Formato de llave para la quiniela de eliminatorias: a un partido o ida/vuelta.
+  // Null = la competición NO se ofrece para la quiniela de llaves.
+  knockoutLegFormat: 'single_match' | 'two_legged' | null;
   historicalContext: string | null;
   isNationalTeamCompetition: boolean;
 }
@@ -34,6 +37,7 @@ type CompetitionUpdate = Partial<Pick<Competition,
   | 'currentSeasonYear'
   | 'supportsQuiniela'
   | 'quinielaFormat'
+  | 'knockoutLegFormat'
   | 'historicalContext'
   | 'isNationalTeamCompetition'
 >>;
@@ -131,6 +135,7 @@ function CompetitionDetailsEditor({
   const [currentSeasonYear, setCurrentSeasonYear] = useState(comp.currentSeasonYear ?? '');
   const [supportsQuiniela, setSupportsQuiniela] = useState(comp.supportsQuiniela);
   const [quinielaFormat, setQuinielaFormat] = useState<Competition['quinielaFormat']>(comp.quinielaFormat);
+  const [knockoutLegFormat, setKnockoutLegFormat] = useState<Competition['knockoutLegFormat']>(comp.knockoutLegFormat);
   const [historicalContext, setHistoricalContext] = useState(comp.historicalContext ?? '');
   const [isNationalTeamCompetition, setIsNationalTeamCompetition] = useState(comp.isNationalTeamCompetition);
 
@@ -241,6 +246,19 @@ function CompetitionDetailsEditor({
         </label>
 
         <label className="block">
+          <span className="text-xs text-text-muted font-sans">Knockout leg format (quiniela de llaves)</span>
+          <select
+            value={knockoutLegFormat ?? ''}
+            onChange={(e) => setKnockoutLegFormat((e.target.value || null) as Competition['knockoutLegFormat'])}
+            className="mt-1 w-full h-9 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
+          >
+            <option value="">(none — no se ofrece quiniela de llaves)</option>
+            <option value="single_match">single_match (eliminación directa, 1 partido)</option>
+            <option value="two_legged">two_legged (ida y vuelta)</option>
+          </select>
+        </label>
+
+        <label className="block">
           <span className="text-xs text-text-muted font-sans flex justify-between">
             <span>Historical context (LLM prompt)</span>
             <span className={historicalContext.length > 12000 ? 'text-danger' : 'text-text-muted'}>
@@ -268,6 +286,7 @@ function CompetitionDetailsEditor({
               currentSeasonYear: currentSeasonYear.trim() ? currentSeasonYear.trim() : null,
               supportsQuiniela,
               quinielaFormat,
+              knockoutLegFormat,
               historicalContext: historicalContext.trim() ? historicalContext : null,
               isNationalTeamCompetition,
             })}
