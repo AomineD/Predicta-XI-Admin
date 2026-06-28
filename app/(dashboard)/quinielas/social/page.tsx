@@ -39,6 +39,7 @@ interface SocialConfig {
   enabled: boolean;
   createCostCompetition: number;
   createCostWeekly: number;
+  createCostKnockout: number;
   prizeWinnerCredits: number;
   prizePodiumCredits: Record<string, number>;
   prizeWeeklyWinnerCredits: number;
@@ -311,12 +312,15 @@ function ConfigTab() {
         </Field>
       </SectionCard>
 
-      <SectionCard title="Creation costs" subtitle="Credits the owner pays to create a group (free for premium+ per entitlement logic)">
+      <SectionCard title="Creation costs" subtitle="Credits the owner pays to create a group (free for premium+ per entitlement logic — except knockout, which always charges)">
         <Field label="Weekly group" subtitle="weekly mode">
           <NumInput value={f.createCostWeekly} onChange={(v) => set('createCostWeekly', v)} max={MAX_CREATE_COST} />
         </Field>
         <Field label="Competition group" subtitle="competition mode">
           <NumInput value={f.createCostCompetition} onChange={(v) => set('createCostCompetition', v)} max={MAX_CREATE_COST} />
+        </Field>
+        <Field label="Knockout group" subtitle="knockout mode — always charged, even for PRO/CLUB (no subscription exemption)">
+          <NumInput value={f.createCostKnockout} onChange={(v) => set('createCostKnockout', v)} max={MAX_CREATE_COST} />
         </Field>
       </SectionCard>
 
