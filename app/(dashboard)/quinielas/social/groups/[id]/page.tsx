@@ -20,6 +20,15 @@ interface Fixture {
   finished: boolean;
   result: { home: number; away: number } | null;
   editable: boolean;
+  // ── Knockout-only ──
+  matchId?: number;
+  homeTeamId?: number | null;
+  awayTeamId?: number | null;
+  roundLabel?: string;
+  regResult?: { home: number; away: number } | null;
+  penResult?: { home: number; away: number } | null;
+  advancerTeamId?: number | null;
+  canSetResult?: boolean;
 }
 
 interface Pick {
@@ -72,6 +81,27 @@ function formatSelection(sel: Record<string, unknown> | undefined): string | nul
   return JSON.stringify(sel);
 }
 
+/** Render a knockout "who advances" pick: maps the picked teams.id back to the
+ *  tie's home/away name. Falls back to the generic renderer for other shapes. */
+function formatKnockoutSelection(sel: Record<string, unknown> | undefined, f: Fixture): string | null {
+  if (!sel) return null;
+  const id = sel.advancingTeamId;
+  if (typeof id === 'number') {
+    if (id === f.homeTeamId) return f.home;
+    if (id === f.awayTeamId) return f.away;
+    return `#${id}`;
+  }
+  return formatSelection(sel);
+}
+
+/** Name of the team that advances from a knockout tie, for the column header. */
+function advancerName(f: Fixture): string | null {
+  if (f.advancerTeamId == null) return null;
+  if (f.advancerTeamId === f.homeTeamId) return f.home;
+  if (f.advancerTeamId === f.awayTeamId) return f.away;
+  return null;
+}
+
 const GROUP_STATUS_STYLES: Record<string, string> = {
   open: 'bg-secondary/15 text-secondary',
   locked: 'bg-warning/15 text-warning',
@@ -94,6 +124,7 @@ function StatusPill({ status }: { status: string }) {
 export default function GroupPicksPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const [editor, setEditor] = useState<{ userId?: string; label: string } | null>(null);
+  const [koEditor, setKoEditor] = useState<Fixture | null>(null);
 
   const picksQ = useQuery({
     queryKey: ['admin-group-picks', id],
@@ -102,6 +133,7 @@ export default function GroupPicksPage({ params }: { params: Promise<{ id: strin
   });
 
   const data = picksQ.data;
+  const isKnockout = data?.type === 'knockout';
 
   return (
     <div className="p-8">
@@ -147,7 +179,17 @@ export default function GroupPicksPage({ params }: { params: Promise<{ id: strin
           </span>
         </div>
       )}
-      {data && data.type !== 'weekly' && (
+      {isKnockout && (
+        <div className="flex items-center gap-2 mb-4 rounded-xl px-4 py-3 bg-primary/10 border border-primary/20">
+          <Trophy size={15} className="text-primary flex-none" />
+          <span className="text-xs text-text-secondary font-sans">
+            Quiniela de llaves. Puedes <strong className="text-text-primary">colocar o corregir el resultado</strong> de
+            cada cruce desde su columna (botón <strong className="text-text-primary">Resultado</strong>): liquida los
+            puntos y avanza el cuadro al instante, sin esperar a la sincronización automática.
+          </span>
+        </div>
+      )}
+      {data && data.type !== 'weekly' && !isKnockout && (
         <div className="flex items-center gap-2 mb-4 rounded-xl px-4 py-3 bg-surface-2 border border-border">
           <AlertTriangle size={15} className="text-text-muted flex-none" />
           <span className="text-xs text-text-muted font-sans">
@@ -156,7 +198,13 @@ export default function GroupPicksPage({ params }: { params: Promise<{ id: strin
         </div>
       )}
 
-      {data && <PicksMatrixTable data={data} onEditMember={(m) => setEditor({ userId: m.userId, label: m.displayName ?? m.email ?? m.userId })} />}
+      {data && (
+        <PicksMatrixTable
+          data={data}
+          onEditMember={(m) => setEditor({ userId: m.userId, label: m.displayName ?? m.email ?? m.userId })}
+          onSetResult={isKnockout ? (f) => setKoEditor(f) : undefined}
+        />
+      )}
 
       {editor && data && (
         <ForcePicksModal
@@ -167,13 +215,25 @@ export default function GroupPicksPage({ params }: { params: Promise<{ id: strin
           onClose={() => setEditor(null)}
         />
       )}
+
+      {koEditor && (
+        <SetKnockoutResultModal groupId={id} fixture={koEditor} onClose={() => setKoEditor(null)} />
+      )}
     </div>
   );
 }
 
 /* ── matrix table ──────────────────────────────────────────────────────────── */
 
-function PicksMatrixTable({ data, onEditMember }: { data: PicksMatrix; onEditMember: (m: Member) => void }) {
+function PicksMatrixTable({
+  data,
+  onEditMember,
+  onSetResult,
+}: {
+  data: PicksMatrix;
+  onEditMember: (m: Member) => void;
+  onSetResult?: (f: Fixture) => void;
+}) {
   if (data.fixtures.length === 0) {
     return <div className="text-sm text-text-muted font-sans py-12 text-center">Este grupo no tiene partidos/categorías.</div>;
   }
@@ -195,21 +255,40 @@ function PicksMatrixTable({ data, onEditMember }: { data: PicksMatrix; onEditMem
               >
                 Miembro
               </th>
-              {data.fixtures.map((f) => (
-                <th key={f.fixtureKey} className="px-3 py-2 text-center text-xs font-medium text-text-secondary min-w-[120px] align-bottom">
-                  <div className="font-semibold text-text-primary leading-tight">{f.home ?? f.label}</div>
-                  {f.away != null && <div className="text-text-muted leading-tight">{f.away}</div>}
-                  <div className="mt-1 text-[10px] text-text-muted/70 font-normal normal-case">
-                    {f.finished && f.result ? (
-                      <span className="text-success font-semibold">FT {f.result.home}-{f.result.away}</span>
-                    ) : f.kickoffAt ? (
-                      formatDateTime(f.kickoffAt)
-                    ) : (
-                      f.status ?? ''
+              {data.fixtures.map((f) => {
+                const adv = onSetResult ? advancerName(f) : null;
+                return (
+                  <th key={f.fixtureKey} className="px-3 py-2 text-center text-xs font-medium text-text-secondary min-w-[140px] align-bottom">
+                    {f.roundLabel && (
+                      <div className="text-[9px] uppercase tracking-wider text-text-muted/70 font-semibold mb-0.5">{f.roundLabel}</div>
                     )}
-                  </div>
-                </th>
-              ))}
+                    <div className="font-semibold text-text-primary leading-tight">{f.home ?? f.label}</div>
+                    {f.away != null && <div className="text-text-muted leading-tight">{f.away}</div>}
+                    <div className="mt-1 text-[10px] text-text-muted/70 font-normal normal-case">
+                      {f.finished && f.result ? (
+                        <span className="text-success font-semibold">
+                          {f.status === 'PEN' ? 'Pen' : f.status === 'AET' ? 'Pró' : 'FT'} {f.result.home}-{f.result.away}
+                        </span>
+                      ) : f.kickoffAt ? (
+                        formatDateTime(f.kickoffAt)
+                      ) : (
+                        f.status ?? ''
+                      )}
+                    </div>
+                    {adv && <div className="mt-0.5 text-[10px] text-primary font-semibold normal-case">Avanza: {adv}</div>}
+                    {onSetResult && f.canSetResult && (
+                      <button
+                        type="button"
+                        onClick={() => onSetResult(f)}
+                        title="Colocar / corregir el resultado de este cruce"
+                        className="mt-1.5 inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold text-primary bg-primary/10 hover:bg-primary/20 transition-colors normal-case"
+                      >
+                        <Pencil size={11} /> Resultado
+                      </button>
+                    )}
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>
@@ -248,7 +327,9 @@ function PicksMatrixTable({ data, onEditMember }: { data: PicksMatrix; onEditMem
                 </td>
                 {data.fixtures.map((f) => {
                   const pick = m.picks[f.fixtureKey];
-                  const text = formatSelection(pick?.selection);
+                  const text = data.type === 'knockout'
+                    ? formatKnockoutSelection(pick?.selection, f)
+                    : formatSelection(pick?.selection);
                   const color = pick ? SETTLEMENT_STYLE[pick.settlement] ?? 'text-text-primary' : 'text-text-muted/40';
                   return (
                     <td key={f.fixtureKey} className="px-3 py-3 text-center align-middle">
@@ -426,6 +507,234 @@ function ForcePicksModal({
               Guardar picks
             </Button>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── knockout result modal ─────────────────────────────────────────────────── */
+
+type Decision = 'REG' | 'ET' | 'PEN';
+
+const DECISION_OPTIONS: { value: Decision; label: string }[] = [
+  { value: 'REG', label: '90 minutos' },
+  { value: 'ET', label: 'Prórroga' },
+  { value: 'PEN', label: 'Penales' },
+];
+
+/** Two number inputs "H - A" for one stage's scoreline. */
+function ScoreRow({
+  label,
+  hint,
+  value,
+  onChange,
+}: {
+  label: string;
+  hint?: string;
+  value: ScoreDraft;
+  onChange: (side: 'home' | 'away', v: string) => void;
+}) {
+  return (
+    <div className="flex items-center gap-3 rounded-xl p-3" style={{ background: '#182235', border: '1px solid rgba(255,255,255,0.06)' }}>
+      <div className="flex-1 min-w-0">
+        <div className="text-sm text-text-primary">{label}</div>
+        {hint && <div className="text-[10px] text-text-muted/70 font-sans">{hint}</div>}
+      </div>
+      <input
+        inputMode="numeric"
+        value={value.home}
+        onChange={(e) => onChange('home', e.target.value)}
+        className="h-9 w-12 text-center rounded-lg text-sm bg-surface-2 border border-border text-text-primary font-mono"
+      />
+      <span className="text-text-muted">-</span>
+      <input
+        inputMode="numeric"
+        value={value.away}
+        onChange={(e) => onChange('away', e.target.value)}
+        className="h-9 w-12 text-center rounded-lg text-sm bg-surface-2 border border-border text-text-primary font-mono"
+      />
+    </div>
+  );
+}
+
+function SetKnockoutResultModal({
+  groupId,
+  fixture,
+  onClose,
+}: {
+  groupId: string;
+  fixture: Fixture;
+  onClose: () => void;
+}) {
+  const qc = useQueryClient();
+
+  const num = (n: number | undefined | null) => (typeof n === 'number' ? String(n) : '');
+  const [decision, setDecision] = useState<Decision>(
+    fixture.status === 'PEN' ? 'PEN' : fixture.status === 'AET' ? 'ET' : 'REG',
+  );
+  const [reg, setReg] = useState<ScoreDraft>(() => ({
+    home: num(fixture.regResult?.home ?? (fixture.status === 'FT' ? fixture.result?.home : undefined)),
+    away: num(fixture.regResult?.away ?? (fixture.status === 'FT' ? fixture.result?.away : undefined)),
+  }));
+  const [et, setEt] = useState<ScoreDraft>(() => ({
+    home: num(fixture.status === 'AET' ? fixture.result?.home : undefined),
+    away: num(fixture.status === 'AET' ? fixture.result?.away : undefined),
+  }));
+  const [pen, setPen] = useState<ScoreDraft>(() => ({
+    home: num(fixture.penResult?.home),
+    away: num(fixture.penResult?.away),
+  }));
+
+  const clamp = (v: string) => v.replace(/[^0-9]/g, '').slice(0, 2);
+  const setStage = (set: (fn: (d: ScoreDraft) => ScoreDraft) => void) => (side: 'home' | 'away', v: string) =>
+    set((d) => ({ ...d, [side]: clamp(v) }));
+
+  const parse = (v: string) => (v === '' ? NaN : Number(v));
+  const rH = parse(reg.home), rA = parse(reg.away);
+  const eH = parse(et.home), eA = parse(et.away);
+  const pH = parse(pen.home), pA = parse(pen.away);
+
+  // Derive the advancer from the deciding stage + validate coherence (mirrors the
+  // backend so the admin gets instant feedback).
+  let advancerSide: 'home' | 'away' | null = null;
+  let error: string | null = null;
+  if (decision === 'REG') {
+    if (Number.isNaN(rH) || Number.isNaN(rA)) error = 'Ingresa el marcador de los 90′.';
+    else if (rH === rA) error = 'Un empate en 90′ no decide; usa prórroga o penales.';
+    else advancerSide = rH > rA ? 'home' : 'away';
+  } else if (decision === 'ET') {
+    if (Number.isNaN(rH) || Number.isNaN(rA)) error = 'Ingresa el marcador de los 90′.';
+    else if (rH !== rA) error = 'En prórroga, los 90′ deben estar empatados.';
+    else if (Number.isNaN(eH) || Number.isNaN(eA)) error = 'Ingresa el marcador de la prórroga.';
+    else if (eH === eA) error = 'Un empate en prórroga no decide; usa penales.';
+    else advancerSide = eH > eA ? 'home' : 'away';
+  } else {
+    if (Number.isNaN(rH) || Number.isNaN(rA)) error = 'Ingresa el marcador de los 90′.';
+    else if (rH !== rA) error = 'En penales, los 90′ deben estar empatados.';
+    else if (et.home !== '' || et.away !== '') {
+      if (Number.isNaN(eH) || Number.isNaN(eA)) error = 'Completa la prórroga o déjala vacía.';
+      else if (eH !== eA) error = 'En penales, la prórroga debe estar empatada.';
+    }
+    if (!error) {
+      if (Number.isNaN(pH) || Number.isNaN(pA)) error = 'Ingresa la tanda de penales.';
+      else if (pH === pA) error = 'La tanda de penales no puede empatar.';
+      else advancerSide = pH > pA ? 'home' : 'away';
+    }
+  }
+
+  const advancerTeamId =
+    advancerSide === 'home' ? fixture.homeTeamId : advancerSide === 'away' ? fixture.awayTeamId : null;
+  const advancerLabel = advancerSide === 'home' ? fixture.home : advancerSide === 'away' ? fixture.away : null;
+
+  const mut = useMutation({
+    mutationFn: () =>
+      api.put<{ matchId: number; status: string; finished: boolean }>(`/admin/groups/${groupId}/knockout-result`, {
+        matchId: fixture.matchId,
+        decision,
+        regHome: rH,
+        regAway: rA,
+        etHome: decision === 'REG' ? null : Number.isNaN(eH) ? null : eH,
+        etAway: decision === 'REG' ? null : Number.isNaN(eA) ? null : eA,
+        penHome: decision === 'PEN' ? pH : null,
+        penAway: decision === 'PEN' ? pA : null,
+        advancerTeamId,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-group-picks', groupId] });
+      qc.invalidateQueries({ queryKey: ['admin-group', groupId] });
+      qc.invalidateQueries({ queryKey: ['admin-groups'] });
+      onClose();
+    },
+  });
+
+  const canSave = !error && advancerTeamId != null && fixture.matchId != null && !mut.isPending;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+      <div
+        className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl p-6 space-y-4"
+        style={{ background: '#121A2B', border: '1px solid rgba(255,255,255,0.08)' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3 className="text-lg font-bold text-text-primary font-sans">Resultado del cruce</h3>
+            <p className="text-xs text-text-muted font-sans mt-0.5">
+              {fixture.roundLabel ? `${fixture.roundLabel} · ` : ''}{fixture.home} vs {fixture.away}
+            </p>
+          </div>
+          <button type="button" onClick={onClose} className="p-1 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-3">
+            <XCircle size={20} />
+          </button>
+        </div>
+
+        {/* Decided by */}
+        <div>
+          <label className="block text-[11px] text-text-muted/70 font-sans uppercase tracking-wider mb-1.5">Se definió en</label>
+          <div className="flex gap-1.5">
+            {DECISION_OPTIONS.map((o) => (
+              <button
+                key={o.value}
+                type="button"
+                onClick={() => setDecision(o.value)}
+                className={`flex-1 h-9 rounded-xl text-xs font-semibold font-sans transition-colors ${
+                  decision === o.value
+                    ? 'bg-primary text-white'
+                    : 'bg-surface-2 text-text-muted hover:text-text-primary border border-border'
+                }`}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Scorelines */}
+        <div className="space-y-2">
+          <ScoreRow label="Marcador 90′" value={reg} onChange={setStage(setReg)} />
+          {(decision === 'ET' || decision === 'PEN') && (
+            <ScoreRow
+              label="Prórroga (resultado final)"
+              hint={decision === 'PEN' ? 'Opcional si no hubo prórroga' : undefined}
+              value={et}
+              onChange={setStage(setEt)}
+            />
+          )}
+          {decision === 'PEN' && <ScoreRow label="Penales" value={pen} onChange={setStage(setPen)} />}
+        </div>
+
+        {/* Advancer readout */}
+        <div
+          className="rounded-xl px-4 py-3 flex items-center gap-2"
+          style={{ background: advancerLabel ? 'rgba(34,197,94,0.10)' : '#182235', border: `1px solid ${advancerLabel ? 'rgba(34,197,94,0.25)' : 'rgba(255,255,255,0.06)'}` }}
+        >
+          <Trophy size={15} className={advancerLabel ? 'text-success' : 'text-text-muted'} />
+          {advancerLabel ? (
+            <span className="text-sm font-sans text-text-primary">
+              Avanza: <strong className="text-success">{advancerLabel}</strong>
+            </span>
+          ) : (
+            <span className="text-xs text-text-muted font-sans">{error ?? 'Completa el marcador para ver quién avanza.'}</span>
+          )}
+        </div>
+
+        {/* Cascade warning */}
+        <div className="flex items-start gap-2 rounded-xl px-3 py-2.5 bg-warning/10 border border-warning/20">
+          <AlertTriangle size={14} className="text-warning flex-none mt-0.5" />
+          <span className="text-[11px] text-warning/90 font-sans leading-snug">
+            Este resultado se escribe en el partido: liquida el cruce en <strong>todos</strong> los grupos de esa
+            competición y cuenta para el historial de aciertos. Úsalo solo cuando el partido realmente terminó.
+          </span>
+        </div>
+
+        {mut.error && <p className="text-sm text-danger font-sans">{(mut.error as Error).message}</p>}
+
+        <div className="flex items-center justify-end gap-2 pt-2 border-t" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
+          <Button variant="ghost" size="sm" onClick={onClose}>Cancelar</Button>
+          <Button variant="primary" size="sm" loading={mut.isPending} disabled={!canSave} onClick={() => mut.mutate()}>
+            Guardar resultado
+          </Button>
         </div>
       </div>
     </div>
