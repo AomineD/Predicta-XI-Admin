@@ -515,32 +515,19 @@ function ForcePicksModal({
 
 /* ── knockout result modal ─────────────────────────────────────────────────── */
 
-type Decision = 'REG' | 'ET' | 'PEN';
-
-const DECISION_OPTIONS: { value: Decision; label: string }[] = [
-  { value: 'REG', label: '90 minutos' },
-  { value: 'ET', label: 'Prórroga' },
-  { value: 'PEN', label: 'Penales' },
-];
-
-/** Two number inputs "H - A" for one stage's scoreline. */
+/** Two number inputs "H - A" for the 90' scoreline. */
 function ScoreRow({
   label,
-  hint,
   value,
   onChange,
 }: {
   label: string;
-  hint?: string;
   value: ScoreDraft;
   onChange: (side: 'home' | 'away', v: string) => void;
 }) {
   return (
     <div className="flex items-center gap-3 rounded-xl p-3" style={{ background: '#182235', border: '1px solid rgba(255,255,255,0.06)' }}>
-      <div className="flex-1 min-w-0">
-        <div className="text-sm text-text-primary">{label}</div>
-        {hint && <div className="text-[10px] text-text-muted/70 font-sans">{hint}</div>}
-      </div>
+      <div className="flex-1 min-w-0 text-sm text-text-primary">{label}</div>
       <input
         inputMode="numeric"
         value={value.home}
@@ -558,6 +545,11 @@ function ScoreRow({
   );
 }
 
+/**
+ * Coloca/corrige el resultado de un cruce KO con el MISMO modelo que la app:
+ * marcador de 90′ + quién avanza + si fue a prórroga/penales (switches, no
+ * marcadores). Empate a 90′ ⇒ prórroga implícita; los penales la implican.
+ */
 function SetKnockoutResultModal({
   groupId,
   fixture,
@@ -570,85 +562,116 @@ function SetKnockoutResultModal({
   const qc = useQueryClient();
 
   const num = (n: number | undefined | null) => (typeof n === 'number' ? String(n) : '');
-  const [decision, setDecision] = useState<Decision>(
-    fixture.status === 'PEN' ? 'PEN' : fixture.status === 'AET' ? 'ET' : 'REG',
-  );
   const [reg, setReg] = useState<ScoreDraft>(() => ({
     home: num(fixture.regResult?.home ?? (fixture.status === 'FT' ? fixture.result?.home : undefined)),
     away: num(fixture.regResult?.away ?? (fixture.status === 'FT' ? fixture.result?.away : undefined)),
   }));
-  const [et, setEt] = useState<ScoreDraft>(() => ({
-    home: num(fixture.status === 'AET' ? fixture.result?.home : undefined),
-    away: num(fixture.status === 'AET' ? fixture.result?.away : undefined),
-  }));
-  const [pen, setPen] = useState<ScoreDraft>(() => ({
-    home: num(fixture.penResult?.home),
-    away: num(fixture.penResult?.away),
-  }));
+  // Quién avanza (lo decide la prórroga/penales en un empate). Precarga el actual.
+  const [advancingTeamId, setAdvancingTeamId] = useState<number | null>(fixture.advancerTeamId ?? null);
+  // ¿Se definió en penales? Solo aplica con empate a 90′.
+  const [penalties, setPenalties] = useState<boolean>(fixture.status === 'PEN');
+  // Cuando se corrige un grupo YA liquidado: se recalculan los puntos pero NO los
+  // premios ya pagados. Mantenemos el modal abierto con un aviso (no cierra en seco).
+  const [settledNotice, setSettledNotice] = useState(false);
 
   const clamp = (v: string) => v.replace(/[^0-9]/g, '').slice(0, 2);
-  const setStage = (set: (fn: (d: ScoreDraft) => ScoreDraft) => void) => (side: 'home' | 'away', v: string) =>
-    set((d) => ({ ...d, [side]: clamp(v) }));
+  const setScore = (side: 'home' | 'away', v: string) => setReg((d) => ({ ...d, [side]: clamp(v) }));
 
   const parse = (v: string) => (v === '' ? NaN : Number(v));
-  const rH = parse(reg.home), rA = parse(reg.away);
-  const eH = parse(et.home), eA = parse(et.away);
-  const pH = parse(pen.home), pA = parse(pen.away);
+  const rH = parse(reg.home);
+  const rA = parse(reg.away);
+  const bothFilled = !Number.isNaN(rH) && !Number.isNaN(rA);
+  const isDraw = bothFilled && rH === rA;
+  const hasWinner = bothFilled && rH !== rA;
 
-  // Derive the advancer from the deciding stage + validate coherence (mirrors the
-  // backend so the admin gets instant feedback).
-  let advancerSide: 'home' | 'away' | null = null;
+  // Con ganador a los 90′ el que avanza ES el ganador (forzado). Con empate, lo
+  // decide la prórroga/penales y lo elige el admin con los chips.
+  const winnerTeamId: number | null = hasWinner
+    ? (rH > rA ? fixture.homeTeamId ?? null : fixture.awayTeamId ?? null)
+    : null;
+  const effectiveAdvancer = hasWinner ? winnerTeamId : advancingTeamId;
+
   let error: string | null = null;
-  if (decision === 'REG') {
-    if (Number.isNaN(rH) || Number.isNaN(rA)) error = 'Ingresa el marcador de los 90′.';
-    else if (rH === rA) error = 'Un empate en 90′ no decide; usa prórroga o penales.';
-    else advancerSide = rH > rA ? 'home' : 'away';
-  } else if (decision === 'ET') {
-    if (Number.isNaN(rH) || Number.isNaN(rA)) error = 'Ingresa el marcador de los 90′.';
-    else if (rH !== rA) error = 'En prórroga, los 90′ deben estar empatados.';
-    else if (Number.isNaN(eH) || Number.isNaN(eA)) error = 'Ingresa el marcador de la prórroga.';
-    else if (eH === eA) error = 'Un empate en prórroga no decide; usa penales.';
-    else advancerSide = eH > eA ? 'home' : 'away';
-  } else {
-    if (Number.isNaN(rH) || Number.isNaN(rA)) error = 'Ingresa el marcador de los 90′.';
-    else if (rH !== rA) error = 'En penales, los 90′ deben estar empatados.';
-    else if (et.home !== '' || et.away !== '') {
-      if (Number.isNaN(eH) || Number.isNaN(eA)) error = 'Completa la prórroga o déjala vacía.';
-      else if (eH !== eA) error = 'En penales, la prórroga debe estar empatada.';
-    }
-    if (!error) {
-      if (Number.isNaN(pH) || Number.isNaN(pA)) error = 'Ingresa la tanda de penales.';
-      else if (pH === pA) error = 'La tanda de penales no puede empatar.';
-      else advancerSide = pH > pA ? 'home' : 'away';
-    }
-  }
+  if (!bothFilled) error = 'Ingresa el marcador de los 90′.';
+  else if (isDraw && effectiveAdvancer == null) error = 'Elige quién avanza.';
 
-  const advancerTeamId =
-    advancerSide === 'home' ? fixture.homeTeamId : advancerSide === 'away' ? fixture.awayTeamId : null;
-  const advancerLabel = advancerSide === 'home' ? fixture.home : advancerSide === 'away' ? fixture.away : null;
+  const stage = hasWinner ? 'en los 90′' : penalties ? 'en los penales' : 'en la prórroga';
+  const advancerLabel =
+    effectiveAdvancer == null
+      ? null
+      : effectiveAdvancer === fixture.homeTeamId
+        ? fixture.home
+        : effectiveAdvancer === fixture.awayTeamId
+          ? fixture.away
+          : null;
 
   const mut = useMutation({
     mutationFn: () =>
-      api.put<{ matchId: number; status: string; finished: boolean }>(`/admin/groups/${groupId}/knockout-result`, {
-        matchId: fixture.matchId,
-        decision,
-        regHome: rH,
-        regAway: rA,
-        etHome: decision === 'REG' ? null : Number.isNaN(eH) ? null : eH,
-        etAway: decision === 'REG' ? null : Number.isNaN(eA) ? null : eA,
-        penHome: decision === 'PEN' ? pH : null,
-        penAway: decision === 'PEN' ? pA : null,
-        advancerTeamId,
-      }),
-    onSuccess: () => {
+      api.put<{ matchId: number; status: string; finished: boolean; wasSettled: boolean }>(
+        `/admin/groups/${groupId}/knockout-result`,
+        {
+          matchId: fixture.matchId,
+          regHome: rH,
+          regAway: rA,
+          advancerTeamId: effectiveAdvancer,
+          hadExtraTime: isDraw,
+          hadPenalties: isDraw && penalties,
+        },
+      ),
+    onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ['admin-group-picks', groupId] });
       qc.invalidateQueries({ queryKey: ['admin-group', groupId] });
       qc.invalidateQueries({ queryKey: ['admin-groups'] });
-      onClose();
+      // Si la quiniela ya estaba liquidada, avisamos (premios ya pagados sin ajustar);
+      // si no, cerramos directo.
+      if (res?.wasSettled) setSettledNotice(true);
+      else onClose();
     },
   });
 
-  const canSave = !error && advancerTeamId != null && fixture.matchId != null && !mut.isPending;
+  const canSave = !error && effectiveAdvancer != null && fixture.matchId != null && !mut.isPending;
+
+  // Aviso post-corrección de un grupo ya liquidado: puntos recalculados, premios no.
+  if (settledNotice) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+        <div
+          className="w-full max-w-md rounded-2xl p-6 space-y-4"
+          style={{ background: '#121A2B', border: '1px solid rgba(255,255,255,0.08)' }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <h3 className="text-lg font-bold text-text-primary font-sans">Resultado actualizado</h3>
+          <div className="flex items-start gap-2 rounded-xl px-4 py-3 bg-warning/10 border border-warning/20">
+            <AlertTriangle size={16} className="text-warning flex-none mt-0.5" />
+            <span className="text-xs text-warning/90 font-sans leading-snug">
+              La quiniela <strong>ya estaba liquidada</strong>: se recalcularon los puntos y el ranking de cada
+              participante, pero <strong>los premios ya pagados NO se ajustaron</strong>. Si esta corrección cambió al
+              ganador, reconcília los créditos a mano.
+            </span>
+          </div>
+          <div className="flex justify-end">
+            <Button variant="primary" size="sm" onClick={onClose}>Entendido</Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const teamChip = (teamId: number | null | undefined, label: string | null) => {
+    const selected = effectiveAdvancer != null && effectiveAdvancer === teamId;
+    return (
+      <button
+        type="button"
+        disabled={hasWinner}
+        onClick={() => teamId != null && setAdvancingTeamId(teamId)}
+        className={`flex-1 h-11 px-3 rounded-xl text-sm font-semibold font-sans transition-colors truncate ${
+          selected ? 'bg-primary text-white' : 'bg-surface-2 text-text-secondary border border-border hover:text-text-primary'
+        } ${hasWinner ? 'cursor-default' : ''}`}
+      >
+        {label ?? '—'}
+      </button>
+    );
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
@@ -669,42 +692,43 @@ function SetKnockoutResultModal({
           </button>
         </div>
 
-        {/* Decided by */}
+        {/* Marcador a los 90' */}
+        <ScoreRow label="Marcador a los 90′" value={reg} onChange={setScore} />
+
+        {/* ¿Quién avanza? (chips, como en la app) */}
         <div>
-          <label className="block text-[11px] text-text-muted/70 font-sans uppercase tracking-wider mb-1.5">Se definió en</label>
-          <div className="flex gap-1.5">
-            {DECISION_OPTIONS.map((o) => (
-              <button
-                key={o.value}
-                type="button"
-                onClick={() => setDecision(o.value)}
-                className={`flex-1 h-9 rounded-xl text-xs font-semibold font-sans transition-colors ${
-                  decision === o.value
-                    ? 'bg-primary text-white'
-                    : 'bg-surface-2 text-text-muted hover:text-text-primary border border-border'
-                }`}
-              >
-                {o.label}
-              </button>
-            ))}
+          <label className="block text-[11px] text-text-muted/70 font-sans uppercase tracking-wider mb-1.5">
+            ¿Quién avanza?
+          </label>
+          <div className="flex gap-2">
+            {teamChip(fixture.homeTeamId, fixture.home)}
+            {teamChip(fixture.awayTeamId, fixture.away)}
           </div>
-        </div>
-
-        {/* Scorelines */}
-        <div className="space-y-2">
-          <ScoreRow label="Marcador 90′" value={reg} onChange={setStage(setReg)} />
-          {(decision === 'ET' || decision === 'PEN') && (
-            <ScoreRow
-              label="Prórroga (resultado final)"
-              hint={decision === 'PEN' ? 'Opcional si no hubo prórroga' : undefined}
-              value={et}
-              onChange={setStage(setEt)}
-            />
+          {hasWinner && (
+            <p className="text-[10px] text-text-muted/70 font-sans mt-1">Definido en los 90′: avanza el de mayor marcador.</p>
           )}
-          {decision === 'PEN' && <ScoreRow label="Penales" value={pen} onChange={setStage(setPen)} />}
         </div>
 
-        {/* Advancer readout */}
+        {/* Prórroga / penales como SWITCH (solo con empate a 90') */}
+        {isDraw && (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 rounded-xl px-3 py-2.5 bg-surface-2 border border-border">
+              <Trophy size={14} className="text-text-muted flex-none" />
+              <span className="text-[11px] text-text-muted font-sans">
+                Empate a los 90′: prórroga incluida. Indica si se definió en los penales.
+              </span>
+            </div>
+            <label
+              className="flex items-center justify-between gap-3 rounded-xl px-4 py-3 cursor-pointer"
+              style={{ background: '#182235', border: '1px solid rgba(255,255,255,0.06)' }}
+            >
+              <span className="text-sm text-text-primary font-sans">¿Se definió en los penales?</span>
+              <input type="checkbox" checked={penalties} onChange={(e) => setPenalties(e.target.checked)} className="h-5 w-5 accent-primary" />
+            </label>
+          </div>
+        )}
+
+        {/* Lectura de quién avanza */}
         <div
           className="rounded-xl px-4 py-3 flex items-center gap-2"
           style={{ background: advancerLabel ? 'rgba(34,197,94,0.10)' : '#182235', border: `1px solid ${advancerLabel ? 'rgba(34,197,94,0.25)' : 'rgba(255,255,255,0.06)'}` }}
@@ -712,19 +736,21 @@ function SetKnockoutResultModal({
           <Trophy size={15} className={advancerLabel ? 'text-success' : 'text-text-muted'} />
           {advancerLabel ? (
             <span className="text-sm font-sans text-text-primary">
-              Avanza: <strong className="text-success">{advancerLabel}</strong>
+              Avanza <strong className="text-success">{advancerLabel}</strong>
+              <span className="text-text-muted"> · {stage}</span>
             </span>
           ) : (
-            <span className="text-xs text-text-muted font-sans">{error ?? 'Completa el marcador para ver quién avanza.'}</span>
+            <span className="text-xs text-text-muted font-sans">{error ?? 'Completa el resultado.'}</span>
           )}
         </div>
 
-        {/* Cascade warning */}
+        {/* Aviso de cascada + recompute */}
         <div className="flex items-start gap-2 rounded-xl px-3 py-2.5 bg-warning/10 border border-warning/20">
           <AlertTriangle size={14} className="text-warning flex-none mt-0.5" />
           <span className="text-[11px] text-warning/90 font-sans leading-snug">
-            Este resultado se escribe en el partido: liquida el cruce en <strong>todos</strong> los grupos de esa
-            competición y cuenta para el historial de aciertos. Úsalo solo cuando el partido realmente terminó.
+            Se escribe en el partido: liquida el cruce en <strong>todos</strong> los grupos de esa competición y cuenta
+            para el historial de aciertos. Si la quiniela ya terminó, se recalculan los puntos de cada participante
+            (los premios ya pagados no se modifican).
           </span>
         </div>
 
