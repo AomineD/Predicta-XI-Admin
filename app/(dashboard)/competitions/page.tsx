@@ -25,6 +25,9 @@ interface Competition {
   knockoutLegFormat: 'single_match' | 'two_legged' | null;
   historicalContext: string | null;
   isNationalTeamCompetition: boolean;
+  // 3.er puesto: si la competición tiene partido por el 3.er puesto e incluirlo en
+  // la quiniela de llaves (como una llave más; no cuenta para el campeón).
+  thirdPlaceEnabled: boolean;
 }
 
 type CompetitionUpdate = Partial<Pick<Competition,
@@ -40,6 +43,7 @@ type CompetitionUpdate = Partial<Pick<Competition,
   | 'knockoutLegFormat'
   | 'historicalContext'
   | 'isNationalTeamCompetition'
+  | 'thirdPlaceEnabled'
 >>;
 
 interface PredictionConfig {
@@ -138,6 +142,7 @@ function CompetitionDetailsEditor({
   const [knockoutLegFormat, setKnockoutLegFormat] = useState<Competition['knockoutLegFormat']>(comp.knockoutLegFormat);
   const [historicalContext, setHistoricalContext] = useState(comp.historicalContext ?? '');
   const [isNationalTeamCompetition, setIsNationalTeamCompetition] = useState(comp.isNationalTeamCompetition);
+  const [thirdPlaceEnabled, setThirdPlaceEnabled] = useState(comp.thirdPlaceEnabled);
 
   // A tournament-format competition (group-aware standings, like the World
   // Cup) is identified by a non-empty flashscore_season_id. In that case the
@@ -258,6 +263,16 @@ function CompetitionDetailsEditor({
           </select>
         </label>
 
+        <label className="flex items-center justify-between gap-2 px-3 h-9 rounded-xl bg-surface-3 border border-border">
+          <span className="text-xs text-text-muted font-sans">3.er puesto (incluir en quiniela de llaves)</span>
+          <input
+            type="checkbox"
+            checked={thirdPlaceEnabled}
+            onChange={(e) => setThirdPlaceEnabled(e.target.checked)}
+            className="h-4 w-4"
+          />
+        </label>
+
         <label className="block">
           <span className="text-xs text-text-muted font-sans flex justify-between">
             <span>Historical context (LLM prompt)</span>
@@ -289,6 +304,7 @@ function CompetitionDetailsEditor({
               knockoutLegFormat,
               historicalContext: historicalContext.trim() ? historicalContext : null,
               isNationalTeamCompetition,
+              thirdPlaceEnabled,
             })}
             className="px-4 py-2 rounded-xl text-sm font-sans font-medium bg-primary text-background disabled:opacity-40 disabled:cursor-not-allowed"
           >
