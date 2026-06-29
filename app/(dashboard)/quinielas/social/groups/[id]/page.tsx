@@ -125,6 +125,7 @@ export default function GroupPicksPage({ params }: { params: Promise<{ id: strin
   const { id } = use(params);
   const [editor, setEditor] = useState<{ userId?: string; label: string } | null>(null);
   const [koEditor, setKoEditor] = useState<Fixture | null>(null);
+  const [koPicksEditor, setKoPicksEditor] = useState<{ userId?: string; label: string } | null>(null);
 
   const picksQ = useQuery({
     queryKey: ['admin-group-picks', id],
@@ -134,6 +135,9 @@ export default function GroupPicksPage({ params }: { params: Promise<{ id: strin
 
   const data = picksQ.data;
   const isKnockout = data?.type === 'knockout';
+  // Las llaves se pueden forzar mientras el grupo no haya cerrado/liquidado (a
+  // diferencia del submit del usuario, el admin ignora el lock por cruce).
+  const knockoutEditable = isKnockout && (data?.status === 'open' || data?.status === 'locked');
 
   return (
     <div className="p-8">
@@ -164,6 +168,11 @@ export default function GroupPicksPage({ params }: { params: Promise<{ id: strin
             <UserPlus size={15} /> Forzar / agregar usuario
           </Button>
         )}
+        {data && knockoutEditable && (
+          <Button variant="primary" size="sm" onClick={() => setKoPicksEditor({ label: 'Agregar usuario / cargar picks' })}>
+            <UserPlus size={15} /> Forzar / agregar usuario
+          </Button>
+        )}
       </div>
 
       {picksQ.isLoading && <div className="text-sm text-text-muted font-sans py-12 text-center">Cargando…</div>}
@@ -183,9 +192,11 @@ export default function GroupPicksPage({ params }: { params: Promise<{ id: strin
         <div className="flex items-center gap-2 mb-4 rounded-xl px-4 py-3 bg-primary/10 border border-primary/20">
           <Trophy size={15} className="text-primary flex-none" />
           <span className="text-xs text-text-secondary font-sans">
-            Quiniela de llaves. Puedes <strong className="text-text-primary">colocar o corregir el resultado</strong> de
-            cada cruce desde su columna (botón <strong className="text-text-primary">Resultado</strong>): liquida los
-            puntos y avanza el cuadro al instante, sin esperar a la sincronización automática.
+            Quiniela de eliminatorias. Puedes <strong className="text-text-primary">colocar o corregir el resultado</strong> de
+            cada cruce desde su columna (botón <strong className="text-text-primary">Resultado</strong>), y{' '}
+            <strong className="text-text-primary">forzar/cargar los picks</strong> de un miembro desde su lápiz —{' '}
+            <strong className="text-text-primary">incluso si el cruce ya empezó o terminó</strong> (cuando el update no
+            llegó a tiempo a todos). Todo liquida los puntos al instante.
           </span>
         </div>
       )}
@@ -201,7 +212,11 @@ export default function GroupPicksPage({ params }: { params: Promise<{ id: strin
       {data && (
         <PicksMatrixTable
           data={data}
-          onEditMember={(m) => setEditor({ userId: m.userId, label: m.displayName ?? m.email ?? m.userId })}
+          onEditMember={(m) => {
+            const t = { userId: m.userId, label: m.displayName ?? m.email ?? m.userId };
+            if (isKnockout) setKoPicksEditor(t);
+            else setEditor(t);
+          }}
           onSetResult={isKnockout ? (f) => setKoEditor(f) : undefined}
         />
       )}
@@ -213,6 +228,16 @@ export default function GroupPicksPage({ params }: { params: Promise<{ id: strin
           fixtures={data.fixtures}
           existing={data.members.find((m) => m.userId === editor.userId)}
           onClose={() => setEditor(null)}
+        />
+      )}
+
+      {koPicksEditor && data && (
+        <ForceKnockoutPicksModal
+          groupId={id}
+          target={koPicksEditor}
+          fixtures={data.fixtures}
+          existing={data.members.find((m) => m.userId === koPicksEditor.userId)}
+          onClose={() => setKoPicksEditor(null)}
         />
       )}
 
@@ -241,7 +266,8 @@ function PicksMatrixTable({
     return <div className="text-sm text-text-muted font-sans py-12 text-center">Aún no hay miembros.</div>;
   }
 
-  const canEditAny = data.editable;
+  const canEditAny =
+    data.editable || (data.type === 'knockout' && (data.status === 'open' || data.status === 'locked'));
 
   return (
     <div className="rounded-2xl overflow-hidden" style={{ background: '#121A2B', border: '1px solid rgba(255,255,255,0.08)' }}>
@@ -761,6 +787,266 @@ function SetKnockoutResultModal({
           <Button variant="primary" size="sm" loading={mut.isPending} disabled={!canSave} onClick={() => mut.mutate()}>
             Guardar resultado
           </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── force/edit a member's KNOCKOUT picks (bypasses the per-tie lock) ───────── */
+
+interface KoDraft {
+  home: string;
+  away: string;
+  advancingTeamId: number | null;
+  penalties: boolean;
+}
+
+/** Pick de llave resuelto desde un draft (o null si está incompleto). Mismo modelo
+ *  que la app: con ganador a 90′ avanza el ganador y no hay prórroga/penales; con
+ *  empate a 90′ la prórroga es implícita y el admin elige quién avanza (+ penales). */
+function koSelectionFromDraft(f: Fixture, d: KoDraft):
+  | { advancingTeamId: number; homeGoals90: number; awayGoals90: number; extraTime: boolean; penalties: boolean }
+  | null {
+  if (d.home === '' || d.away === '') return null;
+  const rH = Number(d.home);
+  const rA = Number(d.away);
+  if (Number.isNaN(rH) || Number.isNaN(rA)) return null;
+  const isDraw = rH === rA;
+  const advancer = isDraw ? d.advancingTeamId : rH > rA ? f.homeTeamId ?? null : f.awayTeamId ?? null;
+  if (advancer == null) return null;
+  return { advancingTeamId: advancer, homeGoals90: rH, awayGoals90: rA, extraTime: isDraw, penalties: isDraw && d.penalties };
+}
+
+/**
+ * Carga/forza los picks de eliminatorias de un miembro, cruce por cruce, sin el
+ * lock por partido: el admin puede fijar el pick aunque el cruce ya haya empezado o
+ * terminado (caso: el update no llegó a tiempo a todos). Si el cruce ya terminó, el
+ * backend liquida al instante y los puntos aparecen al recargar.
+ */
+function ForceKnockoutPicksModal({
+  groupId,
+  target,
+  fixtures,
+  existing,
+  onClose,
+}: {
+  groupId: string;
+  target: { userId?: string; label: string };
+  fixtures: Fixture[];
+  existing: Member | undefined;
+  onClose: () => void;
+}) {
+  const qc = useQueryClient();
+  const isAdd = !target.userId;
+  const [email, setEmail] = useState('');
+
+  // Solo cruces con ambos equipos definidos se pueden predecir.
+  const ties = useMemo(
+    () => fixtures.filter((f) => f.matchId != null && f.homeTeamId != null && f.awayTeamId != null),
+    [fixtures],
+  );
+
+  const [drafts, setDrafts] = useState<Record<number, KoDraft>>(() => {
+    const init: Record<number, KoDraft> = {};
+    for (const f of ties) {
+      const sel = existing?.picks[f.fixtureKey]?.selection as Record<string, unknown> | undefined;
+      init[f.matchId as number] = {
+        home: typeof sel?.homeGoals90 === 'number' ? String(sel.homeGoals90) : '',
+        away: typeof sel?.awayGoals90 === 'number' ? String(sel.awayGoals90) : '',
+        advancingTeamId: typeof sel?.advancingTeamId === 'number' ? (sel.advancingTeamId as number) : null,
+        penalties: sel?.penalties === true,
+      };
+    }
+    return init;
+  });
+
+  const clamp = (v: string) => v.replace(/[^0-9]/g, '').slice(0, 2);
+  const patch = (matchId: number, p: Partial<KoDraft>) =>
+    setDrafts((d) => ({ ...d, [matchId]: { ...d[matchId], ...p } }));
+
+  const picksToSend = useMemo(() => {
+    const out: { matchId: number; selection: Record<string, unknown> }[] = [];
+    for (const f of ties) {
+      const sel = koSelectionFromDraft(f, drafts[f.matchId as number]);
+      if (sel) out.push({ matchId: f.matchId as number, selection: sel });
+    }
+    return out;
+  }, [drafts, ties]);
+
+  const mut = useMutation({
+    mutationFn: () =>
+      api.put<{ memberAdded: boolean; picksSet: number; submitted: boolean; settled: boolean }>(
+        `/admin/groups/${groupId}/knockout-picks`,
+        {
+          ...(target.userId ? { userId: target.userId } : { email: email.trim() }),
+          picks: picksToSend,
+        },
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-group-picks', groupId] });
+      qc.invalidateQueries({ queryKey: ['admin-group', groupId] });
+      qc.invalidateQueries({ queryKey: ['admin-groups'] });
+      onClose();
+    },
+  });
+
+  const canSave = picksToSend.length > 0 && (!!target.userId || email.trim().length > 3) && !mut.isPending;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+      <div
+        className="w-full max-w-xl max-h-[88vh] overflow-y-auto rounded-2xl p-6 space-y-4"
+        style={{ background: '#121A2B', border: '1px solid rgba(255,255,255,0.08)' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3 className="text-lg font-bold text-text-primary font-sans">Forzar picks de eliminatorias</h3>
+            <p className="text-xs text-text-muted font-sans mt-0.5">
+              {isAdd ? 'Carga los picks de un usuario que no alcanzó a predecir.' : target.label}
+            </p>
+          </div>
+          <button type="button" onClick={onClose} className="p-1 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-3">
+            <XCircle size={20} />
+          </button>
+        </div>
+
+        <div className="flex items-start gap-2 rounded-xl px-3 py-2.5 bg-warning/10 border border-warning/20">
+          <AlertTriangle size={14} className="text-warning flex-none mt-0.5" />
+          <span className="text-[11px] text-warning/90 font-sans leading-snug">
+            Salta el bloqueo por cruce: puedes fijar el pick <strong>aunque el partido ya empezó o terminó</strong>. Si el
+            cruce ya terminó, se liquida al instante. Deja un cruce vacío para no tocarlo.
+          </span>
+        </div>
+
+        {isAdd && (
+          <div>
+            <label className="block text-xs text-text-muted font-sans mb-1">Email del usuario</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="amigo@gmail.com"
+              className="h-9 w-full px-3 rounded-xl text-sm bg-surface-2 border border-border text-text-primary font-sans"
+            />
+            <p className="text-[11px] text-text-muted/60 font-sans mt-1">
+              Debe ser una cuenta existente. Si aún no es miembro del grupo, se agrega automáticamente.
+            </p>
+          </div>
+        )}
+
+        {ties.length === 0 ? (
+          <p className="text-sm text-text-muted font-sans py-6 text-center">
+            No hay cruces con ambos equipos definidos todavía.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {ties.map((f) => {
+              const d = drafts[f.matchId as number];
+              const rH = d.home === '' ? NaN : Number(d.home);
+              const rA = d.away === '' ? NaN : Number(d.away);
+              const bothFilled = !Number.isNaN(rH) && !Number.isNaN(rA);
+              const isDraw = bothFilled && rH === rA;
+              const hasWinner = bothFilled && rH !== rA;
+              const winnerTeamId = hasWinner ? (rH > rA ? f.homeTeamId ?? null : f.awayTeamId ?? null) : null;
+              const effectiveAdvancer = hasWinner ? winnerTeamId : d.advancingTeamId;
+
+              const chip = (teamId: number | null | undefined, label: string | null) => {
+                const selected = effectiveAdvancer != null && effectiveAdvancer === teamId;
+                return (
+                  <button
+                    type="button"
+                    disabled={hasWinner}
+                    onClick={() => teamId != null && patch(f.matchId as number, { advancingTeamId: teamId })}
+                    className={`flex-1 h-9 px-2 rounded-lg text-xs font-semibold font-sans transition-colors truncate ${
+                      selected ? 'bg-primary text-white' : 'bg-surface-2 text-text-secondary border border-border hover:text-text-primary'
+                    } ${hasWinner ? 'cursor-default' : ''}`}
+                  >
+                    {label ?? '—'}
+                  </button>
+                );
+              };
+
+              return (
+                <div
+                  key={f.fixtureKey}
+                  className="rounded-xl p-3 space-y-2"
+                  style={{ background: '#182235', border: '1px solid rgba(255,255,255,0.06)' }}
+                >
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 min-w-0">
+                      {f.roundLabel && (
+                        <div className="text-[9px] uppercase tracking-wider text-text-muted/70 font-semibold">{f.roundLabel}</div>
+                      )}
+                      <div className="text-sm text-text-primary truncate">{f.home} vs {f.away}</div>
+                      <div className="text-[10px] text-text-muted/70 font-sans">
+                        {f.finished && f.result ? (
+                          <span className="text-success font-semibold">
+                            {f.status === 'PEN' ? 'Pen' : f.status === 'AET' ? 'Pró' : 'FT'} {f.result.home}-{f.result.away}
+                          </span>
+                        ) : f.kickoffAt ? (
+                          formatDateTime(f.kickoffAt)
+                        ) : (
+                          f.status ?? ''
+                        )}
+                      </div>
+                    </div>
+                    <input
+                      inputMode="numeric"
+                      value={d.home}
+                      onChange={(e) => patch(f.matchId as number, { home: clamp(e.target.value) })}
+                      className="h-9 w-11 text-center rounded-lg text-sm bg-surface-2 border border-border text-text-primary font-mono"
+                    />
+                    <span className="text-text-muted">-</span>
+                    <input
+                      inputMode="numeric"
+                      value={d.away}
+                      onChange={(e) => patch(f.matchId as number, { away: clamp(e.target.value) })}
+                      className="h-9 w-11 text-center rounded-lg text-sm bg-surface-2 border border-border text-text-primary font-mono"
+                    />
+                  </div>
+
+                  {bothFilled && (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-text-muted/70 font-sans uppercase tracking-wider w-14 flex-none">Avanza</span>
+                        {chip(f.homeTeamId, f.home)}
+                        {chip(f.awayTeamId, f.away)}
+                      </div>
+                      {isDraw && (
+                        <label className="flex items-center justify-between gap-3 px-1 cursor-pointer">
+                          <span className="text-[11px] text-text-muted font-sans">
+                            Empate a 90′: prórroga incluida. ¿Se definió en penales?
+                          </span>
+                          <input
+                            type="checkbox"
+                            checked={d.penalties}
+                            onChange={(e) => patch(f.matchId as number, { penalties: e.target.checked })}
+                            className="h-4 w-4 accent-primary flex-none"
+                          />
+                        </label>
+                      )}
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {mut.error && <p className="text-sm text-danger font-sans">{(mut.error as Error).message}</p>}
+
+        <div className="flex items-center justify-between gap-3 pt-2 border-t" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
+          <span className="text-[11px] text-text-muted/60 font-sans inline-flex items-center gap-1">
+            <Trophy size={12} /> {picksToSend.length} pick(s) a guardar
+          </span>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={onClose}>Cancelar</Button>
+            <Button variant="primary" size="sm" loading={mut.isPending} disabled={!canSave} onClick={() => mut.mutate()}>
+              Guardar picks
+            </Button>
+          </div>
         </div>
       </div>
     </div>
