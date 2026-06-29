@@ -11,7 +11,7 @@ import { Tabs } from '@/components/ui/Tabs';
 import { SectionCard, Field, Toggle, NumInput } from '@/components/ui/form-controls';
 import { QuinielaSubnav } from '@/components/quinielas/QuinielaSubnav';
 import { formatDateTime } from '@/lib/utils';
-import { Ban, ListChecks, Trophy, Users, XCircle } from 'lucide-react';
+import { Ban, ListChecks, Plus, Trophy, UserPlus, Users, XCircle } from 'lucide-react';
 
 /* ── bounds (mirror of quiniela-groups.constants.ts in the backend) ────────── */
 
@@ -137,6 +137,38 @@ interface AntiAbuse {
   prizesLast7d: { total: number; payouts: number };
   deviceCollisions: { deviceSignal: string | null; distinctUsers: number }[];
   topEarnersLast7d: { userId: string; total: number }[];
+}
+
+/* ── admin user search (reuses /admin/users?search=) ───────────────────────── */
+
+interface AdminUserRow {
+  id: string;
+  email: string | null;
+  displayName: string | null;
+}
+interface AdminUsersPage {
+  total: number;
+  page: number;
+  pageSize: number;
+  rows: AdminUserRow[];
+}
+
+/* ── knockout ("eliminatorias") creator ────────────────────────────────────── */
+
+interface KnockoutRoundOption {
+  roundCode: string;
+  label: string;
+  ties: number;
+  openTies: number;
+  playedTies: number;
+  offerable: boolean;
+}
+interface KnockoutCompetition {
+  competitionId: number;
+  competitionApiFootballId: number;
+  name: string;
+  seasonYear: string;
+  rounds: KnockoutRoundOption[];
 }
 
 /* ── per-tier map editor (free/premium/club) ───────────────────────────────── */
@@ -494,13 +526,14 @@ function ConfigTab() {
 /* ── tab: group moderation ─────────────────────────────────────────────────── */
 
 const STATUS_FILTERS = ['', 'open', 'locked', 'settling', 'settled', 'cancelled'];
-const TYPE_FILTERS = ['', 'weekly', 'competition', 'team'];
+const TYPE_FILTERS = ['', 'weekly', 'competition', 'team', 'running', 'knockout'];
 
 function GroupsTab() {
   const [status, setStatus] = useState('');
   const [type, setType] = useState('');
   const [page, setPage] = useState(1);
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [createKnockout, setCreateKnockout] = useState(false);
   const pageSize = 20;
 
   const listQ = useQuery({
@@ -538,6 +571,9 @@ function GroupsTab() {
           ))}
         </select>
         {data && <span className="text-xs text-text-muted font-sans ml-auto">{data.total} groups</span>}
+        <Button variant="primary" size="sm" onClick={() => setCreateKnockout(true)}>
+          <Plus size={14} /> Crear eliminatorias
+        </Button>
       </div>
 
       <div className="rounded-2xl overflow-hidden" style={{ background: '#121A2B', border: '1px solid rgba(255,255,255,0.08)' }}>
@@ -590,6 +626,7 @@ function GroupsTab() {
       )}
 
       {detailId && <GroupDetailModal id={detailId} onClose={() => setDetailId(null)} />}
+      {createKnockout && <CreateKnockoutModal onClose={() => setCreateKnockout(false)} />}
     </>
   );
 }
@@ -758,6 +795,12 @@ function GroupDetailModal({ id, onClose }: { id: string; onClose: () => void }) 
               </div>
             </div>
 
+            <AddMemberSection
+              groupId={id}
+              disabled={g.status === 'cancelled' || g.status === 'settled'}
+              onAdded={invalidate}
+            />
+
             {(voidMut.error || banMut.error || rejectMut.error) && (
               <p className="text-sm text-danger font-sans">{((voidMut.error ?? banMut.error ?? rejectMut.error) as Error).message}</p>
             )}
@@ -790,6 +833,305 @@ function Meta({ label, value, mono }: { label: string; value: string; mono?: boo
     <div>
       <span className="block text-[11px] uppercase tracking-wider text-text-muted/70 font-sans mb-0.5">{label}</span>
       <span className={`text-sm text-text-primary ${mono ? 'font-mono text-xs' : 'font-sans'}`}>{value}</span>
+    </div>
+  );
+}
+
+/* ── reusable: search & pick a registered user (by name or email) ──────────── */
+
+function UserPicker({
+  selected,
+  onSelect,
+}: {
+  selected: AdminUserRow | null;
+  onSelect: (u: AdminUserRow | null) => void;
+}) {
+  const [term, setTerm] = useState('');
+  const [debounced, setDebounced] = useState('');
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(term.trim()), 300);
+    return () => clearTimeout(t);
+  }, [term]);
+
+  const searchQ = useQuery({
+    queryKey: ['admin-user-search', debounced],
+    queryFn: () => api.get<AdminUsersPage>(`/admin/users?search=${encodeURIComponent(debounced)}&pageSize=8`),
+    enabled: debounced.length >= 2,
+  });
+
+  if (selected) {
+    return (
+      <div
+        className="flex items-center gap-3 rounded-xl p-3"
+        style={{ background: '#182235', border: '1px solid rgba(255,255,255,0.06)' }}
+      >
+        <div className="flex-1 min-w-0">
+          <span className="block text-sm text-text-primary font-medium truncate">
+            {selected.displayName ?? selected.email ?? selected.id}
+          </span>
+          {selected.email && <span className="text-[11px] text-text-muted font-sans">{selected.email}</span>}
+        </div>
+        <button
+          type="button"
+          onClick={() => onSelect(null)}
+          className="text-xs text-primary hover:underline font-sans flex-none"
+        >
+          Cambiar
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <input
+        value={term}
+        onChange={(e) => setTerm(e.target.value)}
+        placeholder="Buscar por nombre o correo…"
+        className="h-9 px-3 w-full rounded-xl text-sm bg-surface-2 border border-border text-text-primary font-sans"
+      />
+      {debounced.length >= 2 && (
+        <div
+          className="rounded-xl max-h-56 overflow-y-auto"
+          style={{ background: '#182235', border: '1px solid rgba(255,255,255,0.06)' }}
+        >
+          {searchQ.isLoading ? (
+            <div className="px-3 py-3 text-sm text-text-muted font-sans">Buscando…</div>
+          ) : !searchQ.data || searchQ.data.rows.length === 0 ? (
+            <div className="px-3 py-3 text-sm text-text-muted font-sans">Sin resultados.</div>
+          ) : (
+            searchQ.data.rows.map((u) => (
+              <button
+                key={u.id}
+                type="button"
+                onClick={() => onSelect(u)}
+                className="w-full text-left px-3 py-2 hover:bg-surface-3 transition-colors flex flex-col"
+              >
+                <span className="text-sm text-text-primary truncate">{u.displayName ?? '—'}</span>
+                <span className="text-[11px] text-text-muted font-sans truncate">{u.email ?? u.id}</span>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── group detail: add a registered member without an invite ───────────────── */
+
+function AddMemberSection({
+  groupId,
+  disabled,
+  onAdded,
+}: {
+  groupId: string;
+  disabled: boolean;
+  onAdded: () => void;
+}) {
+  const [user, setUser] = useState<AdminUserRow | null>(null);
+
+  const mut = useMutation({
+    mutationFn: () =>
+      api.post<{ added: boolean; alreadyMember: boolean }>(`/admin/groups/${groupId}/members`, { userId: user!.id }),
+    onSuccess: () => {
+      setUser(null);
+      onAdded();
+    },
+  });
+
+  if (disabled) return null;
+
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-2">
+        <UserPlus size={14} className="text-text-muted" />
+        <span className="text-xs font-semibold text-text-secondary uppercase tracking-wider font-sans">
+          Añadir miembro
+        </span>
+      </div>
+      <p className="text-[11px] text-text-muted/60 font-sans mb-2">
+        Busca un usuario registrado y agrégalo al grupo sin invitación.
+      </p>
+      <UserPicker selected={user} onSelect={setUser} />
+      <div className="flex justify-end mt-2">
+        <Button
+          variant="primary"
+          size="sm"
+          disabled={!user || mut.isPending}
+          loading={mut.isPending}
+          onClick={() => mut.mutate()}
+        >
+          Añadir al grupo
+        </Button>
+      </div>
+      {mut.error && <p className="text-sm text-danger font-sans mt-2">{(mut.error as Error).message}</p>}
+    </div>
+  );
+}
+
+/* ── create a knockout ("eliminatorias") group for a specific user ─────────── */
+
+function CreateKnockoutModal({ onClose }: { onClose: () => void }) {
+  const qc = useQueryClient();
+  const [user, setUser] = useState<AdminUserRow | null>(null);
+  const [competitionId, setCompetitionId] = useState<number | ''>('');
+  const [roundCode, setRoundCode] = useState('');
+  const [name, setName] = useState('');
+
+  const compsQ = useQuery({
+    queryKey: ['admin-knockout-competitions'],
+    queryFn: () => api.get<KnockoutCompetition[]>('/admin/groups/knockout-competitions'),
+  });
+  const comps = compsQ.data ?? [];
+  const comp = comps.find((c) => c.competitionId === competitionId) ?? null;
+
+  const createMut = useMutation({
+    mutationFn: () =>
+      api.post<{ groupId: string; inviteCode: string }>('/admin/groups/knockout', {
+        ownerUserId: user!.id,
+        competitionId,
+        roundCode,
+        name: name.trim(),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-groups'] });
+      onClose();
+    },
+  });
+
+  const onPickComp = (id: number | '') => {
+    setCompetitionId(id);
+    const c = comps.find((x) => x.competitionId === id) ?? null;
+    setRoundCode(c?.rounds.find((r) => r.offerable)?.roundCode ?? '');
+  };
+
+  const trimmed = name.trim();
+  const canSubmit =
+    !!user &&
+    typeof competitionId === 'number' &&
+    !!roundCode &&
+    trimmed.length >= 1 &&
+    trimmed.length <= 40 &&
+    !createMut.isPending;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+      <div
+        className="w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-2xl p-6 space-y-5"
+        style={{ background: '#121A2B', border: '1px solid rgba(255,255,255,0.08)' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3 className="text-lg font-bold text-text-primary font-sans">Crear quiniela eliminatorias</h3>
+            <p className="text-xs text-text-muted font-sans mt-1">
+              Atribuida a un usuario. Siembra los cruces de la ronda elegida; los ya jugados se incluyen bloqueados.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-3 flex-none"
+          >
+            <XCircle size={20} />
+          </button>
+        </div>
+
+        <div>
+          <label className="block text-[11px] uppercase tracking-wider text-text-muted/70 font-sans mb-1">
+            Dueño (usuario)
+          </label>
+          <UserPicker selected={user} onSelect={setUser} />
+        </div>
+
+        <div>
+          <label className="block text-[11px] uppercase tracking-wider text-text-muted/70 font-sans mb-1">
+            Competición
+          </label>
+          {compsQ.isLoading ? (
+            <div className="text-sm text-text-muted font-sans">Cargando…</div>
+          ) : comps.length === 0 ? (
+            <div className="text-sm text-text-muted font-sans">
+              No hay competiciones de eliminatorias con rondas activas.
+            </div>
+          ) : (
+            <select
+              value={competitionId}
+              onChange={(e) => onPickComp(e.target.value ? Number(e.target.value) : '')}
+              className="h-9 px-3 w-full rounded-xl text-sm bg-surface-2 border border-border text-text-primary font-sans"
+            >
+              <option value="">Elige…</option>
+              {comps.map((c) => (
+                <option key={c.competitionId} value={c.competitionId}>
+                  {c.name} ({c.seasonYear})
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+
+        {comp && (
+          <div>
+            <label className="block text-[11px] uppercase tracking-wider text-text-muted/70 font-sans mb-1">
+              Ronda
+            </label>
+            <select
+              value={roundCode}
+              onChange={(e) => setRoundCode(e.target.value)}
+              className="h-9 px-3 w-full rounded-xl text-sm bg-surface-2 border border-border text-text-primary font-sans"
+            >
+              <option value="">Elige…</option>
+              {comp.rounds.map((r) => (
+                <option key={r.roundCode} value={r.roundCode} disabled={!r.offerable}>
+                  {r.label} · {r.ties} cruces
+                  {r.playedTies > 0 ? ` (${r.openTies} por jugar)` : ''}
+                  {!r.offerable ? ' — no disponible' : ''}
+                </option>
+              ))}
+            </select>
+            {comp.rounds.every((r) => !r.offerable) && (
+              <p className="text-[11px] text-warning font-sans mt-1">
+                Ninguna ronda está disponible (sin equipos definidos o sin cruces por jugar).
+              </p>
+            )}
+          </div>
+        )}
+
+        <div>
+          <label className="block text-[11px] uppercase tracking-wider text-text-muted/70 font-sans mb-1">
+            Nombre del grupo
+          </label>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            maxLength={40}
+            placeholder="Ej. Eliminatorias del Mundial"
+            className="h-9 px-3 w-full rounded-xl text-sm bg-surface-2 border border-border text-text-primary font-sans"
+          />
+        </div>
+
+        {createMut.error && <p className="text-sm text-danger font-sans">{(createMut.error as Error).message}</p>}
+
+        <div
+          className="flex items-center justify-end gap-2 pt-2 border-t"
+          style={{ borderColor: 'rgba(255,255,255,0.08)' }}
+        >
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            disabled={!canSubmit}
+            loading={createMut.isPending}
+            onClick={() => createMut.mutate()}
+          >
+            Crear grupo
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
