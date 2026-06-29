@@ -1199,6 +1199,22 @@ function ConfigPageInner() {
 
       <SectionCard title="Output Markets" subtitle="Betting markets included in each generated prediction">
         <MultiCheckbox options={MARKETS} value={activeForm.outputMarkets} onChange={(v) => setField('outputMarkets', v)} />
+        {activeForm.totalsUnifiedEnabled && (
+          <div className="mt-3 flex items-start gap-2 rounded-lg border border-dashed border-border bg-surface-2 px-3 py-2">
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-surface-3 text-text-secondary font-sans whitespace-nowrap mt-0.5">
+              Total Goals · derived
+            </span>
+            <p className="text-xs text-text-muted font-sans leading-relaxed">
+              Unified totals is ON: the engine replaces{' '}
+              <span className="text-text-secondary">O/U 2.5</span> and{' '}
+              <span className="text-text-secondary">O/U 1.5</span> with a single derived{' '}
+              <span className="text-text-secondary">Total Goals</span> market (best line picked by the
+              Poisson selector). That derived market — not the two O/U above — is what users see. Keep
+              O/U 2.5 + O/U 1.5 checked here; they feed the engine. This market is not toggled here: its
+              on/off is the &ldquo;Totales unificados&rdquo; switch in the calibrated engine card.
+            </p>
+          </div>
+        )}
       </SectionCard>
 
       <PredictionEngineCard form={activeForm} setField={setField} />
