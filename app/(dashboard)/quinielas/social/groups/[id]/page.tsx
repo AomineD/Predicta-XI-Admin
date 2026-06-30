@@ -62,6 +62,13 @@ interface PicksMatrix {
 
 /* ── helpers ───────────────────────────────────────────────────────────────── */
 
+/** Group types whose picks are 90′ scorelines (weekly/team/running). All three
+ *  share the same force/edit flow; only `competition` (categories) and `knockout`
+ *  (ties) differ. Mirror of the backend `isScorelineGroupType`. */
+const SCORELINE_TYPES = ['weekly', 'team', 'running'];
+const isScorelineType = (type: string | undefined): boolean =>
+  type != null && SCORELINE_TYPES.includes(type);
+
 const SETTLEMENT_STYLE: Record<string, string> = {
   won: 'text-success',
   partial: 'text-warning',
@@ -180,7 +187,7 @@ export default function GroupPicksPage({ params }: { params: Promise<{ id: strin
         <div className="text-sm text-danger font-sans py-12 text-center">{(picksQ.error as Error).message}</div>
       )}
 
-      {data && !data.editable && data.type === 'weekly' && (
+      {data && !data.editable && isScorelineType(data.type) && (
         <div className="flex items-center gap-2 mb-4 rounded-xl px-4 py-3 bg-warning/10 border border-warning/20">
           <AlertTriangle size={15} className="text-warning flex-none" />
           <span className="text-xs text-warning font-sans">
@@ -200,11 +207,12 @@ export default function GroupPicksPage({ params }: { params: Promise<{ id: strin
           </span>
         </div>
       )}
-      {data && data.type !== 'weekly' && !isKnockout && (
+      {data && !isScorelineType(data.type) && !isKnockout && (
         <div className="flex items-center gap-2 mb-4 rounded-xl px-4 py-3 bg-surface-2 border border-border">
           <AlertTriangle size={15} className="text-text-muted flex-none" />
           <span className="text-xs text-text-muted font-sans">
-            Vista de solo lectura. Forzar/editar picks solo está disponible para quinielas semanales (marcadores).
+            Vista de solo lectura. Forzar/editar picks solo está disponible para quinielas de marcadores (semanal, de
+            equipo o de corrida) y de eliminatorias.
           </span>
         </div>
       )}
