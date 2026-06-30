@@ -60,6 +60,11 @@ interface PredictionConfig {
   totalsUnifiedEnabled: boolean;
   // Selector floors (round-tripped; tuned via API). Optional in the admin form.
   totalsSelector?: { confFloor: number; confCeiling: number; oddsFloor: number };
+  // Special value markets (idea #1): engine derives exotic markets from the Poisson
+  // matrix, anchors them to Sportium odds (edge) and emits the best ones to MAX/CLUB.
+  specialMarketsEnabled: boolean;
+  // Value selector config (round-tripped; tuned via API). Optional in the admin form.
+  specialMarketsSelector?: { maxPicks: number; minConfidence: number; minEdge: number; oddsFloor: number };
   // Quiniela IA: master switch + motor para la generación de llaves de eliminatoria
   // ronda por ronda (automatización de la quiniela de la IA).
   quinielaKnockoutAutomationEnabled: boolean;
@@ -222,7 +227,8 @@ type EngineLayerKey =
   | 'statBaselinesEnabled'
   | 'independentModelEnabled'
   | 'neutralVenueAwarenessEnabled'
-  | 'totalsUnifiedEnabled';
+  | 'totalsUnifiedEnabled'
+  | 'specialMarketsEnabled';
 
 // The long descriptions used to live inline; they now sit behind the (i) button.
 const ENGINE_LAYERS: Array<{ key: EngineLayerKey; title: string; info: string }> = [
@@ -260,6 +266,11 @@ const ENGINE_LAYERS: Array<{ key: EngineLayerKey; title: string; info: string }>
     key: 'totalsUnifiedEnabled',
     title: 'Totales unificados (1 mercado de goles)',
     info: 'Reemplaza los mercados fijos over/under 2.5 + 1.5 por UN solo mercado total_goals cuya línea+lado elige el motor (selector Poisson sobre las cuotas multi-línea + calibración), no el LLM. Backtest 707 partidos: 70.3% de acierto a cuota media 1.35, le gana al fijo-2.5 (59.9%) y diversifica líneas. Antes de encenderlo en serio: agrega total_goals a los markets de los tiers (si no, queda bloqueado hasta el settlement) y publica un AAB con el render nuevo. Afecta scheduler y bridge a la vez; reversible (con OFF, comportamiento actual sin cambios).',
+  },
+  {
+    key: 'specialMarketsEnabled',
+    title: 'Mercados especiales con valor (idea #1)',
+    info: 'El motor deriva mercados exóticos desde la matriz Poisson (total por equipo, par/impar, portería a cero, gana a cero, combos resultado/doble-oportunidad/btts + goles), los ancla a las cuotas de Sportium para computar el edge (valor), y emite solo el top-N que elige el selector de valor. Son picks NO obvios con valor real, no el pick que ya da la cuota. Solo para tiers de suscriptor (MAX/CLUB). Antes de encenderlo en serio: corre el backtest del selector (fija sus umbrales), asigna las claves nuevas SOLO a los tiers MAX/CLUB (fail-closed: sin asignar, el usuario lo ve bloqueado) y publica un AAB con el render nuevo. Reversible (con OFF no se emiten, liquidan ni sirven picks exóticos; la captura de cuotas de Sportium sí corre para alimentar el backtest).',
   },
 ];
 
@@ -604,6 +615,7 @@ function ConfigPageInner() {
       calibrationEnabled: cfg.calibrationEnabled ?? false,
       neutralVenueAwarenessEnabled: cfg.neutralVenueAwarenessEnabled ?? false,
       totalsUnifiedEnabled: cfg.totalsUnifiedEnabled ?? false,
+      specialMarketsEnabled: cfg.specialMarketsEnabled ?? false,
       quinielaKnockoutAutomationEnabled: cfg.quinielaKnockoutAutomationEnabled ?? false,
       quinielaKnockoutEngine: cfg.quinielaKnockoutEngine ?? 'claude_routine',
       llmTimeoutSeconds: cfg.llmTimeoutSeconds ?? 30,
