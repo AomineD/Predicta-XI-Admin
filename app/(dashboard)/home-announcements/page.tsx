@@ -6,6 +6,10 @@ import { api } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { SectionCard, Field, Toggle } from '@/components/ui/form-controls';
+import { Input, Select, Textarea } from '@/components/ui/inputs';
+import { Modal } from '@/components/ui/Modal';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { useToast } from '@/components/ui/ToastProvider';
 
 type LinkType = 'none' | 'route' | 'url';
 
@@ -76,17 +80,25 @@ function toDraft(e: HomeAnnouncement): Draft {
   };
 }
 
-const inputCls =
-  'w-full px-3 py-2 rounded-xl text-sm bg-surface-2 border border-border text-text-primary font-sans';
-const areaCls = `${inputCls} resize-none`;
-const selectCls =
-  'h-9 px-3 rounded-xl text-sm bg-surface-2 border border-border text-text-primary font-sans';
+function CharCount({ value, max }: { value: string; max: number }) {
+  return (
+    <div className="mt-1 text-right text-[10px] font-mono text-text-muted/60">
+      {value.length}/{max}
+    </div>
+  );
+}
 
 // Same catalogue the Config page exposes. '' = use the globally active model.
 const MODELS = [
-  'deepseek-v4-flash', 'deepseek-v4-pro', 'gpt-5.4-mini', 'gpt-5.4',
-  'gpt-5.4-think', 'gemini-3.1-pro', 'gemini-3.1-flash-lite-preview',
-  'glm-5', 'kimi-k2.5',
+  'deepseek-v4-flash',
+  'deepseek-v4-pro',
+  'gpt-5.4-mini',
+  'gpt-5.4',
+  'gpt-5.4-think',
+  'gemini-3.1-pro',
+  'gemini-3.1-flash-lite-preview',
+  'glm-5',
+  'kimi-k2.5',
 ];
 
 interface GeneratedDraft {
@@ -98,8 +110,9 @@ interface GeneratedDraft {
 
 export default function HomeAnnouncementsPage() {
   const qc = useQueryClient();
+  const toast = useToast();
   const [draft, setDraft] = useState<Draft | null>(null);
-  const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<HomeAnnouncement | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   // ── AI generator modal state ──
@@ -129,9 +142,7 @@ export default function HomeAnnouncementsPage() {
         startsAt: d.startsAt ? new Date(d.startsAt).toISOString() : null,
         endsAt: d.endsAt ? new Date(d.endsAt).toISOString() : null,
       };
-      return d.id == null
-        ? api.post('/admin/home-announcements', body)
-        : api.put(`/admin/home-announcements/${d.id}`, body);
+      return d.id == null ? api.post('/admin/home-announcements', body) : api.put(`/admin/home-announcements/${d.id}`, body);
     },
     onSuccess: (saved: unknown) => {
       // Keep editing a freshly-created entry so the admin can upload its image.
@@ -141,29 +152,26 @@ export default function HomeAnnouncementsPage() {
       } else {
         setDraft(null);
       }
-      setMsg({ type: 'success', text: 'Announcement saved.' });
+      toast.success('Announcement saved.');
       invalidate();
     },
-    onError: (err: Error) => setMsg({ type: 'error', text: err.message }),
+    onError: (err: Error) => toast.error(err.message),
   });
 
   const remove = useMutation({
     mutationFn: (id: number) => api.delete(`/admin/home-announcements/${id}`),
     onSuccess: () => {
-      setMsg({ type: 'success', text: 'Announcement deleted.' });
+      setDeleteTarget(null);
+      toast.success('Announcement deleted.');
       invalidate();
     },
-    onError: (err: Error) => setMsg({ type: 'error', text: err.message }),
+    onError: (err: Error) => toast.error(err.message),
   });
 
   const togglePublish = useMutation({
-    mutationFn: ({ id, isPublished }: { id: number; isPublished: boolean }) =>
-      api.put(`/admin/home-announcements/${id}`, { isPublished }),
-    onSuccess: () => {
-      setMsg(null);
-      invalidate();
-    },
-    onError: (err: Error) => setMsg({ type: 'error', text: err.message }),
+    mutationFn: ({ id, isPublished }: { id: number; isPublished: boolean }) => api.put(`/admin/home-announcements/${id}`, { isPublished }),
+    onSuccess: () => invalidate(),
+    onError: (err: Error) => toast.error(err.message),
   });
 
   const uploadImage = useMutation({
@@ -174,20 +182,17 @@ export default function HomeAnnouncementsPage() {
         reader.onerror = () => reject(new Error('Could not read the file'));
         reader.readAsDataURL(file);
       });
-      return api.post(`/admin/home-announcements/${id}/image`, {
-        imageBase64: dataUrl,
-        contentType: file.type,
-      });
+      return api.post(`/admin/home-announcements/${id}/image`, { imageBase64: dataUrl, contentType: file.type });
     },
     onSuccess: (saved: unknown) => {
       const row = saved as HomeAnnouncement | undefined;
       if (draft && row && typeof row.imageUrl === 'string') {
         setDraft({ ...draft, imageUrl: row.imageUrl });
       }
-      setMsg({ type: 'success', text: 'Image uploaded.' });
+      toast.success('Image uploaded.');
       invalidate();
     },
-    onError: (err: Error) => setMsg({ type: 'error', text: err.message }),
+    onError: (err: Error) => toast.error(err.message),
   });
 
   // Generate an ephemeral bilingual draft with the active LLM, then drop it into
@@ -200,19 +205,12 @@ export default function HomeAnnouncementsPage() {
         model: genModel || undefined,
       }),
     onSuccess: (d) => {
-      setDraft({
-        ...EMPTY_DRAFT,
-        titleEs: d.titleEs,
-        titleEn: d.titleEn,
-        bodyEs: d.bodyEs,
-        bodyEn: d.bodyEn,
-        isPublished: false,
-      });
+      setDraft({ ...EMPTY_DRAFT, titleEs: d.titleEs, titleEn: d.titleEn, bodyEs: d.bodyEs, bodyEn: d.bodyEn, isPublished: false });
       setGenOpen(false);
       setGenBrief('');
-      setMsg({ type: 'success', text: 'Borrador generado. Revísalo, edita si quieres y guárdalo.' });
+      toast.success('Borrador generado. Revísalo, edita si quieres y guárdalo.');
     },
-    onError: (err: Error) => setMsg({ type: 'error', text: err.message }),
+    onError: (err: Error) => toast.error(err.message),
   });
 
   const canSave = useMemo(() => {
@@ -240,69 +238,52 @@ export default function HomeAnnouncementsPage() {
         }
       />
 
-      {genOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
-          onClick={(e) => { if (e.target === e.currentTarget) setGenOpen(false); }}
-        >
-          <div
-            className="w-full max-w-lg rounded-2xl p-5 space-y-4"
-            style={{ background: '#121A2B', border: '1px solid rgba(255,255,255,0.12)' }}
-          >
-            <div>
-              <h2 className="text-sm font-semibold text-text-primary font-sans">Generar anuncio con IA</h2>
-              <p className="text-xs text-text-muted font-sans mt-1">
-                El modelo redacta un borrador bilingüe. Lo revisas y editas en el formulario antes de guardarlo; nada se publica automáticamente.
-              </p>
-            </div>
+      <Modal
+        open={genOpen}
+        onClose={() => setGenOpen(false)}
+        title="Generar anuncio con IA"
+        description="El modelo redacta un borrador bilingüe. Lo revisas y editas en el formulario antes de guardarlo; nada se publica automáticamente."
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setGenOpen(false)} disabled={generate.isPending}>
+              Cancelar
+            </Button>
+            <Button variant="primary" loading={generate.isPending} onClick={() => generate.mutate()}>
+              Generar
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <label className="block">
+            <span className="text-xs text-text-muted font-sans">Tema / brief (opcional)</span>
+            <Textarea
+              rows={3}
+              className="mt-1 resize-none"
+              value={genBrief}
+              onChange={(e) => setGenBrief(e.target.value)}
+              placeholder="Ej.: anuncia las combinadas compartidas con amigos. Si lo dejas vacío, la IA propone una idea."
+            />
+          </label>
 
-            <label className="block">
-              <span className="text-xs text-text-muted font-sans">Tema / brief (opcional)</span>
-              <textarea
-                rows={3}
-                value={genBrief}
-                onChange={(e) => setGenBrief(e.target.value)}
-                placeholder="Ej.: anuncia las combinadas compartidas con amigos. Si lo dejas vacío, la IA propone una idea."
-                className={`${areaCls} mt-1`}
-              />
-            </label>
+          <label className="flex items-center justify-between gap-3">
+            <span className="text-xs text-text-muted font-sans">Basar en los partidos de hoy</span>
+            <Toggle value={genToday} onChange={setGenToday} />
+          </label>
 
-            <label className="flex items-center justify-between gap-3">
-              <span className="text-xs text-text-muted font-sans">Basar en los partidos de hoy</span>
-              <Toggle value={genToday} onChange={setGenToday} />
-            </label>
-
-            <label className="block">
-              <span className="text-xs text-text-muted font-sans">Modelo (opcional)</span>
-              <select
-                value={genModel}
-                onChange={(e) => setGenModel(e.target.value)}
-                className={`${selectCls} mt-1 w-full`}
-              >
-                <option value="">Modelo activo</option>
-                {MODELS.map((m) => (
-                  <option key={m} value={m}>{m}</option>
-                ))}
-              </select>
-            </label>
-
-            <div className="flex items-center gap-3 pt-1">
-              <Button variant="primary" loading={generate.isPending} onClick={() => generate.mutate()}>
-                Generar
-              </Button>
-              <Button variant="secondary" onClick={() => setGenOpen(false)}>
-                Cancelar
-              </Button>
-            </div>
-          </div>
+          <label className="block">
+            <span className="text-xs text-text-muted font-sans">Modelo (opcional)</span>
+            <Select className="mt-1" value={genModel} onChange={(e) => setGenModel(e.target.value)}>
+              <option value="">Modelo activo</option>
+              {MODELS.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </Select>
+          </label>
         </div>
-      )}
-
-      {msg && (
-        <p className={`text-xs font-sans mb-3 ${msg.type === 'success' ? 'text-success' : 'text-danger'}`}>
-          {msg.text}
-        </p>
-      )}
+      </Modal>
 
       {draft && (
         <SectionCard
@@ -310,51 +291,35 @@ export default function HomeAnnouncementsPage() {
           subtitle="User-friendly copy. Spanish is neutral 'tú' and avoids betting language. Save first, then upload an image."
         >
           <Field label="Title (ES)">
-            <input
-              maxLength={120}
-              value={draft.titleEs}
-              onChange={(e) => setDraft({ ...draft, titleEs: e.target.value })}
-              placeholder="Partidos de hoy"
-              className={inputCls}
-            />
+            <div>
+              <Input maxLength={120} value={draft.titleEs} onChange={(e) => setDraft({ ...draft, titleEs: e.target.value })} placeholder="Partidos de hoy" />
+              <CharCount value={draft.titleEs} max={120} />
+            </div>
           </Field>
           <Field label="Title (EN)">
-            <input
-              maxLength={120}
-              value={draft.titleEn}
-              onChange={(e) => setDraft({ ...draft, titleEn: e.target.value })}
-              placeholder="Today's matches"
-              className={inputCls}
-            />
+            <div>
+              <Input maxLength={120} value={draft.titleEn} onChange={(e) => setDraft({ ...draft, titleEn: e.target.value })} placeholder="Today's matches" />
+              <CharCount value={draft.titleEn} max={120} />
+            </div>
           </Field>
           <Field label="Body (ES)" subtitle="Optional.">
-            <textarea
-              rows={2}
-              maxLength={600}
-              value={draft.bodyEs}
-              onChange={(e) => setDraft({ ...draft, bodyEs: e.target.value })}
-              className={areaCls}
-            />
+            <div>
+              <Textarea rows={2} maxLength={600} className="resize-none" value={draft.bodyEs} onChange={(e) => setDraft({ ...draft, bodyEs: e.target.value })} />
+              <CharCount value={draft.bodyEs} max={600} />
+            </div>
           </Field>
           <Field label="Body (EN)" subtitle="Optional.">
-            <textarea
-              rows={2}
-              maxLength={600}
-              value={draft.bodyEn}
-              onChange={(e) => setDraft({ ...draft, bodyEn: e.target.value })}
-              className={areaCls}
-            />
+            <div>
+              <Textarea rows={2} maxLength={600} className="resize-none" value={draft.bodyEn} onChange={(e) => setDraft({ ...draft, bodyEn: e.target.value })} />
+              <CharCount value={draft.bodyEn} max={600} />
+            </div>
           </Field>
           <Field label="Link type" subtitle="none = informational; route = internal app path; url = external https link.">
-            <select
-              value={draft.linkType}
-              onChange={(e) => setDraft({ ...draft, linkType: e.target.value as LinkType })}
-              className={selectCls}
-            >
+            <Select className="w-40" value={draft.linkType} onChange={(e) => setDraft({ ...draft, linkType: e.target.value as LinkType })}>
               <option value="none">none</option>
               <option value="route">route</option>
               <option value="url">url</option>
-            </select>
+            </Select>
           </Field>
           {draft.linkType !== 'none' && (
             <Field
@@ -362,43 +327,25 @@ export default function HomeAnnouncementsPage() {
               subtitle={
                 draft.linkType === 'url'
                   ? 'External https:// URL opened in the browser.'
-                  : "Internal GoRouter location, e.g. /featured-fixtures, /store, /quinielas."
+                  : 'Internal GoRouter location, e.g. /featured-fixtures, /store, /quinielas.'
               }
             >
-              <input
+              <Input
                 maxLength={1024}
                 value={draft.linkValue}
                 onChange={(e) => setDraft({ ...draft, linkValue: e.target.value })}
                 placeholder={draft.linkType === 'url' ? 'https://…' : '/featured-fixtures'}
-                className={inputCls}
               />
             </Field>
           )}
           <Field label="Priority" subtitle="Higher shows first (the carousel sorts by priority then recency).">
-            <input
-              type="number"
-              value={draft.priority}
-              onChange={(e) => setDraft({ ...draft, priority: Number(e.target.value) || 0 })}
-              min={0}
-              max={1000}
-              className="h-9 w-28 px-3 rounded-xl text-sm bg-surface-2 border border-border text-text-primary font-sans"
-            />
+            <Input type="number" min={0} max={1000} className="w-28" value={draft.priority} onChange={(e) => setDraft({ ...draft, priority: Number(e.target.value) || 0 })} />
           </Field>
           <Field label="Starts at" subtitle="Optional. Empty = visible immediately.">
-            <input
-              type="date"
-              value={draft.startsAt}
-              onChange={(e) => setDraft({ ...draft, startsAt: e.target.value })}
-              className={selectCls}
-            />
+            <Input type="date" className="w-48" value={draft.startsAt} onChange={(e) => setDraft({ ...draft, startsAt: e.target.value })} />
           </Field>
           <Field label="Ends at" subtitle="Optional. Empty = no expiry.">
-            <input
-              type="date"
-              value={draft.endsAt}
-              onChange={(e) => setDraft({ ...draft, endsAt: e.target.value })}
-              className={selectCls}
-            />
+            <Input type="date" className="w-48" value={draft.endsAt} onChange={(e) => setDraft({ ...draft, endsAt: e.target.value })} />
           </Field>
           <Field label="Published" subtitle="When on, the announcement can appear in the app (if the Home announcements flag is enabled).">
             <Toggle value={draft.isPublished} onChange={(v) => setDraft({ ...draft, isPublished: v })} />
@@ -445,35 +392,17 @@ export default function HomeAnnouncementsPage() {
         ) : (
           <div className="space-y-2">
             {entries.map((e) => (
-              <div
-                key={e.id}
-                className="flex items-start gap-3 py-3 border-b last:border-0"
-                style={{ borderColor: 'rgba(255,255,255,0.06)' }}
-              >
+              <div key={e.id} className="flex items-start gap-3 py-3 border-b border-border last:border-0">
                 {e.imageUrl && (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={e.imageUrl} alt="" className="h-10 w-16 object-cover rounded-lg border border-border flex-none" />
                 )}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-0.5">
-                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface-3 text-text-secondary">
-                      P{e.priority}
-                    </span>
-                    {e.source === 'auto_today' && (
-                      <span className="text-[10px] font-sans px-1.5 py-0.5 rounded bg-surface-3 text-text-secondary">
-                        AUTO
-                      </span>
-                    )}
-                    {!e.isPublished && (
-                      <span className="text-[10px] font-sans px-1.5 py-0.5 rounded bg-surface-3 text-warning">
-                        DRAFT
-                      </span>
-                    )}
-                    {e.linkType !== 'none' && (
-                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface-3 text-text-secondary">
-                        {e.linkType}
-                      </span>
-                    )}
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface-3 text-text-secondary">P{e.priority}</span>
+                    {e.source === 'auto_today' && <span className="text-[10px] font-sans px-1.5 py-0.5 rounded bg-surface-3 text-text-secondary">AUTO</span>}
+                    {!e.isPublished && <span className="text-[10px] font-sans px-1.5 py-0.5 rounded bg-surface-3 text-warning">DRAFT</span>}
+                    {e.linkType !== 'none' && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface-3 text-text-secondary">{e.linkType}</span>}
                   </div>
                   <p className="text-sm text-text-primary font-sans truncate">{e.titleEs}</p>
                   <p className="text-xs text-text-muted font-sans truncate">{e.titleEn}</p>
@@ -483,12 +412,7 @@ export default function HomeAnnouncementsPage() {
                   <Button variant="secondary" onClick={() => setDraft(toDraft(e))}>
                     Edit
                   </Button>
-                  <Button
-                    variant="ghost"
-                    onClick={() => {
-                      if (confirm('Delete this announcement?')) remove.mutate(e.id);
-                    }}
-                  >
+                  <Button variant="ghost" onClick={() => setDeleteTarget(e)}>
                     Delete
                   </Button>
                 </div>
@@ -497,6 +421,17 @@ export default function HomeAnnouncementsPage() {
           </div>
         )}
       </SectionCard>
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title="Delete this announcement?"
+        message={deleteTarget ? `"${deleteTarget.titleEs}" will be permanently removed.` : ''}
+        confirmLabel="Delete announcement"
+        variant="danger"
+        loading={remove.isPending}
+        onConfirm={() => deleteTarget && remove.mutate(deleteTarget.id)}
+        onClose={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }

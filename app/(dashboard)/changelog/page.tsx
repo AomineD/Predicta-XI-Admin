@@ -6,6 +6,9 @@ import { api } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { SectionCard, Field, Toggle } from '@/components/ui/form-controls';
+import { Input, Textarea } from '@/components/ui/inputs';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { useToast } from '@/components/ui/ToastProvider';
 
 interface ChangelogEntry {
   id: number;
@@ -56,14 +59,45 @@ function toDraft(e: ChangelogEntry): DraftEntry {
   };
 }
 
-const inputCls =
-  'w-full px-3 py-2 rounded-xl text-sm bg-surface-2 border border-border text-text-primary font-sans';
-const areaCls = `${inputCls} resize-none`;
+/** Campo de texto con contador de caracteres (el cuerpo se leía largo en la app). */
+function TextField({
+  label,
+  subtitle,
+  value,
+  onChange,
+  max,
+  placeholder,
+  multiline,
+}: {
+  label: string;
+  subtitle?: string;
+  value: string;
+  onChange: (v: string) => void;
+  max: number;
+  placeholder?: string;
+  multiline?: boolean;
+}) {
+  return (
+    <Field label={label} subtitle={subtitle}>
+      <div>
+        {multiline ? (
+          <Textarea rows={3} maxLength={max} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="resize-none" />
+        ) : (
+          <Input maxLength={max} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} />
+        )}
+        <div className="mt-1 text-right text-[10px] font-mono text-text-muted/60">
+          {value.length}/{max}
+        </div>
+      </div>
+    </Field>
+  );
+}
 
 export default function ChangelogPage() {
   const qc = useQueryClient();
+  const toast = useToast();
   const [draft, setDraft] = useState<DraftEntry | null>(null);
-  const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ChangelogEntry | null>(null);
 
   const { data: entries, isLoading } = useQuery<ChangelogEntry[]>({
     queryKey: ['admin-changelog'],
@@ -83,45 +117,35 @@ export default function ChangelogPage() {
         isPublished: d.isPublished,
         publishedAt: d.publishedAt ? new Date(d.publishedAt).toISOString() : undefined,
       };
-      return d.id == null
-        ? api.post('/admin/changelog', body)
-        : api.put(`/admin/changelog/${d.id}`, body);
+      return d.id == null ? api.post('/admin/changelog', body) : api.put(`/admin/changelog/${d.id}`, body);
     },
     onSuccess: () => {
       setDraft(null);
-      setMsg({ type: 'success', text: 'Entry saved.' });
+      toast.success('Entry saved.');
       invalidate();
     },
-    onError: (err: Error) => setMsg({ type: 'error', text: err.message }),
+    onError: (err: Error) => toast.error(err.message),
   });
 
   const remove = useMutation({
     mutationFn: (id: number) => api.delete(`/admin/changelog/${id}`),
     onSuccess: () => {
-      setMsg({ type: 'success', text: 'Entry deleted.' });
+      setDeleteTarget(null);
+      toast.success('Entry deleted.');
       invalidate();
     },
-    onError: (err: Error) => setMsg({ type: 'error', text: err.message }),
+    onError: (err: Error) => toast.error(err.message),
   });
 
   const togglePublish = useMutation({
-    mutationFn: ({ id, isPublished }: { id: number; isPublished: boolean }) =>
-      api.put(`/admin/changelog/${id}`, { isPublished }),
-    onSuccess: () => {
-      setMsg(null);
-      invalidate();
-    },
-    onError: (err: Error) => setMsg({ type: 'error', text: err.message }),
+    mutationFn: ({ id, isPublished }: { id: number; isPublished: boolean }) => api.put(`/admin/changelog/${id}`, { isPublished }),
+    onSuccess: () => invalidate(),
+    onError: (err: Error) => toast.error(err.message),
   });
 
   const canSave = useMemo(() => {
     if (!draft) return false;
-    return (
-      draft.titleEs.trim() !== '' &&
-      draft.titleEn.trim() !== '' &&
-      draft.bodyEs.trim() !== '' &&
-      draft.bodyEn.trim() !== ''
-    );
+    return draft.titleEs.trim() !== '' && draft.titleEn.trim() !== '' && draft.bodyEs.trim() !== '' && draft.bodyEn.trim() !== '';
   }, [draft]);
 
   return (
@@ -136,72 +160,35 @@ export default function ChangelogPage() {
         }
       />
 
-      {msg && (
-        <p className={`text-xs font-sans mb-3 ${msg.type === 'success' ? 'text-success' : 'text-danger'}`}>
-          {msg.text}
-        </p>
-      )}
-
       {/* Editor (create / edit) */}
       {draft && (
         <SectionCard
           title={draft.id == null ? 'New entry' : `Edit entry #${draft.id}`}
           subtitle="User-friendly copy. Spanish is neutral 'tú' and avoids betting language. Only published entries are shown in the app."
         >
-          <Field label="Title (ES)">
-            <input
-              maxLength={120}
-              value={draft.titleEs}
-              onChange={(e) => setDraft({ ...draft, titleEs: e.target.value })}
-              placeholder="Comparte tus combinadas"
-              className={inputCls}
-            />
-          </Field>
-          <Field label="Title (EN)">
-            <input
-              maxLength={120}
-              value={draft.titleEn}
-              onChange={(e) => setDraft({ ...draft, titleEn: e.target.value })}
-              placeholder="Share your combinadas"
-              className={inputCls}
-            />
-          </Field>
-          <Field label="Body (ES)">
-            <textarea
-              rows={3}
-              maxLength={2000}
-              value={draft.bodyEs}
-              onChange={(e) => setDraft({ ...draft, bodyEs: e.target.value })}
-              placeholder="Ahora puedes compartir tu combinada con una imagen y ver tu ganancia potencial."
-              className={areaCls}
-            />
-          </Field>
-          <Field label="Body (EN)">
-            <textarea
-              rows={3}
-              maxLength={2000}
-              value={draft.bodyEn}
-              onChange={(e) => setDraft({ ...draft, bodyEn: e.target.value })}
-              placeholder="You can now share your combinada as an image and see your potential payout."
-              className={areaCls}
-            />
-          </Field>
+          <TextField label="Title (ES)" value={draft.titleEs} onChange={(v) => setDraft({ ...draft, titleEs: v })} max={120} placeholder="Comparte tus combinadas" />
+          <TextField label="Title (EN)" value={draft.titleEn} onChange={(v) => setDraft({ ...draft, titleEn: v })} max={120} placeholder="Share your combinadas" />
+          <TextField
+            label="Body (ES)"
+            multiline
+            value={draft.bodyEs}
+            onChange={(v) => setDraft({ ...draft, bodyEs: v })}
+            max={2000}
+            placeholder="Ahora puedes compartir tu combinada con una imagen y ver tu ganancia potencial."
+          />
+          <TextField
+            label="Body (EN)"
+            multiline
+            value={draft.bodyEn}
+            onChange={(v) => setDraft({ ...draft, bodyEn: v })}
+            max={2000}
+            placeholder="You can now share your combinada as an image and see your potential payout."
+          />
           <Field label="Version label" subtitle='Optional tag, e.g. "1.2.0".'>
-            <input
-              maxLength={20}
-              value={draft.versionLabel}
-              onChange={(e) => setDraft({ ...draft, versionLabel: e.target.value })}
-              placeholder="1.2.0"
-              className="h-9 w-40 px-3 rounded-xl text-sm bg-surface-2 border border-border text-text-primary font-sans"
-            />
+            <Input maxLength={20} className="w-40" value={draft.versionLabel} onChange={(e) => setDraft({ ...draft, versionLabel: e.target.value })} placeholder="1.2.0" />
           </Field>
           <Field label="Published date" subtitle="Leave empty to keep the current date.">
-            <input
-              type="date"
-              value={draft.publishedAt}
-              onChange={(e) => setDraft({ ...draft, publishedAt: e.target.value })}
-              className="h-9 px-3 rounded-xl text-sm bg-surface-2 border border-border text-text-primary font-sans"
-            />
+            <Input type="date" className="w-48" value={draft.publishedAt} onChange={(e) => setDraft({ ...draft, publishedAt: e.target.value })} />
           </Field>
           <Field label="Published" subtitle="When on, the entry is visible in the app.">
             <Toggle value={draft.isPublished} onChange={(v) => setDraft({ ...draft, isPublished: v })} />
@@ -226,44 +213,24 @@ export default function ChangelogPage() {
         ) : (
           <div className="space-y-2">
             {entries.map((e) => (
-              <div
-                key={e.id}
-                className="flex items-start gap-3 py-3 border-b last:border-0"
-                style={{ borderColor: 'rgba(255,255,255,0.06)' }}
-              >
+              <div key={e.id} className="flex items-start gap-3 py-3 border-b border-border last:border-0">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-0.5">
                     {e.versionLabel && (
-                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface-3 text-text-secondary">
-                        v{e.versionLabel}
-                      </span>
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface-3 text-text-secondary">v{e.versionLabel}</span>
                     )}
-                    <span className="text-xs text-text-muted font-mono">
-                      {e.publishedAt ? e.publishedAt.slice(0, 10) : '—'}
-                    </span>
-                    {!e.isPublished && (
-                      <span className="text-[10px] font-sans px-1.5 py-0.5 rounded bg-surface-3 text-warning">
-                        DRAFT
-                      </span>
-                    )}
+                    <span className="text-xs text-text-muted font-mono">{e.publishedAt ? e.publishedAt.slice(0, 10) : '—'}</span>
+                    {!e.isPublished && <span className="text-[10px] font-sans px-1.5 py-0.5 rounded bg-surface-3 text-warning">DRAFT</span>}
                   </div>
                   <p className="text-sm text-text-primary font-sans truncate">{e.titleEs}</p>
                   <p className="text-xs text-text-muted font-sans truncate">{e.titleEn}</p>
                 </div>
                 <div className="flex items-center gap-2 flex-none">
-                  <Toggle
-                    value={e.isPublished}
-                    onChange={(v) => togglePublish.mutate({ id: e.id, isPublished: v })}
-                  />
+                  <Toggle value={e.isPublished} onChange={(v) => togglePublish.mutate({ id: e.id, isPublished: v })} />
                   <Button variant="secondary" onClick={() => setDraft(toDraft(e))}>
                     Edit
                   </Button>
-                  <Button
-                    variant="ghost"
-                    onClick={() => {
-                      if (confirm('Delete this entry?')) remove.mutate(e.id);
-                    }}
-                  >
+                  <Button variant="ghost" onClick={() => setDeleteTarget(e)}>
                     Delete
                   </Button>
                 </div>
@@ -272,6 +239,17 @@ export default function ChangelogPage() {
           </div>
         )}
       </SectionCard>
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title="Delete this entry?"
+        message={deleteTarget ? `"${deleteTarget.titleEs}" will be permanently removed.` : ''}
+        confirmLabel="Delete entry"
+        variant="danger"
+        loading={remove.isPending}
+        onConfirm={() => deleteTarget && remove.mutate(deleteTarget.id)}
+        onClose={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }

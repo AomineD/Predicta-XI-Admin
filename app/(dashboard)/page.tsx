@@ -7,6 +7,8 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { Button } from '@/components/ui/Button';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { HealthBanner } from '@/components/HealthBanner';
+import { ErrorState } from '@/components/ui/ErrorState';
+import { useToast } from '@/components/ui/ToastProvider';
 import { formatDateTime, formatPct } from '@/lib/utils';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
@@ -81,8 +83,9 @@ const SYNC_TYPE_LABELS: Record<string, string> = {
 
 export default function DashboardPage() {
   const qc = useQueryClient();
+  const toast = useToast();
 
-  const { data, isLoading } = useQuery<DashboardMetrics>({
+  const { data, isLoading, isError, error, refetch } = useQuery<DashboardMetrics>({
     queryKey: ['dashboard'],
     queryFn: () => api.get('/admin/dashboard'),
     refetchInterval: 30_000,
@@ -103,7 +106,11 @@ export default function DashboardPage() {
 
   const runJob = useMutation({
     mutationFn: () => api.post('/admin/predictions/run', {}),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['dashboard'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+      toast.success('Prediction job started.');
+    },
+    onError: (err: Error) => toast.error(err.message),
   });
 
   const chartData = [
@@ -130,28 +137,22 @@ export default function DashboardPage() {
 
       <HealthBanner />
 
-      {/* KPI Cards */}
+      {isError && (
+        <div className="mb-6">
+          <ErrorState
+            title="Couldn't load dashboard metrics"
+            message={error instanceof Error ? error.message : undefined}
+            onRetry={() => refetch()}
+          />
+        </div>
+      )}
+
+      {/* KPI Cards — el borde de color distingue la categoría (token del theme). */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <div className="rounded-2xl p-4 flex flex-col" style={{ background: '#121A2B', border: '1px solid rgba(77,168,255,0.2)' }}>
-          <span className="text-xs font-semibold text-blue-400 uppercase tracking-wider font-sans mb-1">Scheduled</span>
-          <span className="text-3xl font-bold text-text-primary font-sans">{stats?.scheduledMatches ?? '—'}</span>
-          <span className="text-xs text-text-muted font-sans mt-1">Upcoming matches</span>
-        </div>
-        <div className="rounded-2xl p-4 flex flex-col" style={{ background: '#121A2B', border: '1px solid rgba(124,255,91,0.2)' }}>
-          <span className="text-xs font-semibold text-success uppercase tracking-wider font-sans mb-1">Finished</span>
-          <span className="text-3xl font-bold text-text-primary font-sans">{stats?.finishedMatches ?? '—'}</span>
-          <span className="text-xs text-text-muted font-sans mt-1">Completed matches</span>
-        </div>
-        <div className="rounded-2xl p-4 flex flex-col" style={{ background: '#121A2B', border: '1px solid rgba(245,158,11,0.2)' }}>
-          <span className="text-xs font-semibold text-amber-400 uppercase tracking-wider font-sans mb-1">Today</span>
-          <span className="text-3xl font-bold text-text-primary font-sans">{stats?.todayMatches ?? '—'}</span>
-          <span className="text-xs text-text-muted font-sans mt-1">Matches today</span>
-        </div>
-        <div className="rounded-2xl p-4 flex flex-col" style={{ background: '#121A2B', border: '1px solid rgba(168,85,247,0.2)' }}>
-          <span className="text-xs font-semibold text-purple-400 uppercase tracking-wider font-sans mb-1">Users</span>
-          <span className="text-3xl font-bold text-text-primary font-sans">{stats?.registeredUsers ?? '—'}</span>
-          <span className="text-xs text-text-muted font-sans mt-1">Registered users</span>
-        </div>
+        <MetricCard label="Scheduled" value={stats?.scheduledMatches} sub="Upcoming matches" className="border-secondary/30" />
+        <MetricCard label="Finished" value={stats?.finishedMatches} sub="Completed matches" className="border-success/30" />
+        <MetricCard label="Today" value={stats?.todayMatches} sub="Matches today" className="border-warning/30" />
+        <MetricCard label="Users" value={stats?.registeredUsers} sub="Registered users" className="border-accent/30" />
       </div>
 
       {/* Prediction metrics */}

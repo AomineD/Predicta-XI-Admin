@@ -2,9 +2,15 @@
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Pencil } from 'lucide-react';
 import { api } from '@/lib/api';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { Toggle } from '@/components/ui/form-controls';
+import { Input, Select, Textarea } from '@/components/ui/inputs';
+import { Modal } from '@/components/ui/Modal';
+import { useToast } from '@/components/ui/ToastProvider';
 
 interface Competition {
   id: number;
@@ -30,21 +36,24 @@ interface Competition {
   thirdPlaceEnabled: boolean;
 }
 
-type CompetitionUpdate = Partial<Pick<Competition,
-  | 'name'
-  | 'country'
-  | 'active'
-  | 'logoCustom'
-  | 'flashscoreSlug'
-  | 'flashscoreSeasonId'
-  | 'currentSeasonYear'
-  | 'supportsQuiniela'
-  | 'quinielaFormat'
-  | 'knockoutLegFormat'
-  | 'historicalContext'
-  | 'isNationalTeamCompetition'
-  | 'thirdPlaceEnabled'
->>;
+type CompetitionUpdate = Partial<
+  Pick<
+    Competition,
+    | 'name'
+    | 'country'
+    | 'active'
+    | 'logoCustom'
+    | 'flashscoreSlug'
+    | 'flashscoreSeasonId'
+    | 'currentSeasonYear'
+    | 'supportsQuiniela'
+    | 'quinielaFormat'
+    | 'knockoutLegFormat'
+    | 'historicalContext'
+    | 'isNationalTeamCompetition'
+    | 'thirdPlaceEnabled'
+  >
+>;
 
 interface PredictionConfig {
   automationEnabled: boolean;
@@ -66,6 +75,16 @@ interface PredictionConfig {
   featuredLeagueIds: number[];
 }
 
+/** Fila de "toggle con etiqueta" (pill) — reemplaza los checkboxes nativos. */
+function ToggleRow({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-surface-3 border border-border">
+      <span className="text-xs text-text-muted font-sans">{label}</span>
+      <Toggle value={value} onChange={onChange} />
+    </div>
+  );
+}
+
 function LogoEditor({
   comp,
   onSave,
@@ -80,44 +99,27 @@ function LogoEditor({
   const [url, setUrl] = useState(comp.logoCustom ?? '');
 
   return (
-    <div className="mt-3 p-3 rounded-xl" style={{ background: '#0D1220', border: '1px solid rgba(255,255,255,0.1)' }}>
+    <div className="mt-3 p-3 rounded-xl border border-border bg-background">
       <p className="text-xs text-text-muted font-sans mb-2">Custom logo URL</p>
       <div className="flex gap-2 mb-2">
         {url && (
+          // eslint-disable-next-line @next/next/no-img-element
           <img src={url} alt="preview" className="w-8 h-8 object-contain rounded" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
         )}
-        <input
-          type="text"
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          placeholder="https://..."
-          className="flex-1 h-8 px-2 rounded-lg text-xs font-sans text-text-primary bg-surface-3 border border-border outline-none placeholder:text-text-muted"
-        />
+        <Input type="text" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://..." className="h-8 text-xs" />
       </div>
       <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={() => onSave(url)}
-          className="px-3 py-1 rounded-lg text-xs font-sans font-medium bg-primary text-background"
-        >
+        <Button variant="primary" size="sm" onClick={() => onSave(url)}>
           Save
-        </button>
+        </Button>
         {comp.logoCustom && (
-          <button
-            type="button"
-            onClick={onReset}
-            className="px-3 py-1 rounded-lg text-xs font-sans font-medium bg-surface-3 text-text-secondary hover:text-text-primary"
-          >
+          <Button variant="secondary" size="sm" onClick={onReset}>
             Reset to API default
-          </button>
+          </Button>
         )}
-        <button
-          type="button"
-          onClick={onClose}
-          className="px-3 py-1 rounded-lg text-xs font-sans font-medium text-text-muted hover:text-text-primary"
-        >
+        <Button variant="ghost" size="sm" onClick={onClose}>
           Cancel
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -150,64 +152,70 @@ function CompetitionDetailsEditor({
   // row entirely with a warn.
   const isTournamentShape = flashscoreSeasonId.trim().length > 0;
   const missingSeasonYear = isTournamentShape && currentSeasonYear.trim().length === 0;
+  const contextTooLong = historicalContext.length > 12000;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    <Modal
+      open
+      onClose={onClose}
+      title="Edit competition"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            disabled={missingSeasonYear || contextTooLong}
+            onClick={() =>
+              onSave({
+                name: name.trim() || undefined,
+                country: country.trim() ? country.trim() : null,
+                flashscoreSlug: flashscoreSlug.trim() ? flashscoreSlug.trim() : null,
+                flashscoreSeasonId: flashscoreSeasonId.trim() ? flashscoreSeasonId.trim() : null,
+                currentSeasonYear: currentSeasonYear.trim() ? currentSeasonYear.trim() : null,
+                supportsQuiniela,
+                quinielaFormat,
+                knockoutLegFormat,
+                historicalContext: historicalContext.trim() ? historicalContext : null,
+                isNationalTeamCompetition,
+                thirdPlaceEnabled,
+              })
+            }
+          >
+            Save
+          </Button>
+        </>
+      }
     >
-      <div
-        className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl p-5 space-y-4"
-        style={{ background: '#121A2B', border: '1px solid rgba(255,255,255,0.12)' }}
-      >
-        <h2 className="text-sm font-semibold text-text-primary font-sans">Edit competition</h2>
-
+      <div className="space-y-4">
         <label className="block">
           <span className="text-xs text-text-muted font-sans">Name</span>
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="mt-1 w-full h-9 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
-          />
+          <Input className="mt-1" value={name} onChange={(e) => setName(e.target.value)} />
         </label>
 
         <label className="block">
           <span className="text-xs text-text-muted font-sans">Country</span>
-          <input
-            value={country}
-            onChange={(e) => setCountry(e.target.value)}
-            placeholder="e.g. England, World"
-            className="mt-1 w-full h-9 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none placeholder:text-text-muted"
-          />
+          <Input className="mt-1" value={country} onChange={(e) => setCountry(e.target.value)} placeholder="e.g. England, World" />
         </label>
 
         <label className="block">
           <span className="text-xs text-text-muted font-sans">Flashscore slug</span>
-          <input
-            value={flashscoreSlug}
-            onChange={(e) => setFlashscoreSlug(e.target.value)}
-            placeholder="football/world/world-cup"
-            className="mt-1 w-full h-9 px-3 rounded-xl text-sm font-mono text-text-primary bg-surface-3 border border-border outline-none placeholder:text-text-muted"
-          />
+          <Input className="mt-1 font-mono" value={flashscoreSlug} onChange={(e) => setFlashscoreSlug(e.target.value)} placeholder="football/world/world-cup" />
         </label>
 
         <div className="grid grid-cols-2 gap-3">
           <label className="block">
             <span className="text-xs text-text-muted font-sans">Flashscore season id</span>
-            <input
-              value={flashscoreSeasonId}
-              onChange={(e) => setFlashscoreSeasonId(e.target.value)}
-              placeholder="SbLsX4y7 (tournaments only)"
-              className="mt-1 w-full h-9 px-3 rounded-xl text-sm font-mono text-text-primary bg-surface-3 border border-border outline-none placeholder:text-text-muted"
-            />
+            <Input className="mt-1 font-mono" value={flashscoreSeasonId} onChange={(e) => setFlashscoreSeasonId(e.target.value)} placeholder="SbLsX4y7 (tournaments only)" />
           </label>
           <label className="block">
             <span className="text-xs text-text-muted font-sans">Current season year</span>
-            <input
+            <Input
+              className={cn('mt-1', missingSeasonYear && 'border-danger')}
               value={currentSeasonYear}
               onChange={(e) => setCurrentSeasonYear(e.target.value)}
               placeholder="2026"
-              className={`mt-1 w-full h-9 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 outline-none placeholder:text-text-muted ${missingSeasonYear ? 'border border-danger' : 'border border-border'}`}
             />
           </label>
         </div>
@@ -216,115 +224,52 @@ function CompetitionDetailsEditor({
         )}
 
         <div className="grid grid-cols-2 gap-3">
-          <label className="flex items-center justify-between gap-2 px-3 h-9 rounded-xl bg-surface-3 border border-border">
-            <span className="text-xs text-text-muted font-sans">Is national-team comp</span>
-            <input
-              type="checkbox"
-              checked={isNationalTeamCompetition}
-              onChange={(e) => setIsNationalTeamCompetition(e.target.checked)}
-              className="h-4 w-4"
-            />
-          </label>
-          <label className="flex items-center justify-between gap-2 px-3 h-9 rounded-xl bg-surface-3 border border-border">
-            <span className="text-xs text-text-muted font-sans">Supports quiniela</span>
-            <input
-              type="checkbox"
-              checked={supportsQuiniela}
-              onChange={(e) => setSupportsQuiniela(e.target.checked)}
-              className="h-4 w-4"
-            />
-          </label>
+          <ToggleRow label="Is national-team comp" value={isNationalTeamCompetition} onChange={setIsNationalTeamCompetition} />
+          <ToggleRow label="Supports quiniela" value={supportsQuiniela} onChange={setSupportsQuiniela} />
         </div>
 
         <label className="block">
           <span className="text-xs text-text-muted font-sans">Quiniela format</span>
-          <select
-            value={quinielaFormat ?? ''}
-            onChange={(e) => setQuinielaFormat((e.target.value || null) as Competition['quinielaFormat'])}
-            className="mt-1 w-full h-9 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
-          >
+          <Select className="mt-1" value={quinielaFormat ?? ''} onChange={(e) => setQuinielaFormat((e.target.value || null) as Competition['quinielaFormat'])}>
             <option value="">(none)</option>
             <option value="group_then_knockout">group_then_knockout</option>
             <option value="league_then_knockout">league_then_knockout</option>
             <option value="single_phase">single_phase</option>
-          </select>
+          </Select>
         </label>
 
         <label className="block">
           <span className="text-xs text-text-muted font-sans">Knockout leg format (quiniela de llaves)</span>
-          <select
-            value={knockoutLegFormat ?? ''}
-            onChange={(e) => setKnockoutLegFormat((e.target.value || null) as Competition['knockoutLegFormat'])}
-            className="mt-1 w-full h-9 px-3 rounded-xl text-sm font-sans text-text-primary bg-surface-3 border border-border outline-none"
-          >
+          <Select className="mt-1" value={knockoutLegFormat ?? ''} onChange={(e) => setKnockoutLegFormat((e.target.value || null) as Competition['knockoutLegFormat'])}>
             <option value="">(none — no se ofrece quiniela de llaves)</option>
             <option value="single_match">single_match (eliminación directa, 1 partido)</option>
             <option value="two_legged">two_legged (ida y vuelta)</option>
-          </select>
+          </Select>
         </label>
 
-        <label className="flex items-center justify-between gap-2 px-3 h-9 rounded-xl bg-surface-3 border border-border">
-          <span className="text-xs text-text-muted font-sans">3.er puesto (incluir en quiniela de llaves)</span>
-          <input
-            type="checkbox"
-            checked={thirdPlaceEnabled}
-            onChange={(e) => setThirdPlaceEnabled(e.target.checked)}
-            className="h-4 w-4"
-          />
-        </label>
+        <ToggleRow label="3.er puesto (incluir en quiniela de llaves)" value={thirdPlaceEnabled} onChange={setThirdPlaceEnabled} />
 
         <label className="block">
           <span className="text-xs text-text-muted font-sans flex justify-between">
             <span>Historical context (LLM prompt)</span>
-            <span className={historicalContext.length > 12000 ? 'text-danger' : 'text-text-muted'}>
-              {historicalContext.length} / 12000
-            </span>
+            <span className={contextTooLong ? 'text-danger' : 'text-text-muted'}>{historicalContext.length} / 12000</span>
           </span>
-          <textarea
+          <Textarea
+            className={cn('mt-1 font-mono text-xs min-h-[9rem]', contextTooLong && 'border-danger')}
             value={historicalContext}
             onChange={(e) => setHistoricalContext(e.target.value)}
             rows={6}
             placeholder="Brief description, recent editions, scoring quirks…"
-            className={`mt-1 w-full px-3 py-2 rounded-xl text-xs font-mono text-text-primary bg-surface-3 outline-none placeholder:text-text-muted resize-y ${historicalContext.length > 12000 ? 'border border-danger' : 'border border-border'}`}
           />
         </label>
-
-        <div className="flex gap-2 pt-2">
-          <button
-            type="button"
-            disabled={missingSeasonYear || historicalContext.length > 12000}
-            onClick={() => onSave({
-              name: name.trim() || undefined,
-              country: country.trim() ? country.trim() : null,
-              flashscoreSlug: flashscoreSlug.trim() ? flashscoreSlug.trim() : null,
-              flashscoreSeasonId: flashscoreSeasonId.trim() ? flashscoreSeasonId.trim() : null,
-              currentSeasonYear: currentSeasonYear.trim() ? currentSeasonYear.trim() : null,
-              supportsQuiniela,
-              quinielaFormat,
-              knockoutLegFormat,
-              historicalContext: historicalContext.trim() ? historicalContext : null,
-              isNationalTeamCompetition,
-              thirdPlaceEnabled,
-            })}
-            className="px-4 py-2 rounded-xl text-sm font-sans font-medium bg-primary text-background disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            Save
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 rounded-xl text-sm font-sans font-medium text-text-muted hover:text-text-primary"
-          >
-            Cancel
-          </button>
-        </div>
       </div>
-    </div>
+    </Modal>
   );
 }
 
 export default function CompetitionsPage() {
   const qc = useQueryClient();
+  const toast = useToast();
   const [editingLogoId, setEditingLogoId] = useState<number | null>(null);
   const [editingDetails, setEditingDetails] = useState<Competition | null>(null);
 
@@ -340,30 +285,43 @@ export default function CompetitionsPage() {
 
   const syncCompetitions = useMutation({
     mutationFn: () => api.post('/admin/competitions/sync', {}),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['competitions'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['competitions'] });
+      toast.success('Competitions sync started.');
+    },
+    onError: (err: Error) => toast.error(err.message),
   });
 
   const syncTeams = useMutation({
     mutationFn: () => api.post('/admin/teams/sync', {}),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['teams'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['teams'] });
+      toast.success('Teams sync started.');
+    },
+    onError: (err: Error) => toast.error(err.message),
   });
 
   const updateCompetition = useMutation({
-    mutationFn: ({ id, ...body }: { id: number } & CompetitionUpdate) =>
-      api.patch(`/admin/competitions/${id}`, body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['competitions'] }),
+    mutationFn: ({ id, ...body }: { id: number } & CompetitionUpdate) => api.patch(`/admin/competitions/${id}`, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['competitions'] });
+      toast.success('Competition updated.');
+    },
+    onError: (err: Error) => toast.error(err.message),
   });
 
   const toggleFeatured = useMutation({
     mutationFn: async ({ apiFootballId, featured }: { apiFootballId: number; featured: boolean }) => {
       const fullConfig = await api.get<PredictionConfig>('/admin/prediction-config');
       const current: number[] = fullConfig.featuredLeagueIds ?? [];
-      const updated = featured
-        ? [...current, apiFootballId]
-        : current.filter((id: number) => id !== apiFootballId);
+      const updated = featured ? [...current, apiFootballId] : current.filter((id: number) => id !== apiFootballId);
       return api.put('/admin/prediction-config', { ...fullConfig, featuredLeagueIds: updated });
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['prediction-config'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['prediction-config'] });
+      toast.success('Featured leagues updated.');
+    },
+    onError: (err: Error) => toast.error(err.message),
   });
 
   return (
@@ -394,27 +352,23 @@ export default function CompetitionsPage() {
           return (
             <div
               key={comp.id}
-              className="relative rounded-2xl p-4 flex flex-col items-center text-center transition-colors"
-              style={{
-                background: '#121A2B',
-                border: `1px solid ${isFeatured ? 'rgba(245,158,11,0.3)' : comp.active ? 'rgba(124,255,91,0.2)' : 'rgba(255,255,255,0.06)'}`,
-              }}
+              className={cn(
+                'relative rounded-2xl p-4 flex flex-col items-center text-center transition-colors bg-surface border',
+                isFeatured ? 'border-warning/30' : comp.active ? 'border-success/20' : 'border-border',
+              )}
             >
               {/* Active toggle — top-left corner, small, no label */}
               <div className="absolute top-3 left-3">
                 <button
                   type="button"
                   onClick={() => updateCompetition.mutate({ id: comp.id, active: !comp.active })}
-                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
-                    comp.active ? 'bg-primary' : 'bg-surface-3'
-                  }`}
+                  className={cn(
+                    'relative inline-flex h-5 w-9 items-center rounded-full transition-colors cursor-pointer',
+                    comp.active ? 'bg-primary' : 'bg-surface-3',
+                  )}
                   title={comp.active ? 'Active' : 'Inactive'}
                 >
-                  <span
-                    className={`inline-block h-3 w-3 transform rounded-full bg-background transition-transform ${
-                      comp.active ? 'translate-x-5' : 'translate-x-1'
-                    }`}
-                  />
+                  <span className={cn('inline-block h-3 w-3 transform rounded-full bg-background transition-transform', comp.active ? 'translate-x-5' : 'translate-x-1')} />
                 </button>
               </div>
 
@@ -422,22 +376,20 @@ export default function CompetitionsPage() {
               <button
                 type="button"
                 onClick={() => setEditingDetails(comp)}
-                className="absolute top-3 right-3 p-1 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-3 transition-colors"
+                className="absolute top-3 right-3 p-1 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-3 transition-colors cursor-pointer"
                 title="Edit competition details"
               >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                </svg>
+                <Pencil size={16} />
               </button>
 
               {/* Quiniela-ready indicator under the name */}
               {comp.supportsQuiniela && (
-                <span className="absolute top-3 left-14 text-[9px] font-semibold font-sans text-amber-400 uppercase tracking-wider" title={`Quiniela format: ${comp.quinielaFormat ?? 'unset'}`}>
+                <span className="absolute top-3 left-14 text-[9px] font-semibold font-sans text-warning uppercase tracking-wider" title={`Quiniela format: ${comp.quinielaFormat ?? 'unset'}`}>
                   Q
                 </span>
               )}
               {comp.isNationalTeamCompetition && (
-                <span className="absolute top-3 left-20 text-[9px] font-semibold font-sans text-sky-400 uppercase tracking-wider" title="National-team competition">
+                <span className="absolute top-3 left-20 text-[9px] font-semibold font-sans text-secondary uppercase tracking-wider" title="National-team competition">
                   Nat
                 </span>
               )}
@@ -445,31 +397,22 @@ export default function CompetitionsPage() {
               {/* Logo with edit trigger */}
               <div className="relative group mb-3 mt-2">
                 {displayLogo ? (
-                  <img
-                    src={displayLogo}
-                    alt={comp.name}
-                    className="w-14 h-14 object-contain"
-                  />
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={displayLogo} alt={comp.name} className="w-14 h-14 object-contain" />
                 ) : (
                   <div className="w-14 h-14 rounded-full bg-surface-3 flex items-center justify-center">
-                    <span className="text-lg font-semibold text-text-muted font-sans">
-                      {comp.name.slice(0, 2).toUpperCase()}
-                    </span>
+                    <span className="text-lg font-semibold text-text-muted font-sans">{comp.name.slice(0, 2).toUpperCase()}</span>
                   </div>
                 )}
                 <button
                   type="button"
                   onClick={() => setEditingLogoId(isEditingLogo ? null : comp.id)}
-                  className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
                   title="Edit logo"
                 >
-                  <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                  </svg>
+                  <Pencil size={16} className="text-white" />
                 </button>
-                {comp.logoCustom && (
-                  <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-amber-400" title="Custom logo" />
-                )}
+                {comp.logoCustom && <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-warning" title="Custom logo" />}
               </div>
 
               {/* Name */}
@@ -484,19 +427,15 @@ export default function CompetitionsPage() {
                   type="button"
                   disabled={!comp.active}
                   onClick={() => toggleFeatured.mutate({ apiFootballId: comp.apiFootballId, featured: !isFeatured })}
-                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
-                    isFeatured ? 'bg-amber-500' : 'bg-surface-3'
-                  } ${!comp.active ? 'opacity-40 cursor-not-allowed' : ''}`}
+                  className={cn(
+                    'relative inline-flex h-5 w-9 items-center rounded-full transition-colors cursor-pointer',
+                    isFeatured ? 'bg-warning' : 'bg-surface-3',
+                    !comp.active && 'opacity-40 cursor-not-allowed',
+                  )}
                 >
-                  <span
-                    className={`inline-block h-3 w-3 transform rounded-full bg-background transition-transform ${
-                      isFeatured ? 'translate-x-5' : 'translate-x-1'
-                    }`}
-                  />
+                  <span className={cn('inline-block h-3 w-3 transform rounded-full bg-background transition-transform', isFeatured ? 'translate-x-5' : 'translate-x-1')} />
                 </button>
-                <span className="text-[10px] text-text-muted font-sans">
-                  {isFeatured ? 'Featured' : 'Not featured'}
-                </span>
+                <span className="text-[10px] text-text-muted font-sans">{isFeatured ? 'Featured' : 'Not featured'}</span>
               </div>
 
               {/* Logo editor */}

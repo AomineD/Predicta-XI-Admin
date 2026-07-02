@@ -17,13 +17,10 @@ interface DataTableProps<T> {
 
 export function DataTable<T>({ columns, data, keyExtractor, loading, emptyMessage }: DataTableProps<T>) {
   return (
-    <div
-      className="rounded-2xl overflow-hidden"
-      style={{ background: '#121A2B', border: '1px solid rgba(255,255,255,0.08)' }}
-    >
+    <div className="rounded-2xl overflow-hidden border border-border bg-surface">
       <table className="w-full text-sm font-sans">
         <thead>
-          <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+          <tr className="border-b border-border">
             {columns.map((col) => (
               <th
                 key={col.key}
@@ -51,10 +48,7 @@ export function DataTable<T>({ columns, data, keyExtractor, loading, emptyMessag
             data.map((row) => (
               <tr
                 key={keyExtractor(row)}
-                className="transition-colors"
-                style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = '#1F2A40')}
-                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                className="border-b border-border/70 last:border-0 transition-colors hover:bg-surface-3"
               >
                 {columns.map((col) => (
                   <td key={col.key} className="px-4 py-3 text-text-primary">
