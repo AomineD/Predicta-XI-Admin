@@ -167,6 +167,21 @@ export function MaintenanceTab() {
     onError: (err: Error) => toast.error(err.message),
   });
 
+  // ── Live scores (real-time via ESPN) ──
+  const [liveScoresForm, setLiveScoresForm] = useState<{ liveScoresEnabled: boolean } | null>(null);
+  const liveScoresInitial = useMemo(() => (maintCfg ? { liveScoresEnabled: maintCfg.liveScoresEnabled } : null), [maintCfg]);
+  const liveScores = liveScoresForm ?? liveScoresInitial;
+
+  const saveLiveScores = useMutation({
+    mutationFn: (body: { liveScoresEnabled: boolean }) => api.put('/admin/credits-config', body),
+    onSuccess: () => {
+      setLiveScoresForm(null);
+      toast.success('Live scores setting saved.');
+      invalidateMaint();
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
   // ── Home announcements ──
   const [homeAnnouncementsForm, setHomeAnnouncementsForm] = useState<{ homeAnnouncementsEnabled: boolean } | null>(null);
   const homeAnnouncementsInitial = useMemo(
@@ -419,6 +434,25 @@ export function MaintenanceTab() {
                 Save live tracker
               </Button>
               {liveTracker.liveTrackerEnabled && <span className="text-xs font-sans text-success">Live tracker is on for users on a build that includes it.</span>}
+            </div>
+          </>
+        )}
+      </SectionCard>
+
+      {/* Live scores (real-time via ESPN) */}
+      <SectionCard title="Live scores (real-time)" subtitle="Real-time scoreboard on the match detail, polled directly from ESPN (idea #16). Master switch for both the backend event-binding scheduler and the app's live score polling. The code ships in the app build but stays hidden until turned on here — turn it on only once the build that includes it is live in the stores.">
+        {!liveScores ? (
+          <p className="text-text-muted text-sm font-sans py-3">Loading…</p>
+        ) : (
+          <>
+            <Field label="Live scores enabled" subtitle="When on, the match screen updates the live score in real time (no more stale 0-0) and the backend runs the ESPN event-binding scheduler. Off = neither the scheduler nor the app polling run.">
+              <Toggle value={liveScores.liveScoresEnabled} onChange={(v) => setLiveScoresForm({ liveScoresEnabled: v })} />
+            </Field>
+            <div className="flex items-center gap-3 pt-3">
+              <Button variant="primary" loading={saveLiveScores.isPending} onClick={() => saveLiveScores.mutate({ liveScoresEnabled: liveScores.liveScoresEnabled })}>
+                Save live scores
+              </Button>
+              {liveScores.liveScoresEnabled && <span className="text-xs font-sans text-success">Live scores are on for users on a build that includes it.</span>}
             </div>
           </>
         )}

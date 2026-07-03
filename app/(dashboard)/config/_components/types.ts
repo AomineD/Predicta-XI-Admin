@@ -123,6 +123,7 @@ export interface MaintenanceCreditsConfig {
   socialInstagramEnabled: boolean;
   socialInstagramUrl: string;
   liveTrackerEnabled: boolean;
+  liveScoresEnabled: boolean;
   homeAnnouncementsEnabled: boolean;
 }
 
