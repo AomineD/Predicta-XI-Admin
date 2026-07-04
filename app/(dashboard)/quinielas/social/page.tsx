@@ -91,6 +91,10 @@ interface GroupRow {
   ownerName: string | null;
   ownerEmail: string | null;
   memberCount: number;
+  // Actual house-funded credits this group paid out. 0 with status 'settled' means
+  // the prize was withheld (see prizeSummary.withheldReason in the detail).
+  prizePaid: number;
+  prizeWinners: number;
 }
 
 interface GroupListResponse {
@@ -109,9 +113,31 @@ interface GroupMember {
   rank: number | null;
   submitted: boolean;
   prizeAwarded: number;
+  // Authoritative prize this member actually received (from the credit ledger).
+  // Prefer this over prizeAwarded — it's correct for every group type.
+  prizePaid: number;
   banned: boolean;
+  appCheckVerified: boolean;
   displayName: string | null;
   email: string | null;
+}
+
+/** Prize payout status for a group, computed from the credit ledger + the same
+ *  gates the settlement enforces. Explains WHY a settled group paid nothing. */
+interface PrizeSummary {
+  settled: boolean;
+  paid: number;
+  winners: number;
+  withheldReason: 'anti_abuse' | 'low_participation' | 'no_winner' | null;
+  gate: {
+    realMembers: number;
+    minRealMembers: number;
+    participants: number;
+    rosterTotal: number;
+    participationPct: number;
+    minParticipationPct: number;
+    appCheckEnforced: boolean;
+  };
 }
 
 interface PendingRequest {
@@ -127,6 +153,7 @@ interface GroupDetail extends GroupRow {
   fixtureCount: number;
   requiresApproval: boolean;
   members: GroupMember[];
+  prizeSummary: PrizeSummary;
   pendingRequests: PendingRequest[];
 }
 
@@ -221,6 +248,28 @@ function GroupStatusPill({ status }: { status: string }) {
       {status}
     </span>
   );
+}
+
+/* ── prize payout status (list cell + modal summary) ───────────────────────── */
+
+const WITHHELD_LABELS: Record<NonNullable<PrizeSummary['withheldReason']>, string> = {
+  anti_abuse: 'Retenido: no hubo suficientes miembros reales',
+  low_participation: 'Retenido: no jugó suficiente gente',
+  no_winner: 'Sin ganador (nadie sumó puntos)',
+};
+
+/** Compact prize status for a list row: paid amount, "Sin premio", or "—". */
+function PrizeCell({ row }: { row: GroupRow }) {
+  if (row.status !== 'settled') return <span className="text-text-muted/50">—</span>;
+  if (row.prizePaid > 0) {
+    return (
+      <span className="inline-flex items-center gap-1 text-success font-medium" title={`${row.prizeWinners} ganador(es)`}>
+        <Trophy size={12} /> +{row.prizePaid} cr
+        {row.prizeWinners > 1 && <span className="text-text-muted">· {row.prizeWinners}</span>}
+      </span>
+    );
+  }
+  return <span className="text-warning">Sin premio</span>;
 }
 
 /* ── page ──────────────────────────────────────────────────────────────────── */
@@ -580,16 +629,16 @@ function GroupsTab() {
         <table className="w-full text-sm font-sans">
           <thead>
             <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-              {['Group', 'Type', 'Status', 'Members', 'Credits', 'Created', ''].map((h, i) => (
+              {['Group', 'Type', 'Status', 'Members', 'Credits', 'Prize', 'Created', ''].map((h, i) => (
                 <th key={h || `col-${i}`} className="px-4 py-3 text-left text-xs font-medium text-text-muted uppercase tracking-wider">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {listQ.isLoading ? (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-text-muted">Loading…</td></tr>
+              <tr><td colSpan={8} className="px-4 py-8 text-center text-text-muted">Loading…</td></tr>
             ) : !data || data.items.length === 0 ? (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-text-muted">No groups match these filters.</td></tr>
+              <tr><td colSpan={8} className="px-4 py-8 text-center text-text-muted">No groups match these filters.</td></tr>
             ) : (
               data.items.map((g) => (
                 <tr
@@ -608,6 +657,7 @@ function GroupsTab() {
                   <td className="px-4 py-3"><GroupStatusPill status={g.status} /></td>
                   <td className="px-4 py-3 font-mono text-xs">{g.memberCount}/{g.maxMembers}</td>
                   <td className="px-4 py-3 font-mono text-xs">{g.creditsCharged}</td>
+                  <td className="px-4 py-3 text-xs"><PrizeCell row={g} /></td>
                   <td className="px-4 py-3 text-text-secondary text-xs">{formatDateTime(g.createdAt)}</td>
                   <td className="px-4 py-3 text-right text-xs text-primary">View</td>
                 </tr>
@@ -680,11 +730,15 @@ function GroupDetailModal({ id, onClose }: { id: string; onClose: () => void }) 
                 <div className="flex items-center gap-2 mt-1">
                   <GroupStatusPill status={g.status} />
                   <span className="text-xs text-text-muted uppercase font-sans">{g.type}</span>
-                  {g.prizeSettled && (
-                    <span className="inline-flex items-center gap-1 text-xs text-primary font-sans">
-                      <Trophy size={12} /> prizes paid
+                  {g.prizeSummary.paid > 0 ? (
+                    <span className="inline-flex items-center gap-1 text-xs text-success font-sans">
+                      <Trophy size={12} /> +{g.prizeSummary.paid} cr a {g.prizeSummary.winners}
                     </span>
-                  )}
+                  ) : g.prizeSummary.settled ? (
+                    <span className="inline-flex items-center gap-1 text-xs text-warning font-sans">
+                      <Trophy size={12} /> Sin premio
+                    </span>
+                  ) : null}
                 </div>
               </div>
               <div className="flex items-center gap-2 flex-none">
@@ -711,6 +765,8 @@ function GroupDetailModal({ id, onClose }: { id: string; onClose: () => void }) 
               <Meta label="Created" value={formatDateTime(g.createdAt)} />
               <Meta label="Settled" value={formatDateTime(g.settledAt)} />
             </div>
+
+            <PrizeSummaryCard summary={g.prizeSummary} />
 
             {g.pendingRequests.length > 0 && (
               <div>
@@ -777,7 +833,7 @@ function GroupDetailModal({ id, onClose }: { id: string; onClose: () => void }) 
                     </div>
                     <div className="text-right flex-none">
                       <div className="font-mono text-xs text-text-primary">{m.score} pts{m.rank ? ` · #${m.rank}` : ''}</div>
-                      {m.prizeAwarded > 0 && <div className="font-mono text-[11px] text-primary">+{m.prizeAwarded} cr</div>}
+                      {m.prizePaid > 0 && <div className="font-mono text-[11px] text-success">+{m.prizePaid} cr</div>}
                     </div>
                     {m.role !== 'owner' && !m.banned && (
                       <button
@@ -833,6 +889,57 @@ function Meta({ label, value, mono }: { label: string; value: string; mono?: boo
     <div>
       <span className="block text-[11px] uppercase tracking-wider text-text-muted/70 font-sans mb-0.5">{label}</span>
       <span className={`text-sm text-text-primary ${mono ? 'font-mono text-xs' : 'font-sans'}`}>{value}</span>
+    </div>
+  );
+}
+
+/* ── modal: prize payout summary (paid / withheld + gate breakdown) ─────────── */
+
+function PrizeSummaryCard({ summary }: { summary: PrizeSummary }) {
+  const { paid, winners, settled, withheldReason, gate } = summary;
+  const realOk = gate.realMembers >= gate.minRealMembers;
+  const partOk = gate.participationPct >= gate.minParticipationPct;
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-2">
+        <Trophy size={14} className="text-text-muted" />
+        <span className="text-xs font-semibold text-text-secondary uppercase tracking-wider font-sans">Premios</span>
+      </div>
+      <div className="rounded-xl p-3 space-y-2.5" style={{ background: '#182235', border: '1px solid rgba(255,255,255,0.06)' }}>
+        {paid > 0 ? (
+          <p className="text-sm text-success font-sans">
+            Se pagaron <span className="font-semibold">{paid} créditos</span> a {winners} miembro{winners === 1 ? '' : 's'}.
+          </p>
+        ) : settled ? (
+          <p className="text-sm text-warning font-sans">
+            {withheldReason ? WITHHELD_LABELS[withheldReason] : 'Sin premio'}.
+          </p>
+        ) : (
+          <p className="text-sm text-text-muted font-sans">Aún sin liquidar (el premio se decide al cerrar el grupo).</p>
+        )}
+        <div className="grid grid-cols-2 gap-2">
+          <GateStat ok={realOk} label="Miembros reales" value={`${gate.realMembers} / ${gate.minRealMembers} mín`} />
+          <GateStat
+            ok={partOk}
+            label="Participación"
+            value={`${gate.participationPct}% · ${gate.participants}/${gate.rosterTotal} (mín ${gate.minParticipationPct}%)`}
+          />
+        </div>
+        {gate.appCheckEnforced && (
+          <p className="text-[11px] text-text-muted/60 font-sans">
+            App Check en <span className="font-mono">enforce</span>: para contar como miembro real, la app debe estar verificada.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function GateStat({ ok, label, value }: { ok: boolean; label: string; value: string }) {
+  return (
+    <div className="text-[11px] font-sans">
+      <span className="block text-text-muted/70 uppercase tracking-wider mb-0.5">{label}</span>
+      <span className={ok ? 'text-success' : 'text-warning'}>{value}</span>
     </div>
   );
 }
