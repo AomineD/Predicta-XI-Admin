@@ -84,6 +84,35 @@ export interface SportiumConfig {
   requestTimeoutMs: number;
 }
 
+/** Config de la fuente de datos secundaria/fallback (ESPN, idea #20). Autocontenida
+ *  (tabla `data_source_config` con GET/PUT propios), como Sportium. */
+export interface DataSourceConfig {
+  enabled: boolean;
+  influencePredictions: boolean;
+  resultFallbackEnabled: boolean;
+  matchConfidenceMin: number;
+  downtimeErrorThreshold: number;
+  downtimeWindowMinutes: number;
+}
+
+/** Una fila del preview de resolución ESPN (`GET /admin/data-source/espn-preview`).
+ *  Sirve para auditar que ESPN empareja el evento correcto antes de encender la inyección. */
+export interface EspnPreviewRow {
+  matchId: number;
+  label: string;
+  kickoff: string;
+  competition: string | null;
+  supported: boolean;
+  resolved: boolean;
+  confidence?: number;
+  espnEvent?: { eventId: string; slug: string; home: string; away: string };
+  hasForm: boolean;
+  hasH2H: boolean;
+  statsCoverage: 'none' | 'partial' | 'full';
+  hasStandings: boolean;
+  error?: string;
+}
+
 export interface TeamLite {
   id: number;
   name: string;

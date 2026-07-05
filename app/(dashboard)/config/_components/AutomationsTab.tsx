@@ -3,6 +3,7 @@
 import { SectionCard, Field, SubHeading, Toggle } from '@/components/ui/form-controls';
 import { Input, Select } from '@/components/ui/inputs';
 import { SportiumCard } from './SportiumCard';
+import { DataSourceCard } from './DataSourceCard';
 import type { CompetitionLite, PredictionConfig, SetField } from './types';
 
 export function AutomationsTab({
@@ -120,6 +121,8 @@ export function AutomationsTab({
       </SectionCard>
 
       <SportiumCard competitions={competitions} />
+
+      <DataSourceCard />
     </div>
   );
 }
