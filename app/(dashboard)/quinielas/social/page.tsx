@@ -95,6 +95,14 @@ interface SocialConfig {
     minParticipants: number;
     podiumMaxRank: number;
   };
+  // Picks de riesgo del modal de quiniela (idea #21 Fase 2).
+  riskPicksEnabled: boolean;
+  riskPenaltyHitPoints: number;
+  riskPenaltyMissPenalty: number;
+  riskRedCardHitPoints: number;
+  riskRedCardMissPenalty: number;
+  riskPlayerGoalHitPoints: number;
+  riskPlayerGoalMissPenalty: number;
 }
 
 /* ── competition categories that carry a weight (mirror of scoring.ts) ──────── */
@@ -695,6 +703,33 @@ function ConfigTab() {
         </Field>
         <Field label="Posición máxima de podio" subtitle="Hasta qué posición cuenta como podio (por defecto 3)">
           <NumInput value={f.rankingParams.podiumMaxRank} onChange={(v) => set('rankingParams', { ...f.rankingParams, podiumMaxRank: v })} min={1} max={1000} />
+        </Field>
+      </SectionCard>
+
+      <SectionCard
+        title="Risk picks (idea #21)"
+        subtitle="Switches opcionales en el modal de predicción de cada partido (¿habrá penal? / ¿habrá roja? / gol de un jugador) que suman/restan puntos INDEPENDIENTES del resultado, en cualquier quiniela. Master flag OFF = la app no muestra los switches. Cada 'acierto' suma; cada 'fallo' resta (valor negativo). Se anulan (0) si falta el dato del partido."
+      >
+        <Field label="Risk picks enabled" subtitle="Master flag (riskPicksEnabled). Off = inerte (la app oculta los switches).">
+          <Toggle value={f.riskPicksEnabled} onChange={(v) => set('riskPicksEnabled', v)} />
+        </Field>
+        <Field label="¿Habrá penal? — acierto" subtitle="Puntos si el usuario lo activa y SÍ hubo penal">
+          <NumInput value={f.riskPenaltyHitPoints} onChange={(v) => set('riskPenaltyHitPoints', v)} min={0} max={100} />
+        </Field>
+        <Field label="¿Habrá penal? — fallo" subtitle="Resta si lo activó y NO hubo penal (negativo)">
+          <NumInput value={f.riskPenaltyMissPenalty} onChange={(v) => set('riskPenaltyMissPenalty', v)} min={-100} max={0} />
+        </Field>
+        <Field label="¿Habrá roja? — acierto" subtitle="Puntos si lo activó y SÍ hubo tarjeta roja">
+          <NumInput value={f.riskRedCardHitPoints} onChange={(v) => set('riskRedCardHitPoints', v)} min={0} max={100} />
+        </Field>
+        <Field label="¿Habrá roja? — fallo" subtitle="Resta si lo activó y NO hubo roja (negativo)">
+          <NumInput value={f.riskRedCardMissPenalty} onChange={(v) => set('riskRedCardMissPenalty', v)} min={-100} max={0} />
+        </Field>
+        <Field label="Gol de jugador — acierto" subtitle="Puntos si el jugador elegido marcó">
+          <NumInput value={f.riskPlayerGoalHitPoints} onChange={(v) => set('riskPlayerGoalHitPoints', v)} min={0} max={100} />
+        </Field>
+        <Field label="Gol de jugador — fallo" subtitle="Resta si el jugador elegido NO marcó (negativo)">
+          <NumInput value={f.riskPlayerGoalMissPenalty} onChange={(v) => set('riskPlayerGoalMissPenalty', v)} min={-100} max={0} />
         </Field>
       </SectionCard>
 
