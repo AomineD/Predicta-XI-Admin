@@ -241,6 +241,21 @@ export default function TeamsPage() {
     mutationFn: () => api.post('/admin/standings/sync-all', {}),
   });
 
+  // Preparación de nueva temporada (rollover de agosto). Dispara de golpe los
+  // tres barridos —plantillas + fichajes + tablas— reutilizando los mismos
+  // encoladores que los botones individuales. Resuelve la brecha de verano: sin
+  // partidos liquidados no hay refresh reactivo, así que los fichajes y las
+  // plantillas nuevas no entran solos hasta el primer partido de agosto. Standings
+  // corre inline (devuelve el conteo); los dos barridos de equipos son
+  // fire-and-forget (202). Máx. 1/5min. Idempotente (los jobs en vuelo se dejan).
+  const prepareSeason = useMutation<
+    { status: string; standings: { leagues: number; enqueued: number } },
+    Error,
+    void
+  >({
+    mutationFn: () => api.post('/admin/season/prepare', {}),
+  });
+
   // Extract unique countries from current page for filter. Excludes the
   // pseudo-"World" countries used as the home country of national teams so the
   // dropdown stays focused on club leagues; the "Selecciones" option is the
@@ -265,6 +280,22 @@ export default function TeamsPage() {
           <div className="flex items-center gap-2">
             <Button
               variant="primary"
+              loading={prepareSeason.isPending}
+              onClick={() => {
+                if (
+                  window.confirm(
+                    '¿Preparar nueva temporada? Encola de golpe plantillas + fichajes + tablas de todas las competiciones activas. Úsalo al arrancar la temporada (agosto), cuando aún no hay partidos liquidados que disparen el refresh automático.',
+                  )
+                ) {
+                  prepareSeason.mutate();
+                }
+              }}
+              title="Rollover de temporada: encola los tres barridos (plantillas, fichajes y tablas) para recoger los fichajes de verano y las plantillas nuevas sin esperar al primer partido liquidado. Máx. 1 cada 5 min."
+            >
+              🗓️ Preparar temporada
+            </Button>
+            <Button
+              variant="secondary"
               loading={syncAllTeams.isPending}
               onClick={() => syncAllTeams.mutate()}
               title="Encola un re-sync completo (historial + plantillas + FIFA/estadio) de todos los equipos con slug de Flashscore. Fire-and-forget: el worker lo procesa en segundo plano (~1h). Máx. 1 cada 5 min."
@@ -290,6 +321,21 @@ export default function TeamsPage() {
           </div>
         }
       />
+
+      {prepareSeason.isSuccess && (
+        <div className="mb-4 rounded-xl px-4 py-2 text-sm font-sans bg-primary/10 border border-primary/30">
+          <span className="text-primary font-medium">
+            Preparación de temporada iniciada{prepareSeason.data ? ` (${prepareSeason.data.standings.leagues} ligas)` : ''}.
+          </span>{' '}
+          <span className="text-text-muted">Plantillas, fichajes y tablas se encolaron; el worker los drena en segundo plano (~1h). Sigue el avance en la pestaña Jobs.</span>
+        </div>
+      )}
+      {prepareSeason.error && (
+        <div className="mb-4 rounded-xl px-4 py-2 text-sm font-sans bg-danger/15 border border-danger/30">
+          <span className="text-danger font-medium">Preparación de temporada falló:</span>{' '}
+          <span className="text-text-muted">{prepareSeason.error.message}</span>
+        </div>
+      )}
 
       {syncAllTeams.isSuccess && (
         <div className="mb-4 rounded-xl px-4 py-2 text-sm font-sans bg-primary/10 border border-primary/30">
