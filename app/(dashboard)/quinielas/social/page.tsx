@@ -74,7 +74,37 @@ interface SocialConfig {
   runningPerWeekPrizeCredits: number;
   runningMaxPrizeCredits: number;
   runningDefaultPodiumBonus: Record<string, number>;
+  // Puntos de eliminatorias / categorías / ranking (idea #21). Antes hardcodeados.
+  knockoutExactScorePoints: number;
+  knockoutCorrectOutcomePoints: number;
+  knockoutAdvancerPoints: number;
+  knockoutExtraTimeFullPoints: number;
+  knockoutExtraTimeReducedPoints: number;
+  knockoutPenaltiesFullPoints: number;
+  knockoutPenaltiesReducedPoints: number;
+  knockoutRiskMissPenalty: number;
+  knockoutProximityPoints: number;
+  knockoutProximityMaxGoalError: number;
+  categoryWeights: Record<string, number>;
+  categoryDefaultWeight: number;
+  rankingParams: {
+    basePoints: number[];
+    referenceSize: number;
+    minScale: number;
+    maxScale: number;
+    minParticipants: number;
+    podiumMaxRank: number;
+  };
 }
+
+/* ── competition categories that carry a weight (mirror of scoring.ts) ──────── */
+const WEIGHTED_CATEGORIES: { key: string; label: string }[] = [
+  { key: 'champion', label: 'Campeón' },
+  { key: 'final_score', label: 'Marcador final' },
+  { key: 'runner_up', label: 'Subcampeón' },
+  { key: 'top_scorer', label: 'Goleador' },
+  { key: 'top_assister', label: 'Asistidor' },
+];
 
 interface GroupRow {
   id: string;
@@ -564,6 +594,107 @@ function ConfigTab() {
             <NumInput value={f.runningDefaultPodiumBonus['2'] ?? 0} onChange={(v) => set('runningDefaultPodiumBonus', { ...f.runningDefaultPodiumBonus, '2': v })} min={0} max={MAX_PRIZE} />
             <NumInput value={f.runningDefaultPodiumBonus['3'] ?? 0} onChange={(v) => set('runningDefaultPodiumBonus', { ...f.runningDefaultPodiumBonus, '3': v })} min={0} max={MAX_PRIZE} />
           </div>
+        </Field>
+      </SectionCard>
+
+      <SectionCard
+        title="Knockout scoring (idea #21)"
+        subtitle="Puntos por cruce de la quiniela de eliminatorias. Ejes ADITIVOS: quién avanza + marcador 90' + riesgos (prórroga/penales). Cambiarlos recalcula las quinielas EN curso; las ya terminadas quedan congeladas. Rango 0–100 (la penalización de riesgo es negativa)."
+      >
+        <Field label="Quién avanza" subtitle="Eje principal, aditivo: acertar el clasificado del cruce">
+          <NumInput value={f.knockoutAdvancerPoints} onChange={(v) => set('knockoutAdvancerPoints', v)} min={0} max={100} />
+        </Field>
+        <Field label="Marcador exacto (90')" subtitle="Clavar el marcador del tiempo reglamentario">
+          <NumInput value={f.knockoutExactScorePoints} onChange={(v) => set('knockoutExactScorePoints', v)} min={0} max={100} />
+        </Field>
+        <Field label="Tendencia (1X2 del 90')" subtitle="Acertar el resultado del 90' sin el marcador exacto">
+          <NumInput value={f.knockoutCorrectOutcomePoints} onChange={(v) => set('knockoutCorrectOutcomePoints', v)} min={0} max={100} />
+        </Field>
+        <Field label="Bonus de cercanía" subtitle="Extra cuando la tendencia acierta y el marcador queda a ≤ el error de goles de abajo. 0 = off.">
+          <NumInput value={f.knockoutProximityPoints} onChange={(v) => set('knockoutProximityPoints', v)} min={0} max={100} />
+        </Field>
+        <Field label="Cercanía: error máx de goles" subtitle="|Δlocal|+|Δvisitante| que aún gana el bonus">
+          <NumInput value={f.knockoutProximityMaxGoalError} onChange={(v) => set('knockoutProximityMaxGoalError', v)} min={0} max={20} />
+        </Field>
+        <Field label="Prórroga (con quién avanza)" subtitle="Riesgo prórroga acertado + acertar el clasificado">
+          <NumInput value={f.knockoutExtraTimeFullPoints} onChange={(v) => set('knockoutExtraTimeFullPoints', v)} min={0} max={100} />
+        </Field>
+        <Field label="Prórroga (reducido)" subtitle="Riesgo prórroga acertado pero fallando el clasificado">
+          <NumInput value={f.knockoutExtraTimeReducedPoints} onChange={(v) => set('knockoutExtraTimeReducedPoints', v)} min={0} max={100} />
+        </Field>
+        <Field label="Penales (con quién avanza)" subtitle="Riesgo penales acertado + acertar el clasificado">
+          <NumInput value={f.knockoutPenaltiesFullPoints} onChange={(v) => set('knockoutPenaltiesFullPoints', v)} min={0} max={100} />
+        </Field>
+        <Field label="Penales (reducido)" subtitle="Riesgo penales acertado pero fallando el clasificado">
+          <NumInput value={f.knockoutPenaltiesReducedPoints} onChange={(v) => set('knockoutPenaltiesReducedPoints', v)} min={0} max={100} />
+        </Field>
+        <Field label="Penalización de riesgo fallido" subtitle="Resta al marcar un riesgo (prórroga/penales) que no ocurrió. Valor negativo (−100 a 0).">
+          <NumInput value={f.knockoutRiskMissPenalty} onChange={(v) => set('knockoutRiskMissPenalty', v)} min={-100} max={0} />
+        </Field>
+      </SectionCard>
+
+      <SectionCard
+        title="Competition category weights (idea #21)"
+        subtitle="Peso de cada categoría de la quiniela de competición. Un veredicto 'parcial' (solo el marcador final) paga la mitad, redondeado hacia abajo, mínimo 1. Rango 0–100."
+      >
+        {WEIGHTED_CATEGORIES.map((c) => (
+          <Field key={c.key} label={c.label} subtitle={c.key}>
+            <NumInput
+              value={f.categoryWeights[c.key] ?? f.categoryDefaultWeight}
+              onChange={(v) => set('categoryWeights', { ...f.categoryWeights, [c.key]: v })}
+              min={0}
+              max={100}
+            />
+          </Field>
+        ))}
+        <Field label="Peso por defecto" subtitle="Para cualquier categoría no listada arriba">
+          <NumInput value={f.categoryDefaultWeight} onChange={(v) => set('categoryDefaultWeight', v)} min={0} max={100} />
+        </Field>
+      </SectionCard>
+
+      <SectionCard
+        title="All-time ranking points (idea #21)"
+        subtitle="Curva de puntos del leaderboard de por vida por posición final del grupo, escalada por participación real (sqrt, acotada). Los grupos con menos participantes que el mínimo dan 0 (anti-farming)."
+      >
+        <Field label="Puntos base por posición" subtitle="Lista separada por comas (posición 1, 2, 3…); más allá de la lista se usa el último valor.">
+          <input
+            value={f.rankingParams.basePoints.join(', ')}
+            onChange={(e) => {
+              const arr = e.target.value
+                .split(',')
+                .map((s) => Number(s.trim()))
+                .filter((n) => Number.isFinite(n));
+              set('rankingParams', { ...f.rankingParams, basePoints: arr });
+            }}
+            className="h-9 px-3 w-full rounded-xl text-sm bg-surface-2 border border-border text-text-primary font-mono"
+          />
+        </Field>
+        <Field label="Tamaño de referencia" subtitle="Tamaño de grupo donde la escala de participación es 1.0">
+          <NumInput value={f.rankingParams.referenceSize} onChange={(v) => set('rankingParams', { ...f.rankingParams, referenceSize: v })} min={1} max={1000} />
+        </Field>
+        <Field label="Escala mínima" subtitle="Piso del multiplicador de participación (ej. 0.5)">
+          <input
+            type="number"
+            step="0.1"
+            value={f.rankingParams.minScale}
+            onChange={(e) => set('rankingParams', { ...f.rankingParams, minScale: Number(e.target.value) })}
+            className="h-9 px-3 w-full rounded-xl text-sm bg-surface-2 border border-border text-text-primary font-mono"
+          />
+        </Field>
+        <Field label="Escala máxima" subtitle="Techo del multiplicador de participación (ej. 2.0)">
+          <input
+            type="number"
+            step="0.1"
+            value={f.rankingParams.maxScale}
+            onChange={(e) => set('rankingParams', { ...f.rankingParams, maxScale: Number(e.target.value) })}
+            className="h-9 px-3 w-full rounded-xl text-sm bg-surface-2 border border-border text-text-primary font-mono"
+          />
+        </Field>
+        <Field label="Participantes mínimos" subtitle="Grupos con menos participantes reales dan 0 puntos de ranking">
+          <NumInput value={f.rankingParams.minParticipants} onChange={(v) => set('rankingParams', { ...f.rankingParams, minParticipants: v })} min={1} max={1000} />
+        </Field>
+        <Field label="Posición máxima de podio" subtitle="Hasta qué posición cuenta como podio (por defecto 3)">
+          <NumInput value={f.rankingParams.podiumMaxRank} onChange={(v) => set('rankingParams', { ...f.rankingParams, podiumMaxRank: v })} min={1} max={1000} />
         </Field>
       </SectionCard>
 
