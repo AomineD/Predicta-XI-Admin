@@ -95,6 +95,10 @@ interface SocialConfig {
     minParticipants: number;
     podiumMaxRank: number;
   };
+  // Flags `enabled` por tipo de quiniela social (idea #21 Fase 3).
+  weeklyQuinielasEnabled: boolean;
+  competitionQuinielasEnabled: boolean;
+  knockoutQuinielasEnabled: boolean;
   // Picks de riesgo del modal de quiniela (idea #21 Fase 2).
   riskPicksEnabled: boolean;
   riskPenaltyHitPoints: number;
@@ -438,7 +442,7 @@ function ConfigTab() {
         <Field label="Competition group" subtitle="competition mode">
           <NumInput value={f.createCostCompetition} onChange={(v) => set('createCostCompetition', v)} max={MAX_CREATE_COST} />
         </Field>
-        <Field label="Knockout group" subtitle="knockout mode — always charged, even for PRO/CLUB (no subscription exemption)">
+        <Field label="Knockout group" subtitle="knockout mode — base cost (premium+ exempt, so PRO/CLUB create free, like the other types)">
           <NumInput value={f.createCostKnockout} onChange={(v) => set('createCostKnockout', v)} max={MAX_CREATE_COST} />
         </Field>
       </SectionCard>
@@ -544,6 +548,21 @@ function ConfigTab() {
         </Field>
         <Field label="Proximity max goal error" subtitle="Max total goal error (|Δhome| + |Δaway|) that still earns the bonus. 1 = off by exactly one goal (real 4-1: both 3-1 and 5-1 qualify; 2-1 does not).">
           <NumInput value={f.weeklyProximityMaxGoalError} onChange={(v) => set('weeklyProximityMaxGoalError', v)} min={0} max={20} />
+        </Field>
+      </SectionCard>
+
+      <SectionCard
+        title="Tipos habilitados (idea #21 Fase 3)"
+        subtitle="Interruptores por tipo de quiniela social. Apágalos para desactivar remotamente un tipo: la app oculta la opción de crearlo y el backend rechaza la creación. Default ON (comportamiento previo). Team y running tienen su propio flag en sus cards."
+      >
+        <Field label="Weekly quinielas enabled" subtitle="Master flag por tipo (weeklyQuinielasEnabled).">
+          <Toggle value={f.weeklyQuinielasEnabled} onChange={(v) => set('weeklyQuinielasEnabled', v)} />
+        </Field>
+        <Field label="Competition quinielas enabled" subtitle="Master flag por tipo (competitionQuinielasEnabled).">
+          <Toggle value={f.competitionQuinielasEnabled} onChange={(v) => set('competitionQuinielasEnabled', v)} />
+        </Field>
+        <Field label="Knockout quinielas enabled" subtitle="Master flag por tipo (knockoutQuinielasEnabled). Además requiere una competición con formato de llaves habilitado.">
+          <Toggle value={f.knockoutQuinielasEnabled} onChange={(v) => set('knockoutQuinielasEnabled', v)} />
         </Field>
       </SectionCard>
 
