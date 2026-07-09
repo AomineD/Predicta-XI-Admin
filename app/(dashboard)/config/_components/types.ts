@@ -47,6 +47,9 @@ export interface PredictionConfig {
   specialMarketsEnabled: boolean;
   // Value selector config (round-tripped; tuned via API). Optional in the admin form.
   specialMarketsSelector?: { maxPicks: number; minConfidence: number; minEdge: number; oddsFloor: number };
+  // Player markets (idea #1, Fase C): engine anchors to Sportium player odds (anytime
+  // scorer + assist) and emits the most likely player per market, to MAX/CLUB.
+  playerMarketsEnabled: boolean;
   // Quiniela IA: master switch + motor para la generación de llaves de eliminatoria
   // ronda por ronda (automatización de la quiniela de la IA).
   quinielaKnockoutAutomationEnabled: boolean;

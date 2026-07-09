@@ -103,6 +103,7 @@ function ConfigPageInner() {
       neutralVenueAwarenessEnabled: cfg.neutralVenueAwarenessEnabled ?? false,
       totalsUnifiedEnabled: cfg.totalsUnifiedEnabled ?? false,
       specialMarketsEnabled: cfg.specialMarketsEnabled ?? false,
+      playerMarketsEnabled: cfg.playerMarketsEnabled ?? false,
       quinielaKnockoutAutomationEnabled: cfg.quinielaKnockoutAutomationEnabled ?? false,
       quinielaKnockoutEngine: cfg.quinielaKnockoutEngine ?? 'claude_routine',
       llmTimeoutSeconds: cfg.llmTimeoutSeconds ?? 30,

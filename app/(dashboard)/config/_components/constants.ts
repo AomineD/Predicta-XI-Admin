@@ -85,7 +85,8 @@ export type EngineLayerKey =
   | 'independentModelEnabled'
   | 'neutralVenueAwarenessEnabled'
   | 'totalsUnifiedEnabled'
-  | 'specialMarketsEnabled';
+  | 'specialMarketsEnabled'
+  | 'playerMarketsEnabled';
 
 // The long descriptions used to live inline; they now sit behind the (i) button.
 export const ENGINE_LAYERS: Array<{ key: EngineLayerKey; title: string; info: string }> = [
@@ -128,5 +129,10 @@ export const ENGINE_LAYERS: Array<{ key: EngineLayerKey; title: string; info: st
     key: 'specialMarketsEnabled',
     title: 'Mercados especiales con valor (idea #1)',
     info: 'El motor deriva mercados exóticos desde la matriz Poisson (total por equipo, par/impar, portería a cero, gana a cero, combos resultado/doble-oportunidad/btts + goles), los ancla a las cuotas de Sportium para computar el edge (valor), y emite solo el top-N que elige el selector de valor. Son picks NO obvios con valor real, no el pick que ya da la cuota. Solo para tiers de suscriptor (MAX/CLUB). Antes de encenderlo en serio: corre el backtest del selector (fija sus umbrales), asigna las claves nuevas SOLO a los tiers MAX/CLUB (fail-closed: sin asignar, el usuario lo ve bloqueado) y publica un AAB con el render nuevo. Reversible (con OFF no se emiten, liquidan ni sirven picks exóticos; la captura de cuotas de Sportium sí corre para alimentar el backtest).',
+  },
+  {
+    key: 'playerMarketsEnabled',
+    title: 'Mercados de jugador (idea #1, Fase C)',
+    info: 'El motor ancla a las cuotas de jugador de Sportium (goleador "cualq. momento" + asistencia) y emite el jugador más probable por mercado. Son picks fundamentados/anclados (la confianza sale de la cuota implícita), no de valor: el eje de valor de jugador exige un modelo independiente por jugador y queda para después, así que NO entran a combinadas todavía. Se liquidan por las incidencias del partido (goleador/asistente). Solo para tiers de suscriptor (MAX/CLUB). Antes de encenderlo en serio: valida el scraping de las cuotas de jugador de Sportium en el Worker, asigna las claves anytime_scorer/player_assist SOLO a los tiers MAX/CLUB (fail-closed) y publica un AAB con el render nuevo. Reversible (con OFF no se emiten ni liquidan).',
   },
 ];
