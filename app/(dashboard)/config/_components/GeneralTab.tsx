@@ -5,7 +5,9 @@ import { Input, Select } from '@/components/ui/inputs';
 import { Toggle } from '@/components/ui/form-controls';
 import { MultiCheckbox, PredictionEngineCard } from './controls';
 import { MODELS, MODEL_DEFAULT_MAX_TOKENS, MARKETS, DATA_FIELDS, REASONING_OPTIONS } from './constants';
-import type { PredictionConfig, SetField } from './types';
+import type { PredictionConfig, RecommendationsConfig, SetField } from './types';
+
+const DEFAULT_RECOMMENDATIONS_CONFIG: RecommendationsConfig = { minSample: 20, minWinratePct: 55, topK: 4, windowDays: 90 };
 
 export function GeneralTab({ form, setField }: { form: PredictionConfig; setField: SetField }) {
   return (
@@ -128,9 +130,86 @@ export function GeneralTab({ form, setField }: { form: PredictionConfig; setFiel
 
       <PredictionEngineCard form={form} setField={setField} />
 
+      <RecommendationsCard form={form} setField={setField} />
+
       <SectionCard title="Input Data Fields" subtitle="Data sources the model receives to generate predictions">
         <MultiCheckbox options={DATA_FIELDS} value={form.inputDataFields} onChange={(v) => setField('inputDataFields', v)} />
       </SectionCard>
     </div>
+  );
+}
+
+/** Recomendaciones por mercado para suscriptores (idea #24): flag maestro + umbrales
+ *  del generador. El backend expone /stats/recommendations con el winrate real por
+ *  mercado cuando el flag está encendido. */
+function RecommendationsCard({ form, setField }: { form: PredictionConfig; setField: SetField }) {
+  const rc = form.recommendationsConfig ?? DEFAULT_RECOMMENDATIONS_CONFIG;
+  const setRc = (patch: Partial<RecommendationsConfig>) => setField('recommendationsConfig', { ...rc, ...patch });
+
+  return (
+    <SectionCard
+      title="Recomendaciones por mercado (idea #24)"
+      subtitle="Muestra a los suscriptores (PRO/CLUB), dentro de la sección de estadísticas/winrate, los mercados en los que el motor viene acertando más. Se calcula del winrate real por mercado (prediction_pick_stats), sin nada inventado. Apagado = el endpoint /stats/recommendations no expone nada."
+    >
+      <Field
+        label="Recomendaciones habilitadas"
+        subtitle="Interruptor maestro (recommendationsEnabled). Apagado = la app no muestra el bloque de recomendaciones."
+      >
+        <Toggle value={form.recommendationsEnabled} onChange={(v) => setField('recommendationsEnabled', v)} />
+      </Field>
+
+      <Field
+        label="Muestra mínima"
+        subtitle="Mínimo de picks liquidados de un mercado para que sea recomendable (evita recomendar con muestra ridícula). Default 20."
+      >
+        <Input
+          type="number"
+          min={1}
+          max={100000}
+          className="w-28"
+          value={rc.minSample}
+          onChange={(e) => setRc({ minSample: Number(e.target.value) })}
+        />
+      </Field>
+
+      <Field
+        label="Winrate mínimo (%)"
+        subtitle="Winrate mínimo (0–100) para que un mercado se recomiende. Default 55."
+      >
+        <Input
+          type="number"
+          min={0}
+          max={100}
+          className="w-28"
+          value={rc.minWinratePct}
+          onChange={(e) => setRc({ minWinratePct: Number(e.target.value) })}
+        />
+      </Field>
+
+      <Field label="Máximo de mercados (topK)" subtitle="Cuántos mercados recomendar como máximo (0–20). Default 4.">
+        <Input
+          type="number"
+          min={0}
+          max={20}
+          className="w-28"
+          value={rc.topK}
+          onChange={(e) => setRc({ topK: Number(e.target.value) })}
+        />
+      </Field>
+
+      <Field
+        label="Ventana (días)"
+        subtitle="Días hacia atrás sobre los que se mide el rendimiento por mercado (1–365). Default 90."
+      >
+        <Input
+          type="number"
+          min={1}
+          max={365}
+          className="w-28"
+          value={rc.windowDays}
+          onChange={(e) => setRc({ windowDays: Number(e.target.value) })}
+        />
+      </Field>
+    </SectionCard>
   );
 }

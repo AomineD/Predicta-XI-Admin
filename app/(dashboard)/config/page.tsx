@@ -104,6 +104,8 @@ function ConfigPageInner() {
       totalsUnifiedEnabled: cfg.totalsUnifiedEnabled ?? false,
       specialMarketsEnabled: cfg.specialMarketsEnabled ?? false,
       playerMarketsEnabled: cfg.playerMarketsEnabled ?? false,
+      recommendationsEnabled: cfg.recommendationsEnabled ?? false,
+      recommendationsConfig: cfg.recommendationsConfig ?? { minSample: 20, minWinratePct: 55, topK: 4, windowDays: 90 },
       quinielaKnockoutAutomationEnabled: cfg.quinielaKnockoutAutomationEnabled ?? false,
       quinielaKnockoutEngine: cfg.quinielaKnockoutEngine ?? 'claude_routine',
       llmTimeoutSeconds: cfg.llmTimeoutSeconds ?? 30,

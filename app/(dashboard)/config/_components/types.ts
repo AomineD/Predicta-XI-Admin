@@ -50,6 +50,12 @@ export interface PredictionConfig {
   // Player markets (idea #1, Fase C): engine anchors to Sportium player odds (anytime
   // scorer + assist) and emits the most likely player per market, to MAX/CLUB.
   playerMarketsEnabled: boolean;
+  // Recomendaciones por mercado (idea #24): flag maestro + umbrales del generador.
+  // Con ON, el endpoint premium /stats/recommendations expone los mercados donde el
+  // motor viene acertando más (winrate real de prediction_pick_stats).
+  recommendationsEnabled: boolean;
+  // Umbrales del generador (round-tripped; tuned via API). Optional en el form.
+  recommendationsConfig?: RecommendationsConfig;
   // Quiniela IA: master switch + motor para la generación de llaves de eliminatoria
   // ronda por ronda (automatización de la quiniela de la IA).
   quinielaKnockoutAutomationEnabled: boolean;
@@ -75,6 +81,19 @@ export interface PredictionConfig {
   earlyEnrichmentHourUtc?: number;
   /** Per-model max output token override. Empty/missing → backend uses baked-in default. */
   llmMaxTokens?: Record<string, number>;
+}
+
+/** Umbrales del generador de recomendaciones por mercado (idea #24). Debe reflejar
+ *  el schema del backend (recommendations.config.ts). */
+export interface RecommendationsConfig {
+  /** Mínimo de picks liquidados de un mercado para que sea recomendable (1–100000). */
+  minSample: number;
+  /** Winrate mínimo (0–100) para recomendar el mercado. */
+  minWinratePct: number;
+  /** Máximo de mercados a devolver (0–20). */
+  topK: number;
+  /** Ventana de días hacia atrás sobre la que se mide el rendimiento (1–365). */
+  windowDays: number;
 }
 
 export interface SportiumConfig {
