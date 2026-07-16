@@ -200,6 +200,24 @@ export function MaintenanceTab() {
     onError: (err: Error) => toast.error(err.message),
   });
 
+  // ── Subscriber identity (idea #22) ──
+  const [subIdentityForm, setSubIdentityForm] = useState<{ subscriberIdentityEnabled: boolean } | null>(null);
+  const subIdentityInitial = useMemo(
+    () => (maintCfg ? { subscriberIdentityEnabled: maintCfg.subscriberIdentityEnabled } : null),
+    [maintCfg],
+  );
+  const subIdentity = subIdentityForm ?? subIdentityInitial;
+
+  const saveSubIdentity = useMutation({
+    mutationFn: (body: { subscriberIdentityEnabled: boolean }) => api.put('/admin/credits-config', body),
+    onSuccess: () => {
+      setSubIdentityForm(null);
+      toast.success('Subscriber identity setting saved.');
+      invalidateMaint();
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
   // ── Data Maintenance: backfill stats ──
   const [showBackfillConfirm, setShowBackfillConfirm] = useState(false);
   const backfillStats = useMutation({
@@ -477,6 +495,31 @@ export function MaintenanceTab() {
               </Button>
               {homeAnnouncements.homeAnnouncementsEnabled && (
                 <span className="text-xs font-sans text-success">Home announcements are on for users on a build that includes the carousel.</span>
+              )}
+            </div>
+          </>
+        )}
+      </SectionCard>
+
+      {/* Subscriber identity (idea #22) */}
+      <SectionCard title="Subscriber identity" subtitle="Animated PRO/CLUB visual identity wherever a person shows up (idea #22): friends, search, add-friend, quiniela management, the leaderboard table and King of the hill — tier ring, animated tag, gold name and 'member since'. The code ships in the app build but stays hidden until turned on here — turn it on only once the build that includes it is live in the stores.">
+        {!subIdentity ? (
+          <p className="text-text-muted text-sm font-sans py-3">Loading…</p>
+        ) : (
+          <>
+            <Field label="Subscriber identity enabled" subtitle="When on, subscriber (PRO/CLUB) surfaces show the enriched animated identity. Off = the app uses the plain previous tier render (no rings/tags/animations, no 'member since').">
+              <Toggle value={subIdentity.subscriberIdentityEnabled} onChange={(v) => setSubIdentityForm({ subscriberIdentityEnabled: v })} />
+            </Field>
+            <div className="flex items-center gap-3 pt-3">
+              <Button
+                variant="primary"
+                loading={saveSubIdentity.isPending}
+                onClick={() => saveSubIdentity.mutate({ subscriberIdentityEnabled: subIdentity.subscriberIdentityEnabled })}
+              >
+                Save subscriber identity
+              </Button>
+              {subIdentity.subscriberIdentityEnabled && (
+                <span className="text-xs font-sans text-success">Subscriber identity is on for users on a build that includes it.</span>
               )}
             </div>
           </>

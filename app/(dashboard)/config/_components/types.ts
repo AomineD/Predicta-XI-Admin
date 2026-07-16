@@ -176,6 +176,7 @@ export interface MaintenanceCreditsConfig {
   liveTrackerEnabled: boolean;
   liveScoresEnabled: boolean;
   homeAnnouncementsEnabled: boolean;
+  subscriberIdentityEnabled: boolean;
 }
 
 export type SetField = <K extends keyof PredictionConfig>(key: K, value: PredictionConfig[K]) => void;
