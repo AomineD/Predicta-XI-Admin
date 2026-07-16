@@ -34,6 +34,10 @@ interface Competition {
   // 3.er puesto: si la competición tiene partido por el 3.er puesto e incluirlo en
   // la quiniela de llaves (como una llave más; no cuenta para el campeón).
   thirdPlaceEnabled: boolean;
+  // Modo de marcador en vivo (idea #27): 'direct' = la app poléa la fuente (ESPN)
+  // directo; 'centralized' = el backend sirve el marcador (base para cambiar de
+  // fuente sin release). Solo surte efecto con «Live scores» activo.
+  liveScoreMode: 'direct' | 'centralized';
 }
 
 type CompetitionUpdate = Partial<
@@ -52,6 +56,7 @@ type CompetitionUpdate = Partial<
     | 'historicalContext'
     | 'isNationalTeamCompetition'
     | 'thirdPlaceEnabled'
+    | 'liveScoreMode'
   >
 >;
 
@@ -145,6 +150,7 @@ function CompetitionDetailsEditor({
   const [historicalContext, setHistoricalContext] = useState(comp.historicalContext ?? '');
   const [isNationalTeamCompetition, setIsNationalTeamCompetition] = useState(comp.isNationalTeamCompetition);
   const [thirdPlaceEnabled, setThirdPlaceEnabled] = useState(comp.thirdPlaceEnabled);
+  const [liveScoreMode, setLiveScoreMode] = useState<Competition['liveScoreMode']>(comp.liveScoreMode ?? 'direct');
 
   // A tournament-format competition (group-aware standings, like the World
   // Cup) is identified by a non-empty flashscore_season_id. In that case the
@@ -180,6 +186,7 @@ function CompetitionDetailsEditor({
                 historicalContext: historicalContext.trim() ? historicalContext : null,
                 isNationalTeamCompetition,
                 thirdPlaceEnabled,
+                liveScoreMode,
               })
             }
           >
@@ -248,6 +255,22 @@ function CompetitionDetailsEditor({
         </label>
 
         <ToggleRow label="3.er puesto (incluir en quiniela de llaves)" value={thirdPlaceEnabled} onChange={setThirdPlaceEnabled} />
+
+        <label className="block">
+          <span className="text-xs text-text-muted font-sans">Marcador en vivo (idea #27)</span>
+          <Select
+            className="mt-1"
+            value={liveScoreMode}
+            onChange={(e) => setLiveScoreMode(e.target.value as Competition['liveScoreMode'])}
+          >
+            <option value="direct">Directo — la app poléa la fuente (ESPN) directo</option>
+            <option value="centralized">Centralizado — el backend sirve el marcador</option>
+          </Select>
+          <p className="text-xs text-text-muted font-sans mt-1">
+            Solo aplica con «Live scores» activo (Config → Mantenimiento). El modo centralizado
+            requiere que la competición esté cubierta por ESPN; si no hay marcador, la app cae al de backend.
+          </p>
+        </label>
 
         <label className="block">
           <span className="text-xs text-text-muted font-sans flex justify-between">
