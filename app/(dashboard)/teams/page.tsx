@@ -37,6 +37,24 @@ interface TeamNewsSyncResult {
   skippedNoSlug?: boolean;
 }
 
+// Vista mínima de /admin/team-data-sync-status para el pre-flight de
+// "Preparar temporada": solo necesitamos saber si alguna cola sigue drenando.
+interface SyncQueueState {
+  state: 'running' | 'pending' | 'idle' | 'empty';
+  pending: number;
+  running: number;
+  retrying: number;
+}
+
+interface TeamDataSyncStatus {
+  teamHistory: SyncQueueState;
+  transfers: SyncQueueState;
+  standings: { queue: SyncQueueState };
+}
+
+const isQueueBusy = (q: SyncQueueState | undefined): boolean =>
+  !!q && (q.state === 'running' || q.state === 'pending');
+
 function TeamEditor({
   team,
   onSave,
@@ -256,6 +274,62 @@ export default function TeamsPage() {
     mutationFn: () => api.post('/admin/season/prepare', {}),
   });
 
+  // Pre-flight de "Preparar temporada": antes de confirmar, detecta momentos
+  // inoportunos — (a) un barrido de datos aún drenando (se pisarían y el ETA se
+  // vuelve inútil) y (b) jornada activa o inminente (el scraping masivo compite
+  // con el enrichment near-kickoff en la réplica de Flashscore). No bloquea:
+  // arma el confirm con las advertencias encontradas y deja decidir.
+  const [checkingSeasonPrep, setCheckingSeasonPrep] = useState(false);
+
+  const handlePrepareSeason = async () => {
+    if (checkingSeasonPrep || prepareSeason.isPending) return;
+    setCheckingSeasonPrep(true);
+    const warnings: string[] = [];
+    try {
+      const now = Date.now();
+      const from = new Date(now - 3 * 60 * 60 * 1000).toISOString();
+      const to = new Date(now + 6 * 60 * 60 * 1000).toISOString();
+      const [syncStatus, nearbyMatches] = await Promise.all([
+        api.get<TeamDataSyncStatus>('/admin/team-data-sync-status'),
+        api.get<{ total: number }>(
+          `/admin/matches?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&pageSize=1`,
+        ),
+      ]);
+
+      const busy: string[] = [];
+      if (isQueueBusy(syncStatus.teamHistory)) busy.push('plantillas/historial');
+      if (isQueueBusy(syncStatus.transfers)) busy.push('fichajes');
+      if (isQueueBusy(syncStatus.standings?.queue)) busy.push('tablas');
+      if (busy.length > 0) {
+        warnings.push(
+          `Ya hay un barrido en curso (${busy.join(', ')}). Se recomienda esperar a que termine (pestaña Jobs) antes de encolar otro.`,
+        );
+      }
+      if ((nearbyMatches?.total ?? 0) > 0) {
+        warnings.push(
+          `Hay ${nearbyMatches.total} partido(s) en curso o por comenzar en las próximas 6 horas. El scraping masivo compite con el enrichment cerca del kickoff; mejor córrelo en una franja sin partidos.`,
+        );
+      }
+    } catch {
+      // El pre-flight es best-effort: si el chequeo falla, se cae al confirm
+      // genérico en vez de bloquear la acción.
+      warnings.push('No se pudo verificar el estado de colas y partidos; confirma solo si estás seguro de que es buen momento.');
+    } finally {
+      setCheckingSeasonPrep(false);
+    }
+
+    const base =
+      '¿Preparar nueva temporada? Encola de golpe plantillas + fichajes + tablas de todas las competiciones activas (~1h de drenado). Úsalo al arrancar la temporada (agosto), cuando aún no hay partidos liquidados que disparen el refresh automático.';
+    const message =
+      warnings.length > 0
+        ? `⚠️ MOMENTO POCO OPORTUNO DETECTADO:\n\n• ${warnings.join('\n\n• ')}\n\n${base}`
+        : base;
+
+    if (window.confirm(message)) {
+      prepareSeason.mutate();
+    }
+  };
+
   // Extract unique countries from current page for filter. Excludes the
   // pseudo-"World" countries used as the home country of national teams so the
   // dropdown stays focused on club leagues; the "Selecciones" option is the
@@ -280,17 +354,9 @@ export default function TeamsPage() {
           <div className="flex items-center gap-2">
             <Button
               variant="primary"
-              loading={prepareSeason.isPending}
-              onClick={() => {
-                if (
-                  window.confirm(
-                    '¿Preparar nueva temporada? Encola de golpe plantillas + fichajes + tablas de todas las competiciones activas. Úsalo al arrancar la temporada (agosto), cuando aún no hay partidos liquidados que disparen el refresh automático.',
-                  )
-                ) {
-                  prepareSeason.mutate();
-                }
-              }}
-              title="Rollover de temporada: encola los tres barridos (plantillas, fichajes y tablas) para recoger los fichajes de verano y las plantillas nuevas sin esperar al primer partido liquidado. Máx. 1 cada 5 min."
+              loading={prepareSeason.isPending || checkingSeasonPrep}
+              onClick={() => { void handlePrepareSeason(); }}
+              title="Rollover de temporada: encola los tres barridos (plantillas, fichajes y tablas) para recoger los fichajes de verano y las plantillas nuevas sin esperar al primer partido liquidado. Antes de confirmar verifica que no haya barridos en curso ni jornada activa. Máx. 1 cada 5 min."
             >
               🗓️ Preparar temporada
             </Button>
