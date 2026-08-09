@@ -8,7 +8,7 @@ import { Input, Textarea } from '@/components/ui/inputs';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useToast } from '@/components/ui/ToastProvider';
-import type { MaintenanceCreditsConfig } from './types';
+import type { MaintenanceCreditsConfig, MatchRatingsConfig } from './types';
 
 type ReEnrichPreview = {
   dryRun: true;
@@ -217,6 +217,43 @@ export function MaintenanceTab() {
     },
     onError: (err: Error) => toast.error(err.message),
   });
+
+  // ── Match ratings (idea #30) ──
+  const [matchRatingsForm, setMatchRatingsForm] = useState<{
+    matchRatingsEnabled: boolean;
+    matchRatingsConfig: MatchRatingsConfig;
+  } | null>(null);
+  const matchRatingsInitial = useMemo(
+    () =>
+      maintCfg
+        ? {
+            matchRatingsEnabled: maintCfg.matchRatingsEnabled,
+            matchRatingsConfig: maintCfg.matchRatingsConfig,
+          }
+        : null,
+    [maintCfg],
+  );
+  const matchRatings = matchRatingsForm ?? matchRatingsInitial;
+
+  const saveMatchRatings = useMutation({
+    mutationFn: (body: { matchRatingsEnabled: boolean; matchRatingsConfig: MatchRatingsConfig }) =>
+      api.put('/admin/credits-config', body),
+    onSuccess: () => {
+      setMatchRatingsForm(null);
+      toast.success('Match ratings setting saved.');
+      invalidateMaint();
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  /** Ajusta un tunable sin perder el resto del objeto. */
+  const setRatingsTunable = (key: keyof MatchRatingsConfig, value: number) => {
+    if (!matchRatings) return;
+    setMatchRatingsForm({
+      ...matchRatings,
+      matchRatingsConfig: { ...matchRatings.matchRatingsConfig, [key]: value },
+    });
+  };
 
   // ── Data Maintenance: backfill stats ──
   const [showBackfillConfirm, setShowBackfillConfirm] = useState(false);
@@ -520,6 +557,108 @@ export function MaintenanceTab() {
               </Button>
               {subIdentity.subscriberIdentityEnabled && (
                 <span className="text-xs font-sans text-success">Subscriber identity is on for users on a build that includes it.</span>
+              )}
+            </div>
+          </>
+        )}
+      </SectionCard>
+
+      {/* Match ratings (idea #30) */}
+      <SectionCard
+        title="Match ratings"
+        subtitle="Community rating of a finished match, 1 to 10 (idea #30). Users rate from the match detail screen and see their rated-matches history in their profile. The published score is a Bayesian average, not the raw mean, so a handful of votes can't push a match to 10 or 1. The code ships in the app build but stays hidden until turned on here — turn it on only once the build that includes it is live in the stores."
+      >
+        {!matchRatings ? (
+          <p className="text-text-muted text-sm font-sans py-3">Loading…</p>
+        ) : (
+          <>
+            <Field
+              label="Match ratings enabled"
+              subtitle="When on, users can rate finished matches. Off = the app hides the block and the endpoint rejects fail-closed. Already-submitted ratings are kept and stay visible in the user's history."
+            >
+              <Toggle
+                value={matchRatings.matchRatingsEnabled}
+                onChange={(v) => setMatchRatingsForm({ ...matchRatings, matchRatingsEnabled: v })}
+              />
+            </Field>
+            <Field
+              label="Rating window (hours)"
+              subtitle="Hours after kickoff during which a match can be rated or the rating changed. Keeps old matches from being rated en masse. Default 72."
+            >
+              <Input
+                type="number"
+                min={1}
+                max={336}
+                value={matchRatings.matchRatingsConfig.windowHours}
+                onChange={(e) => setRatingsTunable('windowHours', Number(e.target.value))}
+              />
+            </Field>
+            <Field
+              label="Minimum votes to publish"
+              subtitle="Below this many votes the community score stays hidden (the vote count is still shown). Default 10."
+            >
+              <Input
+                type="number"
+                min={1}
+                max={10000}
+                value={matchRatings.matchRatingsConfig.minVotesToShow}
+                onChange={(e) => setRatingsTunable('minVotesToShow', Number(e.target.value))}
+              />
+            </Field>
+            <Field
+              label="Prior weight"
+              subtitle="How many 'virtual votes' the prior is worth. Higher = the score moves away from the prior mean more slowly, so it resists review-bombing harder. Default 8."
+            >
+              <Input
+                type="number"
+                min={1}
+                max={1000}
+                value={matchRatings.matchRatingsConfig.priorWeight}
+                onChange={(e) => setRatingsTunable('priorWeight', Number(e.target.value))}
+              />
+            </Field>
+            <Field
+              label="Prior mean"
+              subtitle="The score a match with few votes is pulled toward. Should sit near the global average rating. Default 6.5."
+            >
+              <Input
+                type="number"
+                min={1}
+                max={10}
+                step="0.1"
+                value={matchRatings.matchRatingsConfig.priorMean}
+                onChange={(e) => setRatingsTunable('priorMean', Number(e.target.value))}
+              />
+            </Field>
+            <Field
+              label="Max ratings per hour"
+              subtitle="Per-user cap. Applies to edits too, so a user can't keep flipping their own rating. Default 10."
+            >
+              <Input
+                type="number"
+                min={1}
+                max={1000}
+                value={matchRatings.matchRatingsConfig.maxPerHour}
+                onChange={(e) => setRatingsTunable('maxPerHour', Number(e.target.value))}
+              />
+            </Field>
+            <div className="flex items-center gap-3 pt-3">
+              <Button
+                variant="primary"
+                loading={saveMatchRatings.isPending}
+                onClick={() =>
+                  saveMatchRatings.mutate({
+                    matchRatingsEnabled: matchRatings.matchRatingsEnabled,
+                    matchRatingsConfig: matchRatings.matchRatingsConfig,
+                  })
+                }
+              >
+                Save match ratings
+              </Button>
+              {matchRatings.matchRatingsEnabled && (
+                <span className="text-xs font-sans text-success">
+                  Match ratings are on for users on a build that includes it.
+                </span>
               )}
             </div>
           </>

@@ -177,6 +177,23 @@ export interface MaintenanceCreditsConfig {
   liveScoresEnabled: boolean;
   homeAnnouncementsEnabled: boolean;
   subscriberIdentityEnabled: boolean;
+  // Calificar el partido 1-10 (idea #30).
+  matchRatingsEnabled: boolean;
+  matchRatingsConfig: MatchRatingsConfig;
+}
+
+/** Tunables de la calificación comunitaria del partido (idea #30). */
+export interface MatchRatingsConfig {
+  /** Horas desde el kickoff en las que se puede calificar o editar. */
+  windowHours: number;
+  /** Votos mínimos antes de publicar la nota comunitaria. */
+  minVotesToShow: number;
+  /** Peso del prior bayesiano, en "votos equivalentes". */
+  priorWeight: number;
+  /** Nota hacia la que tira el prior mientras hay pocos votos. */
+  priorMean: number;
+  /** Tope de calificaciones por usuario y hora. */
+  maxPerHour: number;
 }
 
 export type SetField = <K extends keyof PredictionConfig>(key: K, value: PredictionConfig[K]) => void;
