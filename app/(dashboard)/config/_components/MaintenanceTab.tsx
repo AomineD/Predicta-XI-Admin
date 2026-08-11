@@ -167,13 +167,23 @@ export function MaintenanceTab() {
     onError: (err: Error) => toast.error(err.message),
   });
 
-  // ── Live scores (real-time via ESPN) ──
-  const [liveScoresForm, setLiveScoresForm] = useState<{ liveScoresEnabled: boolean } | null>(null);
-  const liveScoresInitial = useMemo(() => (maintCfg ? { liveScoresEnabled: maintCfg.liveScoresEnabled } : null), [maintCfg]);
+  // ── Live scores (real-time via ESPN) + goal celebration (idea #28) ──
+  // Both live in the same card because the celebration is driven by the live score:
+  // with `liveScoresEnabled` off there is no score change to detect, so turning the
+  // celebration on alone does nothing.
+  type LiveScoresForm = { liveScoresEnabled: boolean; goalCelebrationEnabled: boolean };
+  const [liveScoresForm, setLiveScoresForm] = useState<LiveScoresForm | null>(null);
+  const liveScoresInitial = useMemo(
+    () =>
+      maintCfg
+        ? { liveScoresEnabled: maintCfg.liveScoresEnabled, goalCelebrationEnabled: maintCfg.goalCelebrationEnabled }
+        : null,
+    [maintCfg],
+  );
   const liveScores = liveScoresForm ?? liveScoresInitial;
 
   const saveLiveScores = useMutation({
-    mutationFn: (body: { liveScoresEnabled: boolean }) => api.put('/admin/credits-config', body),
+    mutationFn: (body: LiveScoresForm) => api.put('/admin/credits-config', body),
     onSuccess: () => {
       setLiveScoresForm(null);
       toast.success('Live scores setting saved.');
@@ -501,13 +511,22 @@ export function MaintenanceTab() {
         ) : (
           <>
             <Field label="Live scores enabled" subtitle="When on, the match screen updates the live score in real time (no more stale 0-0) and the backend runs the ESPN event-binding scheduler. Off = neither the scheduler nor the app polling run.">
-              <Toggle value={liveScores.liveScoresEnabled} onChange={(v) => setLiveScoresForm({ liveScoresEnabled: v })} />
+              <Toggle value={liveScores.liveScoresEnabled} onChange={(v) => setLiveScoresForm({ ...liveScores, liveScoresEnabled: v })} />
+            </Field>
+            <Field label="Goal celebration" subtitle="Idea #28. When on, a goal animation plays and a sound fires as soon as the live score goes up — on the match screen and as a flash on the list cards. Needs live scores on: with no live score there is no goal to detect. Users can mute the sound and disable animations in the app's settings.">
+              <Toggle
+                value={liveScores.goalCelebrationEnabled}
+                onChange={(v) => setLiveScoresForm({ ...liveScores, goalCelebrationEnabled: v })}
+              />
             </Field>
             <div className="flex items-center gap-3 pt-3">
-              <Button variant="primary" loading={saveLiveScores.isPending} onClick={() => saveLiveScores.mutate({ liveScoresEnabled: liveScores.liveScoresEnabled })}>
+              <Button variant="primary" loading={saveLiveScores.isPending} onClick={() => saveLiveScores.mutate(liveScores)}>
                 Save live scores
               </Button>
               {liveScores.liveScoresEnabled && <span className="text-xs font-sans text-success">Live scores are on for users on a build that includes it.</span>}
+              {liveScores.goalCelebrationEnabled && !liveScores.liveScoresEnabled && (
+                <span className="text-xs font-sans text-warning">Goal celebration does nothing while live scores are off.</span>
+              )}
             </div>
           </>
         )}

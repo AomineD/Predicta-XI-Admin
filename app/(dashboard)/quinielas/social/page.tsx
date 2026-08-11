@@ -107,6 +107,16 @@ interface SocialConfig {
   riskRedCardMissPenalty: number;
   riskPlayerGoalHitPoints: number;
   riskPlayerGoalMissPenalty: number;
+  // Quiniela de campeonato (idea #29): unifica torneo + eliminatoria + tabla.
+  championshipQuinielasEnabled: boolean;
+  createCostChampionship: number;
+  prizeChampionshipWinnerCredits: number;
+  prizeChampionshipPodiumCredits: Record<string, number>;
+  championshipInitialCloseLeadMinutes: number;
+  standingsExactPoints: number;
+  standingsOffByOnePoints: number;
+  standingsNarrowBandPoints: number;
+  standingsWideBandPoints: number;
 }
 
 /* ── competition categories that carry a weight (mirror of scoring.ts) ──────── */
@@ -558,10 +568,10 @@ function ConfigTab() {
         <Field label="Weekly quinielas enabled" subtitle="Master flag por tipo (weeklyQuinielasEnabled).">
           <Toggle value={f.weeklyQuinielasEnabled} onChange={(v) => set('weeklyQuinielasEnabled', v)} />
         </Field>
-        <Field label="Competition quinielas enabled" subtitle="Master flag por tipo (competitionQuinielasEnabled).">
+        <Field label="Competition quinielas enabled" subtitle="DEPRECADO — lo reemplaza la quiniela de campeonato (idea #29). Se apagó en la migración 0150; los grupos ya creados siguen liquidando con normalidad. Encenderlo vuelve a ofrecer el tipo viejo.">
           <Toggle value={f.competitionQuinielasEnabled} onChange={(v) => set('competitionQuinielasEnabled', v)} />
         </Field>
-        <Field label="Knockout quinielas enabled" subtitle="Master flag por tipo (knockoutQuinielasEnabled). Además requiere una competición con formato de llaves habilitado.">
+        <Field label="Knockout quinielas enabled" subtitle="DEPRECADO — lo reemplaza la quiniela de campeonato (idea #29), cuya fase de llaves es idéntica. Se apagó en la migración 0150; los grupos ya creados siguen liquidando.">
           <Toggle value={f.knockoutQuinielasEnabled} onChange={(v) => set('knockoutQuinielasEnabled', v)} />
         </Field>
       </SectionCard>
@@ -752,6 +762,95 @@ function ConfigTab() {
         </Field>
       </SectionCard>
 
+      <SectionCard
+        title="Championship quiniela (idea #29)"
+        subtitle="Reemplaza a las quinielas de torneo y de eliminatoria: un solo tipo con tres fases — las categorías del torneo, la tabla de la fase de liga y las llaves — solo para PRO/CLUB. Las dos primeras fases cierran juntas antes del primer partido; las llaves, cada una en su kickoff. Los cortes de rango de la tabla se definen POR COMPETICIÓN en su editor; sin ellos, la fase de tabla no se ofrece."
+      >
+        <Field label="Championship quinielas enabled" subtitle="Master flag. Off = la app no ofrece crear campeonatos (los ya creados siguen liquidando).">
+          <Toggle
+            value={f.championshipQuinielasEnabled}
+            onChange={(v) => set('championshipQuinielasEnabled', v)}
+          />
+        </Field>
+        <Field label="Costo de creación" subtitle="Créditos. Los suscriptores (PRO/CLUB) están exentos — y son los únicos que pueden crearla.">
+          <NumInput
+            value={f.createCostChampionship}
+            onChange={(v) => set('createCostChampionship', v)}
+            min={0}
+            max={MAX_CREATE_COST}
+          />
+        </Field>
+        <Field label="Premio al ganador" subtitle="Créditos para el 1.º (clave propia; no reusa la de las quinielas de equipo).">
+          <NumInput
+            value={f.prizeChampionshipWinnerCredits}
+            onChange={(v) => set('prizeChampionshipWinnerCredits', v)}
+            min={0}
+            max={MAX_PRIZE}
+          />
+        </Field>
+        <Field label="Premio 2.º puesto" subtitle="Créditos del podio (0 = sin premio).">
+          <NumInput
+            value={f.prizeChampionshipPodiumCredits?.['2'] ?? 0}
+            onChange={(v) =>
+              set('prizeChampionshipPodiumCredits', { ...f.prizeChampionshipPodiumCredits, '2': v })
+            }
+            min={0}
+            max={MAX_PRIZE}
+          />
+        </Field>
+        <Field label="Premio 3.er puesto" subtitle="Créditos del podio (0 = sin premio).">
+          <NumInput
+            value={f.prizeChampionshipPodiumCredits?.['3'] ?? 0}
+            onChange={(v) =>
+              set('prizeChampionshipPodiumCredits', { ...f.prizeChampionshipPodiumCredits, '3': v })
+            }
+            min={0}
+            max={MAX_PRIZE}
+          />
+        </Field>
+        <Field label="Cierre de la ventana inicial" subtitle="Minutos antes del PRIMER partido del torneo en que cierran las categorías y la tabla (default 60).">
+          <NumInput
+            value={f.championshipInitialCloseLeadMinutes}
+            onChange={(v) => set('championshipInitialCloseLeadMinutes', v)}
+            min={5}
+            max={10080}
+          />
+        </Field>
+      </SectionCard>
+
+      <SectionCard
+        title="Tabla de la fase de liga — puntos (idea #29)"
+        subtitle="Puntos por club al predecir la tabla completa. Por cada club se toma el MEJOR nivel alcanzado, no la suma. Deben ir de mayor a menor (exacta ≥ ±1 ≥ tramo estrecho ≥ tramo amplio): el server rechaza el guardado si no cuadran."
+      >
+        <Field label="Posición exacta" subtitle="El club terminó justo donde el usuario lo puso.">
+          <NumInput value={f.standingsExactPoints} onChange={(v) => set('standingsExactPoints', v)} min={0} max={100} />
+        </Field>
+        <Field label="Error de ±1" subtitle="Falló la posición por una sola plaza.">
+          <NumInput
+            value={f.standingsOffByOnePoints}
+            onChange={(v) => set('standingsOffByOnePoints', v)}
+            min={0}
+            max={100}
+          />
+        </Field>
+        <Field label="Mismo tramo estrecho" subtitle="Acertó el tramo fino (p. ej. 1-8 / 9-16 / 17-24 en Champions).">
+          <NumInput
+            value={f.standingsNarrowBandPoints}
+            onChange={(v) => set('standingsNarrowBandPoints', v)}
+            min={0}
+            max={100}
+          />
+        </Field>
+        <Field label="Mismo tramo amplio" subtitle="Acertó el tramo grueso (p. ej. clasifica / playoff / eliminado).">
+          <NumInput
+            value={f.standingsWideBandPoints}
+            onChange={(v) => set('standingsWideBandPoints', v)}
+            min={0}
+            max={100}
+          />
+        </Field>
+      </SectionCard>
+
       {mut.error && <p className="text-sm text-danger font-sans mt-2">{(mut.error as Error).message}</p>}
     </>
   );
@@ -760,7 +859,7 @@ function ConfigTab() {
 /* ── tab: group moderation ─────────────────────────────────────────────────── */
 
 const STATUS_FILTERS = ['', 'open', 'locked', 'settling', 'settled', 'cancelled'];
-const TYPE_FILTERS = ['', 'weekly', 'competition', 'team', 'running', 'knockout'];
+const TYPE_FILTERS = ['', 'weekly', 'competition', 'team', 'running', 'knockout', 'championship'];
 
 function GroupsTab() {
   const [status, setStatus] = useState('');

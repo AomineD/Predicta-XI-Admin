@@ -38,6 +38,21 @@ interface Competition {
   // directo; 'centralized' = el backend sirve el marcador (base para cambiar de
   // fuente sin release). Solo surte efecto con «Live scores» activo.
   liveScoreMode: 'direct' | 'centralized';
+  // Cortes de rango de la fase de liga para la quiniela de campeonato (idea #29).
+  // Null = la fase de tabla NO se ofrece para esta competición (fail-closed).
+  leaguePhaseConfig: LeaguePhaseConfig | null;
+}
+
+/** Cortes de la fase de liga. Cada corte es la ÚLTIMA posición de su tramo:
+ *  narrowCuts [8,16,24] define 1-8, 9-16, 17-24, 25-N. */
+export interface LeaguePhaseConfig {
+  narrowCuts: number[];
+  wideCuts: number[];
+  narrowLabels?: string[];
+  wideLabels?: string[];
+  expectedSize: number;
+  expectedMatchesPerTeam: number;
+  groupKey?: string | null;
 }
 
 type CompetitionUpdate = Partial<
@@ -57,6 +72,7 @@ type CompetitionUpdate = Partial<
     | 'isNationalTeamCompetition'
     | 'thirdPlaceEnabled'
     | 'liveScoreMode'
+    | 'leaguePhaseConfig'
   >
 >;
 
@@ -78,6 +94,69 @@ interface PredictionConfig {
   llmTimeoutSeconds: number;
   predictionWindowMinutes: number;
   featuredLeagueIds: number[];
+}
+
+/** Parsea "8, 16, 24" a [8,16,24]. Devuelve null si algo no es un entero. */
+function parseCuts(raw: string): number[] | null {
+  const parts = raw
+    .split(',')
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0);
+  if (parts.length === 0) return null;
+  const out: number[] = [];
+  for (const p of parts) {
+    const n = Number(p);
+    if (!Number.isInteger(n)) return null;
+    out.push(n);
+  }
+  return out;
+}
+
+/**
+ * Construye la config de la fase de liga, o null si no es válida.
+ *
+ * Espejo exacto de `normalizeLeaguePhaseConfig` del backend: cortes estrictamente
+ * crecientes y dentro de la tabla, tamaño 2..128, partidos por equipo 1..size-1.
+ * Es fail-closed a propósito: sin una config válida, la fase de tabla no se
+ * ofrece, que es preferible a puntuar con cortes inventados.
+ */
+function buildLeaguePhaseConfig(raw: {
+  expectedSize: string;
+  expectedMatchesPerTeam: string;
+  narrowCuts: string;
+  wideCuts: string;
+  groupKey: string;
+}): LeaguePhaseConfig | null {
+  const size = Number(raw.expectedSize.trim());
+  if (!Number.isInteger(size) || size < 2 || size > 128) return null;
+  const perTeam = Number(raw.expectedMatchesPerTeam.trim());
+  if (!Number.isInteger(perTeam) || perTeam < 1 || perTeam > size - 1) return null;
+
+  const narrowCuts = parseCuts(raw.narrowCuts);
+  const wideCuts = parseCuts(raw.wideCuts);
+  if (!narrowCuts || !wideCuts) return null;
+
+  const cutsOk = (cuts: number[]) => {
+    let prev = 0;
+    for (const v of cuts) {
+      if (v <= prev || v >= size) return false;
+      prev = v;
+    }
+    return true;
+  };
+  if (!cutsOk(narrowCuts) || !cutsOk(wideCuts)) return null;
+
+  // El backend cappea a 64 (`groupKey.trim().slice(0, 64)`); sin este mismo cap,
+  // el formulario aceptaria un valor largo, el server lo truncaria en silencio y
+  // el admin veria en pantalla algo distinto a lo guardado.
+  const groupKey = raw.groupKey.trim().slice(0, 64);
+  return {
+    narrowCuts,
+    wideCuts,
+    expectedSize: size,
+    expectedMatchesPerTeam: perTeam,
+    groupKey: groupKey.length > 0 ? groupKey : null,
+  };
 }
 
 /** Fila de "toggle con etiqueta" (pill) — reemplaza los checkboxes nativos. */
@@ -151,6 +230,15 @@ function CompetitionDetailsEditor({
   const [isNationalTeamCompetition, setIsNationalTeamCompetition] = useState(comp.isNationalTeamCompetition);
   const [thirdPlaceEnabled, setThirdPlaceEnabled] = useState(comp.thirdPlaceEnabled);
   const [liveScoreMode, setLiveScoreMode] = useState<Competition['liveScoreMode']>(comp.liveScoreMode ?? 'direct');
+  // Fase de liga (idea #29): se edita como texto para poder dejarla vacía. Vacío
+  // en cualquiera de los dos campos de cortes = sin config → no se ofrece la fase.
+  const [lpExpectedSize, setLpExpectedSize] = useState(String(comp.leaguePhaseConfig?.expectedSize ?? ''));
+  const [lpMatchesPerTeam, setLpMatchesPerTeam] = useState(
+    String(comp.leaguePhaseConfig?.expectedMatchesPerTeam ?? ''),
+  );
+  const [lpNarrowCuts, setLpNarrowCuts] = useState((comp.leaguePhaseConfig?.narrowCuts ?? []).join(', '));
+  const [lpWideCuts, setLpWideCuts] = useState((comp.leaguePhaseConfig?.wideCuts ?? []).join(', '));
+  const [lpGroupKey, setLpGroupKey] = useState(comp.leaguePhaseConfig?.groupKey ?? '');
 
   // A tournament-format competition (group-aware standings, like the World
   // Cup) is identified by a non-empty flashscore_season_id. In that case the
@@ -159,6 +247,20 @@ function CompetitionDetailsEditor({
   const isTournamentShape = flashscoreSeasonId.trim().length > 0;
   const missingSeasonYear = isTournamentShape && currentSeasonYear.trim().length === 0;
   const contextTooLong = historicalContext.length > 12000;
+
+  // Espejo de `normalizeLeaguePhaseConfig` del backend: si no cuadra, se manda
+  // null y la fase de tabla no se ofrece. Validar aquí evita guardar basura que
+  // el server rechazaría igualmente.
+  const leaguePhaseConfig = buildLeaguePhaseConfig({
+    expectedSize: lpExpectedSize,
+    expectedMatchesPerTeam: lpMatchesPerTeam,
+    narrowCuts: lpNarrowCuts,
+    wideCuts: lpWideCuts,
+    groupKey: lpGroupKey,
+  });
+  const leaguePhaseTouched =
+    [lpExpectedSize, lpMatchesPerTeam, lpNarrowCuts, lpWideCuts].some((v) => v.trim().length > 0);
+  const leaguePhaseInvalid = leaguePhaseTouched && leaguePhaseConfig === null;
 
   return (
     <Modal
@@ -172,7 +274,7 @@ function CompetitionDetailsEditor({
           </Button>
           <Button
             variant="primary"
-            disabled={missingSeasonYear || contextTooLong}
+            disabled={missingSeasonYear || contextTooLong || leaguePhaseInvalid}
             onClick={() =>
               onSave({
                 name: name.trim() || undefined,
@@ -187,6 +289,7 @@ function CompetitionDetailsEditor({
                 isNationalTeamCompetition,
                 thirdPlaceEnabled,
                 liveScoreMode,
+                leaguePhaseConfig,
               })
             }
           >
@@ -255,6 +358,53 @@ function CompetitionDetailsEditor({
         </label>
 
         <ToggleRow label="3.er puesto (incluir en quiniela de llaves)" value={thirdPlaceEnabled} onChange={setThirdPlaceEnabled} />
+
+        {/* ── Fase de liga: cortes de rango (idea #29) ─────────────────────── */}
+        <div className="rounded-xl border border-border p-3 space-y-3">
+          <div>
+            <span className="text-xs text-text-muted font-sans font-semibold">
+              Fase de liga — cortes de rango (quiniela de campeonato)
+            </span>
+            <p className="text-xs text-text-muted font-sans mt-1">
+              Define cómo se puntúa predecir la tabla completa. Los cortes son la ÚLTIMA posición de cada tramo:
+              en Champions, estrecho <code>8, 16, 24</code> (1-8 / 9-16 / 17-24 / 25-36) y amplio <code>8, 24</code>
+              {' '}(clasifica / playoff / eliminado). Deja todo vacío para NO ofrecer la fase de tabla en esta competición.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block">
+              <span className="text-xs text-text-muted font-sans">Clubes en la fase de liga</span>
+              <Input className="mt-1" value={lpExpectedSize} onChange={(e) => setLpExpectedSize(e.target.value)} placeholder="36" />
+            </label>
+            <label className="block">
+              <span className="text-xs text-text-muted font-sans">Partidos por club</span>
+              <Input
+                className="mt-1"
+                value={lpMatchesPerTeam}
+                onChange={(e) => setLpMatchesPerTeam(e.target.value)}
+                placeholder="8"
+              />
+            </label>
+          </div>
+          <label className="block">
+            <span className="text-xs text-text-muted font-sans">Cortes del tramo estrecho</span>
+            <Input className="mt-1" value={lpNarrowCuts} onChange={(e) => setLpNarrowCuts(e.target.value)} placeholder="8, 16, 24" />
+          </label>
+          <label className="block">
+            <span className="text-xs text-text-muted font-sans">Cortes del tramo amplio</span>
+            <Input className="mt-1" value={lpWideCuts} onChange={(e) => setLpWideCuts(e.target.value)} placeholder="8, 24" />
+          </label>
+          <label className="block">
+            <span className="text-xs text-text-muted font-sans">Group key (opcional)</span>
+            <Input className="mt-1" value={lpGroupKey} onChange={(e) => setLpGroupKey(e.target.value)} placeholder="vacío = tabla única" />
+          </label>
+          {leaguePhaseInvalid && (
+            <p className="text-xs text-danger font-sans">
+              Config incompleta o incoherente: los cortes deben ser enteros crecientes y menores que el número de
+              clubes, y los partidos por club, entre 1 y clubes−1. Mientras no cuadre no se puede guardar.
+            </p>
+          )}
+        </div>
 
         <label className="block">
           <span className="text-xs text-text-muted font-sans">Marcador en vivo (idea #27)</span>

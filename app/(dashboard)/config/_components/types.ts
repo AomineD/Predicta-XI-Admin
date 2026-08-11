@@ -180,6 +180,8 @@ export interface MaintenanceCreditsConfig {
   // Calificar el partido 1-10 (idea #30).
   matchRatingsEnabled: boolean;
   matchRatingsConfig: MatchRatingsConfig;
+  // Celebración de gol en vivo (idea #28). Depende de liveScoresEnabled.
+  goalCelebrationEnabled: boolean;
 }
 
 /** Tunables de la calificación comunitaria del partido (idea #30). */
