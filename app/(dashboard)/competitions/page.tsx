@@ -26,6 +26,9 @@ interface Competition {
   currentSeasonYear: string | null;
   supportsQuiniela: boolean;
   quinielaFormat: 'group_then_knockout' | 'league_then_knockout' | 'single_phase' | null;
+  // Categorías que los usuarios pueden predecir en la quiniela social de esta
+  // competición (fase A del campeonato). Vacío = no se ofrece la fase.
+  groupPlayableCategories: string[] | null;
   // Formato de llave para la quiniela de eliminatorias: a un partido o ida/vuelta.
   // Null = la competición NO se ofrece para la quiniela de llaves.
   knockoutLegFormat: 'single_match' | 'two_legged' | null;
@@ -67,6 +70,7 @@ type CompetitionUpdate = Partial<
     | 'currentSeasonYear'
     | 'supportsQuiniela'
     | 'quinielaFormat'
+    | 'groupPlayableCategories'
     | 'knockoutLegFormat'
     | 'historicalContext'
     | 'isNationalTeamCompetition'
@@ -209,6 +213,25 @@ function LogoEditor({
   );
 }
 
+/**
+ * Categorías ofrecibles en la quiniela social. Es EXACTAMENTE el catálogo
+ * `AUTO_RESOLVABLE_GROUP_CATEGORIES` del backend, que además revalida al guardar.
+ *
+ * NO están `mvp`, `best_young_player` ni `best_goalkeeper` (las decide un jurado,
+ * no salen de ningún dato que sincronicemos) ni `dark_horse` (su resultado es un
+ * conjunto de equipos, no un sujeto único, y nunca llegaría a puntuar).
+ */
+const PLAYABLE_CATEGORIES: ReadonlyArray<{ key: string; label: string }> = [
+  { key: 'champion', label: 'Campeón' },
+  { key: 'runner_up', label: 'Subcampeón' },
+  { key: 'first_eliminated', label: 'Primer eliminado' },
+  { key: 'team_with_most_goals', label: 'Más goleador' },
+  { key: 'best_defense', label: 'Mejor defensa' },
+  { key: 'top_scorer', label: 'Goleador' },
+  { key: 'top_assister', label: 'Máximo asistente' },
+  { key: 'final_score', label: 'Marcador de la final' },
+];
+
 function CompetitionDetailsEditor({
   comp,
   onSave,
@@ -225,6 +248,7 @@ function CompetitionDetailsEditor({
   const [currentSeasonYear, setCurrentSeasonYear] = useState(comp.currentSeasonYear ?? '');
   const [supportsQuiniela, setSupportsQuiniela] = useState(comp.supportsQuiniela);
   const [quinielaFormat, setQuinielaFormat] = useState<Competition['quinielaFormat']>(comp.quinielaFormat);
+  const [playableCats, setPlayableCats] = useState<string[]>(comp.groupPlayableCategories ?? []);
   const [knockoutLegFormat, setKnockoutLegFormat] = useState<Competition['knockoutLegFormat']>(comp.knockoutLegFormat);
   const [historicalContext, setHistoricalContext] = useState(comp.historicalContext ?? '');
   const [isNationalTeamCompetition, setIsNationalTeamCompetition] = useState(comp.isNationalTeamCompetition);
@@ -284,6 +308,7 @@ function CompetitionDetailsEditor({
                 currentSeasonYear: currentSeasonYear.trim() ? currentSeasonYear.trim() : null,
                 supportsQuiniela,
                 quinielaFormat,
+                groupPlayableCategories: playableCats,
                 knockoutLegFormat,
                 historicalContext: historicalContext.trim() ? historicalContext : null,
                 isNationalTeamCompetition,
@@ -336,6 +361,40 @@ function CompetitionDetailsEditor({
         <div className="grid grid-cols-2 gap-3">
           <ToggleRow label="Is national-team comp" value={isNationalTeamCompetition} onChange={setIsNationalTeamCompetition} />
           <ToggleRow label="Supports quiniela" value={supportsQuiniela} onChange={setSupportsQuiniela} />
+        </div>
+
+        <div className="rounded-xl border border-border p-3 space-y-2">
+          <div>
+            <span className="text-xs text-text-muted font-sans">Quiniela social — categorías jugables</span>
+            <p className="text-[11px] text-text-muted font-sans mt-0.5">
+              Lo que los usuarios pueden predecir. Solo salen las que el settlement resuelve
+              automáticamente desde nuestros datos. Vacío = no se ofrece la fase de categorías.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {PLAYABLE_CATEGORIES.map((c) => {
+              const on = playableCats.includes(c.key);
+              return (
+                <button
+                  key={c.key}
+                  type="button"
+                  onClick={() =>
+                    setPlayableCats((prev) =>
+                      prev.includes(c.key) ? prev.filter((k) => k !== c.key) : [...prev, c.key],
+                    )
+                  }
+                  className={cn(
+                    'px-2 py-1 rounded-lg text-[11px] font-sans border transition-colors cursor-pointer',
+                    on
+                      ? 'bg-primary/15 border-primary text-primary'
+                      : 'bg-surface-2 border-border text-text-muted hover:text-text-primary',
+                  )}
+                >
+                  {c.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         <label className="block">
