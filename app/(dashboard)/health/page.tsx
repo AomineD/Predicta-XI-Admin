@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { InfoPopover } from '@/components/ui/InfoPopover';
 import { MetricCard } from '@/components/ui/MetricCard';
 import { cn, formatDateTime } from '@/lib/utils';
 
@@ -76,11 +77,24 @@ function FlagPill({ on, label }: { on: boolean; label: string }) {
   );
 }
 
-function Section({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) {
+function Section({
+  title,
+  subtitle,
+  info,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  info?: ReactNode;
+  children: ReactNode;
+}) {
   return (
     <div className="rounded-2xl p-5 mb-6" style={{ background: '#121A2B', border: '1px solid rgba(255,255,255,0.08)' }}>
       <div className="mb-4">
-        <h2 className="text-sm font-semibold text-text-primary uppercase tracking-wider font-sans">{title}</h2>
+        <div className="flex items-center gap-1.5">
+          <h2 className="text-sm font-semibold text-text-primary uppercase tracking-wider font-sans">{title}</h2>
+          {info && <InfoPopover label={`Qué es "${title}"`}>{info}</InfoPopover>}
+        </div>
         {subtitle && <p className="text-xs text-text-muted mt-0.5">{subtitle}</p>}
       </div>
       {children}
@@ -169,7 +183,7 @@ export default function HealthPage() {
 
           <Section
             title="Automatización"
-            subtitle="Flags del scheduler. automation (interno) en OFF es intencional: el bridge de Claude dispara las predicciones."
+            info="Flags del scheduler. automation (interno) en OFF es intencional: el bridge de Claude dispara las predicciones."
           >
             <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
               <FlagPill on={data.automation.automationEnabled} label="Automation (interno)" />

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { DataTable, type Column } from '@/components/ui/DataTable';
+import { InfoPopover } from '@/components/ui/InfoPopover';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Button } from '@/components/ui/Button';
@@ -97,7 +98,7 @@ export default function QuinielasPage() {
     <>
       <PageHeader
         title="Quinielas"
-        description="Tournament-level predictions (World Cup, Champions, etc.). Generate Phase 1 before kickoff and Phase 2 after the group stage."
+        description="Tournament-level predictions (World Cup, Champions, etc.)." info="Generate Phase 1 before kickoff and Phase 2 after the group stage."
         action={<Button variant="primary" onClick={() => setShowCreate(true)}>New quiniela</Button>}
       />
 
@@ -233,12 +234,14 @@ function CreateQuinielaModal({ onClose, onCreated }: CreateQuinielaModalProps) {
           </div>
 
           <div className="pt-2" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-            <p className="text-xs font-semibold text-text-secondary mb-1 mt-2">Settlement schedule (optional)</p>
-            <p className="text-[11px] text-text-muted leading-snug mb-3">
-              Date/time each phase becomes eligible for auto-settlement. Leave empty to settle each phase
-              only manually. Set Phase 1 after the group stage ends, Phase 2 after the final. The settler
-              still waits for real results before scoring a pick.
-            </p>
+            <div className="flex items-center gap-1.5 mb-3 mt-2">
+              <p className="text-xs font-semibold text-text-secondary">Settlement schedule (optional)</p>
+              <InfoPopover label="Cómo funciona el settlement programado">
+                Date/time each phase becomes eligible for auto-settlement. Leave empty to settle each phase
+                only manually. Set Phase 1 after the group stage ends, Phase 2 after the final. The settler
+                still waits for real results before scoring a pick.
+              </InfoPopover>
+            </div>
             <div className="space-y-3">
               <div>
                 <label className="block text-xs font-medium text-text-muted uppercase tracking-wider mb-1">

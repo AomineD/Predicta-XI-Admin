@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { SectionCard, Field, Toggle } from '@/components/ui/form-controls';
+import { InfoPopover } from '@/components/ui/InfoPopover';
 import { Input } from '@/components/ui/inputs';
 import { Button } from '@/components/ui/Button';
 import { DataTable, type Column } from '@/components/ui/DataTable';
@@ -139,7 +140,7 @@ export function DataSourceCard() {
   return (
     <SectionCard
       title="Fuente de datos secundaria (ESPN)"
-      subtitle="Respaldo automático cuando Flashscore falla durante el enrichment (forma, H2H, stats y tabla). ESPN es keyless, sin Cloudflare, y cubre las 9 ligas V1 (incluida la Eredivisie). Nace inerte: solo actúa con el interruptor maestro encendido."
+      subtitle="Nace inerte" info="Respaldo automático cuando Flashscore falla durante el enrichment (forma, H2H, stats y tabla). ESPN es keyless, sin Cloudflare, y cubre las 9 ligas V1 (incluida la Eredivisie). Solo actúa con el interruptor maestro encendido."
     >
       {!ds ? (
         <p className="text-text-muted text-sm font-sans py-3">Cargando…</p>
@@ -147,25 +148,25 @@ export function DataSourceCard() {
         <>
           <Field
             label="Fallback habilitado"
-            subtitle="Interruptor maestro. Apagado = ESPN nunca se consulta. Encendido = el resolver puede caer a ESPN cuando Flashscore está caído."
+            info="Interruptor maestro. Apagado = ESPN nunca se consulta. Encendido = el resolver puede caer a ESPN cuando Flashscore está caído."
           >
             <Toggle value={ds.enabled} onChange={(v) => setForm({ ...ds, enabled: v })} />
           </Field>
           <Field
             label="Influir en predicciones"
-            subtitle="Valida el preview PRIMERO. Apagado: ESPN no inyecta nada (aunque el fallback esté habilitado). Encendido: el contexto ESPN entra al enrichment cuando Flashscore falla. Requiere el fallback habilitado."
+            info="Valida el preview PRIMERO. Apagado: ESPN no inyecta nada, aunque el fallback esté habilitado. Encendido: el contexto ESPN entra al enrichment cuando Flashscore falla. Requiere el fallback habilitado."
           >
             <Toggle value={ds.influencePredictions} onChange={(v) => setForm({ ...ds, influencePredictions: v })} />
           </Field>
           <Field
             label="Escribir resultado (settlement)"
-            subtitle="Fase futura (idea #25): dejar que ESPN escriba el marcador final en el settlement cuando Flashscore está caído. Aún no implementado — se queda apagado."
+            subtitle="Aún no implementado" info="Fase futura (idea #25): dejar que ESPN escriba el marcador final en el settlement cuando Flashscore está caído. Se queda apagado."
           >
             <Toggle value={ds.resultFallbackEnabled} onChange={() => {}} disabled />
           </Field>
           <Field
             label="Confianza mínima de emparejamiento"
-            subtitle="0–1. ESPN resuelve el evento por nombre + hora de inicio; solo confía en el emparejamiento a partir de este umbral. Default 0.82."
+            subtitle="0–1 · def. 0.82" info="ESPN resuelve el evento por nombre + hora de inicio; solo confía en el emparejamiento a partir de este umbral."
           >
             <Input
               type="number"
@@ -179,7 +180,7 @@ export function DataSourceCard() {
           </Field>
           <Field
             label="Umbral de errores de Flashscore"
-            subtitle="Cuántos fallos de Flashscore dentro de la ventana marcan la fuente como caída (1–100). Default 5."
+            subtitle="1–100 · def. 5" info="Cuántos fallos de Flashscore dentro de la ventana marcan la fuente como caída."
           >
             <Input
               type="number"
@@ -193,7 +194,7 @@ export function DataSourceCard() {
           </Field>
           <Field
             label="Ventana de caída (min)"
-            subtitle="Ventana deslizante para contar los errores de Flashscore (1–240). Default 10."
+            subtitle="1–240 · def. 10" info="Ventana deslizante para contar los errores de Flashscore."
           >
             <Input
               type="number"
@@ -220,12 +221,12 @@ export function DataSourceCard() {
 
           <div className="pt-6">
             <div className="flex items-center justify-between gap-3 pb-2">
-              <div>
+              <div className="flex items-center gap-1.5">
                 <p className="text-sm text-text-primary font-sans">Preview de resolución ESPN</p>
-                <p className="text-xs text-text-muted/60 font-sans">
+                <InfoPopover label="Qué muestra el preview de ESPN">
                   Cómo ESPN resolvería los próximos partidos (evento + confianza + cobertura). Revisa que el evento sea el
                   correcto antes de encender &quot;Influir en predicciones&quot;. No inyecta nada; solo consulta.
-                </p>
+                </InfoPopover>
               </div>
               <Button variant="secondary" size="sm" loading={previewLoading} onClick={() => refetchPreview()}>
                 {rows.length ? 'Refrescar' : 'Cargar preview'}

@@ -87,25 +87,25 @@ export function SportiumCard({ competitions }: { competitions: CompetitionLite[]
   return (
     <SectionCard
       title="Sportium odds (scraping)"
-      subtitle="Scrapes Sportium Colombia odds during enrichment (V1/V2) and uses them as the PRIMARY odds source (Flashscore fallback). Also requires SPORTIUM_ENABLED in the Backend + Worker environment. Inert until the master switch below is on and at least one coupon is set."
+      subtitle="Nace inerte" info="Scrapes Sportium Colombia odds during enrichment (V1/V2) and uses them as the PRIMARY odds source, with Flashscore as fallback. Also requires SPORTIUM_ENABLED in the Backend + Worker environment. Inert until the master switch below is on and at least one coupon is set."
     >
       {!sportium ? (
         <p className="text-text-muted text-sm font-sans py-3">Loading…</p>
       ) : (
         <>
-          <Field label="Module enabled" subtitle="Master switch. Off = nothing is scraped or matched. With the env flag on too, captures start resolving + snapshotting.">
+          <Field label="Module enabled" info="Master switch. Off = nothing is scraped or matched. With the env flag on too, captures start resolving and snapshotting.">
             <Toggle value={sportium.enabled} onChange={(v) => setSportiumForm({ ...sportium, enabled: v })} />
           </Field>
-          <Field label="Influence predictions" subtitle="Off (recommended at first): only snapshots odds so you can validate the matching. On: Sportium odds enter the prediction context (primary, Flashscore fallback).">
+          <Field label="Influence predictions" info="Off (recommended at first): only snapshots odds so you can validate the matching. On: Sportium odds enter the prediction context as primary, with Flashscore as fallback.">
             <Toggle value={sportium.influencePredictions} onChange={(v) => setSportiumForm({ ...sportium, influencePredictions: v })} />
           </Field>
           <Field label="Capture at V1" subtitle="Capture during early enrichment (no lineups yet).">
             <Toggle value={sportium.captureV1} onChange={(v) => setSportiumForm({ ...sportium, captureV1: v })} />
           </Field>
-          <Field label="Capture at V2" subtitle="Capture during lineup enrichment (gives V1→V2 line movement).">
+          <Field label="Capture at V2" info="Capture during lineup enrichment. Gives V1→V2 line movement.">
             <Toggle value={sportium.captureV2} onChange={(v) => setSportiumForm({ ...sportium, captureV2: v })} />
           </Field>
-          <Field label="Min match confidence" subtitle="0–1. At or above = auto-linked; just below = sent to the review queue. Default 0.85.">
+          <Field label="Min match confidence" subtitle="0–1 · def. 0.85" info="At or above the threshold the capture is auto-linked; just below it goes to the review queue.">
             <Input
               type="number"
               min={0}
@@ -116,7 +116,7 @@ export function SportiumCard({ competitions }: { competitions: CompetitionLite[]
               onChange={(e) => setSportiumForm({ ...sportium, matchConfidenceMin: Math.min(1, Math.max(0, Number(e.target.value) || 0)) })}
             />
           </Field>
-          <Field label="Scrape timeout (ms)" subtitle="Short per-scrape cap so a slow Sportium degrades to Flashscore fast (2000–60000).">
+          <Field label="Scrape timeout (ms)" subtitle="2000–60000 ms" info="Short per-scrape cap so a slow Sportium degrades to Flashscore fast.">
             <Input
               type="number"
               min={2000}
@@ -127,7 +127,7 @@ export function SportiumCard({ competitions }: { competitions: CompetitionLite[]
               onChange={(e) => setSportiumForm({ ...sportium, requestTimeoutMs: Math.min(60000, Math.max(2000, Number(e.target.value) || 15000)) })}
             />
           </Field>
-          <Field label="Coupons per competition" subtitle="Explicit map: each competition → its Sportium coupon (slug soccer-<cc>-sb_type_<id> or full URL). Empty = nothing scraped. World Cup 2026: soccer-int2-sb_type_296772.">
+          <Field label="Coupons per competition" subtitle="Vacío = no se scrapea" info="Explicit map: each competition → its Sportium coupon (slug soccer-<cc>-sb_type_<id> or full URL). World Cup 2026: soccer-int2-sb_type_296772.">
             <div className="space-y-2 w-full">
               <div className="flex items-center gap-3">
                 <Button variant="secondary" size="sm" loading={detectCoupons.isPending} onClick={() => detectCoupons.mutate()}>

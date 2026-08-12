@@ -6,6 +6,7 @@ import { Pencil } from 'lucide-react';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
+import { InfoPopover } from '@/components/ui/InfoPopover';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Toggle } from '@/components/ui/form-controls';
 import { Input, Select, Textarea } from '@/components/ui/inputs';
@@ -232,6 +233,28 @@ const PLAYABLE_CATEGORIES: ReadonlyArray<{ key: string; label: string }> = [
   { key: 'final_score', label: 'Marcador de la final' },
 ];
 
+/**
+ * Atajos para no marcar ocho casillas a mano en cada competición. Una liga no
+ * tiene subcampeón, ni primer eliminado, ni final, así que "Torneo liga" deja
+ * fuera `runner_up`, `first_eliminated` y `final_score`.
+ */
+const CATEGORY_PRESETS: ReadonlyArray<{ id: string; label: string; keys: readonly string[] }> = [
+  { id: 'cup', label: 'Torneo copa', keys: PLAYABLE_CATEGORIES.map((c) => c.key) },
+  {
+    id: 'league',
+    label: 'Torneo liga',
+    keys: ['champion', 'best_defense', 'team_with_most_goals', 'top_scorer', 'top_assister'],
+  },
+];
+
+/** Claves que un preajuste aplica de verdad: siempre filtradas por el catálogo,
+ *  para que quitar una categoría del catálogo no deje el preajuste sin resaltar. */
+const presetKeys = (preset: (typeof CATEGORY_PRESETS)[number]) =>
+  PLAYABLE_CATEGORIES.filter((c) => preset.keys.includes(c.key)).map((c) => c.key);
+
+const sameCategories = (a: readonly string[], b: readonly string[]) =>
+  a.length === b.length && [...a].sort().join('|') === [...b].sort().join('|');
+
 function CompetitionDetailsEditor({
   comp,
   onSave,
@@ -364,12 +387,31 @@ function CompetitionDetailsEditor({
         </div>
 
         <div className="rounded-xl border border-border p-3 space-y-2">
-          <div>
-            <span className="text-xs text-text-muted font-sans">Quiniela social — categorías jugables</span>
-            <p className="text-[11px] text-text-muted font-sans mt-0.5">
-              Lo que los usuarios pueden predecir. Solo salen las que el settlement resuelve
-              automáticamente desde nuestros datos. Vacío = no se ofrece la fase de categorías.
-            </p>
+          <div className="flex items-center justify-between gap-2">
+            <span className="flex items-center gap-1.5">
+              <span className="text-xs text-text-muted font-sans">Quiniela social — categorías jugables</span>
+              <InfoPopover label="Qué son las categorías jugables">
+                Lo que los usuarios pueden predecir. Solo salen las que el settlement resuelve
+                automáticamente desde nuestros datos. Vacío = no se ofrece la fase de categorías.
+              </InfoPopover>
+            </span>
+            <div className="flex flex-none gap-1.5">
+              {CATEGORY_PRESETS.map((preset) => (
+                <button
+                  key={preset.id}
+                  type="button"
+                  onClick={() => setPlayableCats(presetKeys(preset))}
+                  className={cn(
+                    'px-2 py-1 rounded-lg text-[11px] font-sans border transition-colors cursor-pointer',
+                    sameCategories(playableCats, presetKeys(preset))
+                      ? 'bg-surface-3 border-text-muted text-text-primary'
+                      : 'bg-surface-2 border-border text-text-muted hover:text-text-primary',
+                  )}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="flex flex-wrap gap-1.5">
             {PLAYABLE_CATEGORIES.map((c) => {
@@ -420,15 +462,15 @@ function CompetitionDetailsEditor({
 
         {/* ── Fase de liga: cortes de rango (idea #29) ─────────────────────── */}
         <div className="rounded-xl border border-border p-3 space-y-3">
-          <div>
+          <div className="flex items-center gap-1.5">
             <span className="text-xs text-text-muted font-sans font-semibold">
               Fase de liga — cortes de rango (quiniela de campeonato)
             </span>
-            <p className="text-xs text-text-muted font-sans mt-1">
+            <InfoPopover label="Qué son los cortes de rango">
               Define cómo se puntúa predecir la tabla completa. Los cortes son la ÚLTIMA posición de cada tramo:
               en Champions, estrecho <code>8, 16, 24</code> (1-8 / 9-16 / 17-24 / 25-36) y amplio <code>8, 24</code>
               {' '}(clasifica / playoff / eliminado). Deja todo vacío para NO ofrecer la fase de tabla en esta competición.
-            </p>
+            </InfoPopover>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
@@ -465,9 +507,20 @@ function CompetitionDetailsEditor({
           )}
         </div>
 
-        <label className="block">
-          <span className="text-xs text-text-muted font-sans">Marcador en vivo (idea #27)</span>
+        {/* El ⓘ es un <button>, así que no puede ir dentro del <label> (el clic se
+            reenviaría al select). Se asocian con htmlFor/id en su lugar. */}
+        <div className="block">
+          <span className="flex items-center gap-1.5">
+            <label htmlFor="live-score-mode" className="text-xs text-text-muted font-sans">
+              Marcador en vivo (idea #27)
+            </label>
+            <InfoPopover label="Qué hace el marcador en vivo">
+              Solo aplica con «Live scores» activo (Config → Mantenimiento). El modo centralizado
+              requiere que la competición esté cubierta por ESPN; si no hay marcador, la app cae al de backend.
+            </InfoPopover>
+          </span>
           <Select
+            id="live-score-mode"
             className="mt-1"
             value={liveScoreMode}
             onChange={(e) => setLiveScoreMode(e.target.value as Competition['liveScoreMode'])}
@@ -475,11 +528,7 @@ function CompetitionDetailsEditor({
             <option value="direct">Directo — la app poléa la fuente (ESPN) directo</option>
             <option value="centralized">Centralizado — el backend sirve el marcador</option>
           </Select>
-          <p className="text-xs text-text-muted font-sans mt-1">
-            Solo aplica con «Live scores» activo (Config → Mantenimiento). El modo centralizado
-            requiere que la competición esté cubierta por ESPN; si no hay marcador, la app cae al de backend.
-          </p>
-        </label>
+        </div>
 
         <label className="block">
           <span className="text-xs text-text-muted font-sans flex justify-between">

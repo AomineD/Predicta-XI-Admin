@@ -2,13 +2,14 @@
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronRight, Info, X } from 'lucide-react';
+import { ChevronRight, X } from 'lucide-react';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
+import { InfoPopover } from '@/components/ui/InfoPopover';
 import { Input, Select } from '@/components/ui/inputs';
 import { Toggle } from '@/components/ui/form-controls';
-import { ENGINE_LAYERS, type EngineLayerKey } from './constants';
+import { ENGINE_LAYERS } from './constants';
 import type { PredictionConfig, SetField, TeamLite } from './types';
 
 /** Chips de selección múltiple (mercados de salida, campos de entrada). */
@@ -49,7 +50,6 @@ export function MultiCheckbox({
 /** Tarjeta colapsable con todas las capas del "Motor Predicta calibrado". */
 export function PredictionEngineCard({ form, setField }: { form: PredictionConfig; setField: SetField }) {
   const [expanded, setExpanded] = useState(false);
-  const [openInfo, setOpenInfo] = useState<EngineLayerKey | null>(null);
 
   const enabledCount = ENGINE_LAYERS.filter((l) => form[l.key]).length;
   const allOn = enabledCount === ENGINE_LAYERS.length;
@@ -88,25 +88,9 @@ export function PredictionEngineCard({ form, setField }: { form: PredictionConfi
             <div key={layer.key} className="py-3 border-b border-border last:border-0">
               <div className="flex items-center gap-3">
                 <span className="text-sm text-text-secondary font-sans flex-1">{layer.title}</span>
-                <button
-                  type="button"
-                  onClick={() => setOpenInfo((cur) => (cur === layer.key ? null : layer.key))}
-                  aria-label={`What does "${layer.title}" do?`}
-                  aria-expanded={openInfo === layer.key}
-                  className={cn(
-                    'flex h-5 w-5 flex-none items-center justify-center rounded-full border transition-colors cursor-pointer',
-                    openInfo === layer.key
-                      ? 'border-primary text-primary'
-                      : 'border-border text-text-muted hover:text-text-primary',
-                  )}
-                >
-                  <Info size={11} />
-                </button>
+                <InfoPopover label={`Qué hace "${layer.title}"`}>{layer.info}</InfoPopover>
                 <Toggle value={form[layer.key]} onChange={(v) => setField(layer.key, v)} />
               </div>
-              {openInfo === layer.key && (
-                <p className="text-xs text-text-muted/70 font-sans mt-2 leading-relaxed">{layer.info}</p>
-              )}
             </div>
           ))}
         </div>

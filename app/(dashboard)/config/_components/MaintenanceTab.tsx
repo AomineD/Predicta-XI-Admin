@@ -7,6 +7,7 @@ import { SectionCard, Field, Toggle } from '@/components/ui/form-controls';
 import { Input, Textarea } from '@/components/ui/inputs';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { InfoPopover } from '@/components/ui/InfoPopover';
 import { useToast } from '@/components/ui/ToastProvider';
 import type { MaintenanceCreditsConfig, MatchRatingsConfig } from './types';
 
@@ -34,10 +35,13 @@ function parseReEnrichIds(raw: string): number[] {
 
 /** Encabezado que agrupa un bloque de cards dentro de la pestaña Maintenance,
  * para romper el "muro" de tarjetas apiladas. */
-function GroupHeader({ title, subtitle }: { title: string; subtitle?: string }) {
+function GroupHeader({ title, subtitle, info }: { title: string; subtitle?: string; info?: React.ReactNode }) {
   return (
     <div className="mb-3 mt-6 first:mt-0">
-      <h3 className="text-sm font-semibold text-text-primary font-display">{title}</h3>
+      <div className="flex items-center gap-1.5">
+        <h3 className="text-sm font-semibold text-text-primary font-display">{title}</h3>
+        {info && <InfoPopover label={`Qué es "${title}"`}>{info}</InfoPopover>}
+      </div>
       {subtitle && <p className="text-xs text-text-muted font-sans mt-0.5">{subtitle}</p>}
     </div>
   );
@@ -357,15 +361,15 @@ export function MaintenanceTab() {
       <GroupHeader title="App gates" subtitle="Screens that block or nudge the mobile app." />
 
       {/* App Maintenance Mode */}
-      <SectionCard title="App Maintenance Mode" subtitle="Blocking maintenance screen for the mobile app. Turn this on for a controlled pause while the server stays up (e.g. fixing a bug). A real backend outage is handled separately — the app detects that on its own and shows the offline screen.">
+      <SectionCard title="App Maintenance Mode" info="Blocking maintenance screen for the mobile app. Turn this on for a controlled pause while the server stays up (e.g. fixing a bug). A real backend outage is handled separately — the app detects that on its own and shows the offline screen.">
         {!maint ? (
           <p className="text-text-muted text-sm font-sans py-3">Loading…</p>
         ) : (
           <>
-            <Field label="Maintenance mode" subtitle="When on, the app shows the blocking maintenance screen to all users on launch and on resume.">
+            <Field label="Maintenance mode" info="When on, the app shows the blocking maintenance screen to all users on launch and on resume.">
               <Toggle value={maint.enabled} onChange={(v) => setMaintForm({ ...maint, enabled: v })} />
             </Field>
-            <Field label="Custom message" subtitle="Optional copy shown on the maintenance screen. Leave empty to use the app's default text.">
+            <Field label="Custom message" subtitle="Vacío = texto por defecto" info="Optional copy shown on the maintenance screen.">
               <Textarea
                 maxLength={200}
                 rows={2}
@@ -390,12 +394,12 @@ export function MaintenanceTab() {
       </SectionCard>
 
       {/* Force Update Gate */}
-      <SectionCard title="Force Update Gate" subtitle="When the app's build number is below the minimum, it shows a blocking update screen (the only way to force an update on iOS). Leave the build at 0 to disable the gate. Raise it ONLY after a newer build is live on both stores.">
+      <SectionCard title="Force Update Gate" subtitle="0 = gate apagado" info="When the app's build number is below the minimum, it shows a blocking update screen — the only way to force an update on iOS. Raise it ONLY after a newer build is live on both stores.">
         {!force ? (
           <p className="text-text-muted text-sm font-sans py-3">Loading…</p>
         ) : (
           <>
-            <Field label="Minimum supported build" subtitle="App builds with a buildNumber below this are forced to update (0 = gate off).">
+            <Field label="Minimum supported build" subtitle="0 = gate off" info="App builds with a buildNumber below this are forced to update.">
               <Input type="number" min={0} className="w-32" value={force.build} onChange={(e) => setForceForm({ ...force, build: Math.max(0, parseInt(e.target.value || '0', 10) || 0) })} />
             </Field>
             <Field label="Minimum supported version" subtitle='Display-only label shown on the update screen, e.g. "1.4.0". Optional.'>
@@ -416,12 +420,12 @@ export function MaintenanceTab() {
       </SectionCard>
 
       {/* Recommended Update */}
-      <SectionCard title="Recommended Update" subtitle="Shows a DISMISSIBLE 'a new version is available' modal when the app's build number is below this — it never blocks the app, just nudges. Leave the build at 0 to disable. The force-update gate above always wins when both thresholds apply.">
+      <SectionCard title="Recommended Update" subtitle="0 = apagado" info="Shows a DISMISSIBLE 'a new version is available' modal when the app's build number is below this — it never blocks the app, just nudges. The force-update gate above always wins when both thresholds apply.">
         {!rec ? (
           <p className="text-text-muted text-sm font-sans py-3">Loading…</p>
         ) : (
           <>
-            <Field label="Minimum recommended build" subtitle="App builds with a buildNumber below this see a dismissible update modal (0 = off).">
+            <Field label="Minimum recommended build" subtitle="0 = off" info="App builds with a buildNumber below this see a dismissible update modal.">
               <Input type="number" min={0} className="w-32" value={rec.build} onChange={(e) => setRecForm({ ...rec, build: Math.max(0, parseInt(e.target.value || '0', 10) || 0) })} />
             </Field>
             <Field label="Recommended version" subtitle='Display-only label shown on the modal, e.g. "1.4.0". Optional.'>
@@ -441,18 +445,18 @@ export function MaintenanceTab() {
         )}
       </SectionCard>
 
-      <GroupHeader title="Feature flags" subtitle="Ship-dark switches — turn on only once the build that contains them is live in the stores." />
+      <GroupHeader title="Feature flags" info="Ship-dark switches — turn on only once the build that contains them is live in the stores." />
 
       {/* Social features */}
-      <SectionCard title="Social" subtitle="Feature flags for the social layer. The code ships in the app build but stays hidden until turned on here. Turn these on only once the build that contains the social screens is live in the stores — otherwise users on an older build read about features they don't have.">
+      <SectionCard title="Social" subtitle="Ship-dark" info="Feature flags for the social layer. The code ships in the app build but stays hidden until turned on here. Turn these on only once the build that contains the social screens is live in the stores — otherwise users on an older build read about features they don't have.">
         {!social ? (
           <p className="text-text-muted text-sm font-sans py-3">Loading…</p>
         ) : (
           <>
-            <Field label="Social enabled (master)" subtitle="Master switch for the whole social structure: friends (add / accept / block) and inviting a friend straight into a quiniela. Off = the app hides every social entry point and the endpoints respond 403.">
+            <Field label="Social enabled (master)" info="Master switch for the whole social structure: friends (add / accept / block) and inviting a friend straight into a quiniela. Off = the app hides every social entry point and the endpoints respond 403.">
               <Toggle value={social.socialEnabled} onChange={(v) => setSocialForm({ ...social, socialEnabled: v })} />
             </Field>
-            <Field label="Combinada sharing" subtitle="Lets a user share a combinada with friends (each friend gets their own copy to compete). Off = the app hides the share CTA and the endpoints respond 403. Needs the master switch on to be useful.">
+            <Field label="Combinada sharing" info="Lets a user share a combinada with friends — each friend gets their own copy to compete. Off = the app hides the share CTA and the endpoints respond 403. Needs the master switch on to be useful.">
               <Toggle value={social.combinadaSharesEnabled} onChange={(v) => setSocialForm({ ...social, combinadaSharesEnabled: v })} />
             </Field>
 
@@ -486,12 +490,12 @@ export function MaintenanceTab() {
       </SectionCard>
 
       {/* Live match tracker */}
-      <SectionCard title="Live match tracker" subtitle="The 'Live' animated pitch on the match detail (idea #8). The widget is resolved live from aiscore/TheSports and shown de-branded. The code ships in the app build but stays hidden until turned on here. POC: keep it OFF until the legal decision is made.">
+      <SectionCard title="Live match tracker" subtitle="POC — mantener OFF" info="The 'Live' animated pitch on the match detail (idea #8). The widget is resolved live from aiscore/TheSports and shown de-branded. The code ships in the app build but stays hidden until turned on here. Keep it off until the legal decision is made.">
         {!liveTracker ? (
           <p className="text-text-muted text-sm font-sans py-3">Loading…</p>
         ) : (
           <>
-            <Field label="Live tracker enabled" subtitle="Shows the animated live pitch (loaded in a webview) under the scoreboard while a match is live. Off = the app never shows the Live block. The endpoint also gates by live state + whether the match resolves to a tracker, so turning this on only reveals it where available.">
+            <Field label="Live tracker enabled" info="Shows the animated live pitch (loaded in a webview) under the scoreboard while a match is live. Off = the app never shows the Live block. The endpoint also gates by live state and whether the match resolves to a tracker, so turning this on only reveals it where available.">
               <Toggle value={liveTracker.liveTrackerEnabled} onChange={(v) => setLiveTrackerForm({ liveTrackerEnabled: v })} />
             </Field>
             <div className="flex items-center gap-3 pt-3">
@@ -505,15 +509,15 @@ export function MaintenanceTab() {
       </SectionCard>
 
       {/* Live scores (real-time via ESPN) */}
-      <SectionCard title="Live scores (real-time)" subtitle="Real-time scoreboard on the match detail, polled directly from ESPN (idea #16). Master switch for both the backend event-binding scheduler and the app's live score polling. The code ships in the app build but stays hidden until turned on here — turn it on only once the build that includes it is live in the stores.">
+      <SectionCard title="Live scores (real-time)" subtitle="Ship-dark" info="Real-time scoreboard on the match detail, polled directly from ESPN (idea #16). Master switch for both the backend event-binding scheduler and the app's live score polling. The code ships in the app build but stays hidden until turned on here — turn it on only once the build that includes it is live in the stores.">
         {!liveScores ? (
           <p className="text-text-muted text-sm font-sans py-3">Loading…</p>
         ) : (
           <>
-            <Field label="Live scores enabled" subtitle="When on, the match screen updates the live score in real time (no more stale 0-0) and the backend runs the ESPN event-binding scheduler. Off = neither the scheduler nor the app polling run.">
+            <Field label="Live scores enabled" info="When on, the match screen updates the live score in real time (no more stale 0-0) and the backend runs the ESPN event-binding scheduler. Off = neither the scheduler nor the app polling run.">
               <Toggle value={liveScores.liveScoresEnabled} onChange={(v) => setLiveScoresForm({ ...liveScores, liveScoresEnabled: v })} />
             </Field>
-            <Field label="Goal celebration" subtitle="Idea #28. When on, a goal animation plays and a sound fires as soon as the live score goes up — on the match screen and as a flash on the list cards. Needs live scores on: with no live score there is no goal to detect. Users can mute the sound and disable animations in the app's settings.">
+            <Field label="Goal celebration" subtitle="Requiere live scores" info="Idea #28. When on, a goal animation plays and a sound fires as soon as the live score goes up — on the match screen and as a flash on the list cards. With no live score there is no goal to detect. Users can mute the sound and disable animations in the app's settings.">
               <Toggle
                 value={liveScores.goalCelebrationEnabled}
                 onChange={(v) => setLiveScoresForm({ ...liveScores, goalCelebrationEnabled: v })}
@@ -533,12 +537,12 @@ export function MaintenanceTab() {
       </SectionCard>
 
       {/* Home announcements */}
-      <SectionCard title="Home announcements" subtitle="Master switch for the Home carousel (idea #11). The carousel ships in the app build but stays hidden until turned on here. Content is managed on the Home announcements page — but with this flag off, even published announcements never reach the app.">
+      <SectionCard title="Home announcements" subtitle="Ship-dark" info="Master switch for the Home carousel (idea #11). The carousel ships in the app build but stays hidden until turned on here. Content is managed on the Home announcements page — but with this flag off, even published announcements never reach the app.">
         {!homeAnnouncements ? (
           <p className="text-text-muted text-sm font-sans py-3">Loading…</p>
         ) : (
           <>
-            <Field label="Home announcements enabled" subtitle="Shows the announcements carousel on Home. Off = the app never shows it, regardless of how many announcements are published. Turn this on AND publish at least one announcement for the carousel to appear.">
+            <Field label="Home announcements enabled" info="Shows the announcements carousel on Home. Off = the app never shows it, regardless of how many announcements are published. Turn this on AND publish at least one announcement for the carousel to appear.">
               <Toggle value={homeAnnouncements.homeAnnouncementsEnabled} onChange={(v) => setHomeAnnouncementsForm({ homeAnnouncementsEnabled: v })} />
             </Field>
             <div className="flex items-center gap-3 pt-3">
@@ -558,12 +562,12 @@ export function MaintenanceTab() {
       </SectionCard>
 
       {/* Subscriber identity (idea #22) */}
-      <SectionCard title="Subscriber identity" subtitle="Animated PRO/CLUB visual identity wherever a person shows up (idea #22): friends, search, add-friend, quiniela management, the leaderboard table and King of the hill — tier ring, animated tag, gold name and 'member since'. The code ships in the app build but stays hidden until turned on here — turn it on only once the build that includes it is live in the stores.">
+      <SectionCard title="Subscriber identity" subtitle="Ship-dark" info="Animated PRO/CLUB visual identity wherever a person shows up (idea #22): friends, search, add-friend, quiniela management, the leaderboard table and King of the hill — tier ring, animated tag, gold name and 'member since'. The code ships in the app build but stays hidden until turned on here — turn it on only once the build that includes it is live in the stores.">
         {!subIdentity ? (
           <p className="text-text-muted text-sm font-sans py-3">Loading…</p>
         ) : (
           <>
-            <Field label="Subscriber identity enabled" subtitle="When on, subscriber (PRO/CLUB) surfaces show the enriched animated identity. Off = the app uses the plain previous tier render (no rings/tags/animations, no 'member since').">
+            <Field label="Subscriber identity enabled" info="When on, subscriber (PRO/CLUB) surfaces show the enriched animated identity. Off = the app uses the plain previous tier render: no rings, tags or animations, and no 'member since'.">
               <Toggle value={subIdentity.subscriberIdentityEnabled} onChange={(v) => setSubIdentityForm({ subscriberIdentityEnabled: v })} />
             </Field>
             <div className="flex items-center gap-3 pt-3">
@@ -585,7 +589,7 @@ export function MaintenanceTab() {
       {/* Match ratings (idea #30) */}
       <SectionCard
         title="Match ratings"
-        subtitle="Community rating of a finished match, 1 to 10 (idea #30). Users rate from the match detail screen and see their rated-matches history in their profile. The published score is a Bayesian average, not the raw mean, so a handful of votes can't push a match to 10 or 1. The code ships in the app build but stays hidden until turned on here — turn it on only once the build that includes it is live in the stores."
+        subtitle="Ship-dark · 1 a 10" info="Community rating of a finished match (idea #30). Users rate from the match detail screen and see their rated-matches history in their profile. The published score is a Bayesian average, not the raw mean, so a handful of votes can't push a match to 10 or 1. The code ships in the app build but stays hidden until turned on here — turn it on only once the build that includes it is live in the stores."
       >
         {!matchRatings ? (
           <p className="text-text-muted text-sm font-sans py-3">Loading…</p>
@@ -593,7 +597,7 @@ export function MaintenanceTab() {
           <>
             <Field
               label="Match ratings enabled"
-              subtitle="When on, users can rate finished matches. Off = the app hides the block and the endpoint rejects fail-closed. Already-submitted ratings are kept and stay visible in the user's history."
+              info="When on, users can rate finished matches. Off = the app hides the block and the endpoint rejects fail-closed. Already-submitted ratings are kept and stay visible in the user's history."
             >
               <Toggle
                 value={matchRatings.matchRatingsEnabled}
@@ -602,7 +606,7 @@ export function MaintenanceTab() {
             </Field>
             <Field
               label="Rating window (hours)"
-              subtitle="Hours after kickoff during which a match can be rated or the rating changed. Keeps old matches from being rated en masse. Default 72."
+              subtitle="def. 72 h" info="Hours after kickoff during which a match can be rated or the rating changed. Keeps old matches from being rated en masse."
             >
               <Input
                 type="number"
@@ -614,7 +618,7 @@ export function MaintenanceTab() {
             </Field>
             <Field
               label="Minimum votes to publish"
-              subtitle="Below this many votes the community score stays hidden (the vote count is still shown). Default 10."
+              subtitle="def. 10" info="Below this many votes the community score stays hidden. The vote count is still shown."
             >
               <Input
                 type="number"
@@ -626,7 +630,7 @@ export function MaintenanceTab() {
             </Field>
             <Field
               label="Prior weight"
-              subtitle="How many 'virtual votes' the prior is worth. Higher = the score moves away from the prior mean more slowly, so it resists review-bombing harder. Default 8."
+              subtitle="def. 8" info="How many 'virtual votes' the prior is worth. Higher = the score moves away from the prior mean more slowly, so it resists review-bombing harder."
             >
               <Input
                 type="number"
@@ -638,7 +642,7 @@ export function MaintenanceTab() {
             </Field>
             <Field
               label="Prior mean"
-              subtitle="The score a match with few votes is pulled toward. Should sit near the global average rating. Default 6.5."
+              subtitle="def. 6.5" info="The score a match with few votes is pulled toward. It should sit near the global average rating."
             >
               <Input
                 type="number"
@@ -651,7 +655,7 @@ export function MaintenanceTab() {
             </Field>
             <Field
               label="Max ratings per hour"
-              subtitle="Per-user cap. Applies to edits too, so a user can't keep flipping their own rating. Default 10."
+              subtitle="def. 10" info="Per-user cap. It applies to edits too, so a user can't keep flipping their own rating."
             >
               <Input
                 type="number"
@@ -689,12 +693,12 @@ export function MaintenanceTab() {
       {/* Data Maintenance */}
       <SectionCard title="Data Maintenance" subtitle="One-time actions for data pipeline health">
         <div className="flex items-center justify-between py-3">
-          <div>
+          <div className="flex items-center gap-1.5">
             <p className="text-sm text-text-primary font-sans">Backfill match stats</p>
-            <p className="text-xs text-text-muted/60 font-sans mt-0.5 max-w-md">
+            <InfoPopover label="Qué hace el backfill de stats">
               Scrape corners, cards, fouls and penalty data for completed matches from the last 60 days. Required for deep stats
               (new markets). This only needs to run once.
-            </p>
+            </InfoPopover>
           </div>
           <Button variant="secondary" loading={backfillStats.isPending} onClick={() => setShowBackfillConfirm(true)}>
             Run Backfill
@@ -702,12 +706,14 @@ export function MaintenanceTab() {
         </div>
 
         <div className="border-t border-border mt-3 pt-3">
-          <p className="text-sm text-text-primary font-sans">Re-enrich phase 3 (manual)</p>
-          <p className="text-xs text-text-muted/60 font-sans mt-0.5 max-w-2xl">
-            Re-run the full enrichment pipeline for an explicit list of match IDs. Use this for matches that got stuck on a
-            particular phase and won&apos;t be retried by the regular scheduler (e.g. their pre-match window has passed). Live
-            matches, missing match IDs, and matches already at phase 3 are rejected during preview.
-          </p>
+          <div className="flex items-center gap-1.5">
+            <p className="text-sm text-text-primary font-sans">Re-enrich phase 3 (manual)</p>
+            <InfoPopover label="Qué hace el re-enrich manual">
+              Re-run the full enrichment pipeline for an explicit list of match IDs. Use this for matches that got stuck on a
+              particular phase and won&apos;t be retried by the regular scheduler (e.g. their pre-match window has passed). Live
+              matches, missing match IDs, and matches already at phase 3 are rejected during preview.
+            </InfoPopover>
+          </div>
 
           <Textarea
             className="mt-3 font-mono min-h-[80px]"

@@ -714,7 +714,7 @@ export default function MatchesPage() {
       <MatchesSubnav />
       <PageHeader
         title="Matches"
-        description="All matches in the database. Test predictions stay out of production KPIs and stats. Result Queue runs automatically; Result Sweep is a one-time manual check."
+        description="All matches in the database." info="Test predictions stay out of production KPIs and stats. Result Queue runs automatically; Result Sweep is a one-time manual check."
         action={
           <div className="flex flex-col items-end gap-2">
             <div className="flex gap-2">

@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { InfoPopover } from '@/components/ui/InfoPopover';
 import { Tabs } from '@/components/ui/Tabs';
 import { SectionCard, Field, Toggle, NumInput } from '@/components/ui/form-controls';
 
@@ -173,6 +174,7 @@ function StatusPill({ status }: { status: TelegramPost['status'] }) {
 function TypeCard({
   title,
   subtitle,
+  info,
   enabled,
   mode,
   hour,
@@ -181,7 +183,8 @@ function TypeCard({
   extra,
 }: {
   title: string;
-  subtitle: string;
+  subtitle?: string;
+  info?: React.ReactNode;
   enabled: boolean;
   mode: PublishMode;
   hour: number;
@@ -190,18 +193,18 @@ function TypeCard({
   extra?: React.ReactNode;
 }) {
   return (
-    <SectionCard title={title} subtitle={subtitle}>
+    <SectionCard title={title} subtitle={subtitle} info={info}>
       <Field label="Activo" subtitle="Si está apagado, este tipo nunca se publica.">
         <Toggle value={enabled} onChange={(v) => onChange({ enabled: v })} />
       </Field>
-      <Field label="Modo" subtitle="Automático publica solo; Con aprobación deja un borrador en la cola.">
+      <Field label="Modo" info="Automático publica solo; Con aprobación deja un borrador en la cola.">
         <Select value={mode} options={MODE_OPTIONS} onChange={(v) => onChange({ mode: v })} />
       </Field>
       <Field label="Hora (Bogotá)" subtitle="Hora 0–23 a la que se publica (zona del canal).">
         <NumInput value={hour} onChange={(v) => onChange({ hour: v })} min={0} max={23} />
       </Field>
       {extra}
-      <Field label="Prompt extra (opcional)" subtitle="Instrucción adicional para el redactor IA. Vacío = comportamiento por defecto.">
+      <Field label="Prompt extra (opcional)" subtitle="Vacío = por defecto" info="Instrucción adicional para el redactor IA.">
         <TextArea value={prompt ?? ''} onChange={(v) => onChange({ promptOverride: v })} placeholder="Tono, ángulo, énfasis…" />
       </Field>
     </SectionCard>
@@ -355,7 +358,7 @@ export default function TelegramPage() {
     <div className="p-8 max-w-3xl">
       <PageHeader
         title="Telegram"
-        description="Canal de marketing bilingüe (ES+EN). Inerte hasta configurar token + canal y encender el switch maestro."
+        description="Canal de marketing bilingüe (ES+EN)." info="Inerte hasta configurar token + canal y encender el switch maestro."
         action={headerAction}
       />
 
@@ -367,8 +370,8 @@ export default function TelegramPage() {
         <>
           {/* ── CONNECTION ── */}
           <div hidden={tab !== 'connection'} role="tabpanel" id="tabpanel-connection" aria-labelledby="tab-connection">
-            <SectionCard title="Switch maestro" subtitle="Apagado por default. Mientras esté apagado, no se publica nada al canal, ni automático ni manual.">
-              <Field label="Canal activo" subtitle="Enciéndelo solo tras probar la conexión y un envío de prueba real.">
+            <SectionCard title="Switch maestro" subtitle="Apagado por default" info="Mientras esté apagado, no se publica nada al canal, ni automático ni manual.">
+              <Field label="Canal activo" info="Enciéndelo solo tras probar la conexión y un envío de prueba real.">
                 <Toggle value={cfg.enabled} onChange={(v) => patch({ enabled: v })} />
               </Field>
               {cfg.enabled
@@ -376,14 +379,14 @@ export default function TelegramPage() {
                 : <p className="text-xs font-sans text-warning pt-1">El canal está OFF — nada se publica.</p>}
             </SectionCard>
 
-            <SectionCard title="Conexión del bot" subtitle="El token se guarda encriptado y nunca se devuelve; aquí solo se ve si está configurado.">
+            <SectionCard title="Conexión del bot" info="El token se guarda encriptado y nunca se devuelve; aquí solo se ve si está configurado.">
               <Field label="Bot token" subtitle={cfg.botTokenConfigured ? 'Hay un token guardado. Escribe uno nuevo solo si quieres reemplazarlo.' : 'Pega el token de @BotFather.'}>
                 <TextInput type="password" value={tokenInput} onChange={setTokenInput} placeholder={cfg.botTokenConfigured ? '•••••••••• (configurado)' : '123456:ABC-…'} />
               </Field>
               <Field label="Channel ID" subtitle="@usuario público o el id numérico -100…">
                 <TextInput value={cfg.channelId ?? ''} onChange={(v) => patch({ channelId: v || null })} placeholder="@predictaxi" />
               </Field>
-              <Field label="Probar" subtitle="Verifica el token (getMe) y, opcionalmente, envía un mensaje de prueba al canal.">
+              <Field label="Probar" info="Verifica el token (getMe) y, opcionalmente, envía un mensaje de prueba al canal.">
                 <div className="flex gap-2">
                   <Button variant="secondary" size="sm" loading={testMut.isPending} onClick={() => { setTestMsg(null); testMut.mutate(false); }}>Probar conexión</Button>
                   <Button variant="secondary" size="sm" loading={testMut.isPending} onClick={() => { setTestMsg(null); testMut.mutate(true); }}>Enviar prueba</Button>
@@ -392,7 +395,7 @@ export default function TelegramPage() {
               {testMsg && <p className="text-xs font-sans text-text-secondary pt-2">{testMsg}</p>}
             </SectionCard>
 
-            <SectionCard title="Idioma del canal" subtitle="Bilingüe = un canal con ES+EN en cada post. Separado = ES a un canal y EN a otro.">
+            <SectionCard title="Idioma del canal" info="Bilingüe = un canal con ES+EN en cada post. Separado = ES a un canal y EN a otro.">
               <Field label="Modo" subtitle="Separado requiere un segundo canal abajo.">
                 <Select<ChannelMode>
                   value={cfg.channelMode}
@@ -407,23 +410,23 @@ export default function TelegramPage() {
               )}
             </SectionCard>
 
-            <SectionCard title="Enlace (CTA) y tarjetas" subtitle="El botón del post lleva a este enlace; opcionalmente con utm para medir clics.">
+            <SectionCard title="Enlace (CTA) y tarjetas" info="El botón del post lleva a este enlace; opcionalmente con utm para medir clics.">
               <Field label="CTA URL" subtitle="Vacío = landing por defecto.">
                 <TextInput value={cfg.ctaUrl ?? ''} onChange={(v) => patch({ ctaUrl: v || null })} placeholder="https://predicta-xi.online" />
               </Field>
-              <Field label="Tracking UTM" subtitle="Añade utm_source/medium/campaign al CTA para medir conversión.">
+              <Field label="Tracking UTM" info="Añade utm_source/medium/campaign al CTA para medir conversión.">
                 <Toggle value={cfg.ctaUtmEnabled} onChange={(v) => patch({ ctaUtmEnabled: v })} />
               </Field>
-              <Field label="Tarjetas con 2 escudos" subtitle="Compone una imagen con los escudos local/visitante (requiere almacenamiento B2). Si falla, usa el logo de liga.">
+              <Field label="Tarjetas con 2 escudos" subtitle="Requiere B2" info="Compone una imagen con los escudos local/visitante. Si falla, usa el logo de liga.">
                 <Toggle value={cfg.cardImagesEnabled} onChange={(v) => patch({ cardImagesEnabled: v })} />
               </Field>
             </SectionCard>
 
-            <SectionCard title="Límites y retención" subtitle="Tope diario de publicaciones automáticas y limpieza del historial.">
+            <SectionCard title="Límites y retención" info="Tope diario de publicaciones automáticas y limpieza del historial.">
               <Field label="Máx. posts/día" subtitle="Tope de publicaciones automáticas por día.">
                 <NumInput value={cfg.maxPostsPerDay} onChange={(v) => patch({ maxPostsPerDay: v })} min={1} max={50} />
               </Field>
-              <Field label="Retención (días)" subtitle="Borra el historial más viejo que N días. 0 = guardar siempre.">
+              <Field label="Retención (días)" subtitle="Borra lo más viejo · 0 = guardar siempre" info="Borra el historial de posts más viejo que N días.">
                 <NumInput value={cfg.historyRetentionDays} onChange={(v) => patch({ historyRetentionDays: v })} min={0} max={3650} />
               </Field>
               <Field label="Zona horaria" subtitle="Fija en America/Bogota (UTC−5).">
@@ -434,7 +437,7 @@ export default function TelegramPage() {
 
           {/* ── CONTENT ── */}
           <div hidden={tab !== 'content'} role="tabpanel" id="tabpanel-content" aria-labelledby="tab-content">
-            <SectionCard title="Componer ahora" subtitle="Genera un post al instante (ignora el horario). “Previsualizar” lo deja como borrador en la Cola; “Publicar” lo manda directo.">
+            <SectionCard title="Componer ahora" info="Genera un post al instante, ignorando el horario. “Previsualizar” lo deja como borrador en la Cola; “Publicar” lo manda directo.">
               <Field label="Tipo" subtitle="Qué post componer.">
                 <Select<ContentType>
                   value={composeType}
@@ -453,7 +456,7 @@ export default function TelegramPage() {
 
             <TypeCard
               title="Recap diario"
-              subtitle="Cuántos pronósticos acertó la IA en el día, con desglose por liga."
+              info="Cuántos pronósticos acertó la IA en el día, con desglose por liga."
               enabled={cfg.matchRecapEnabled}
               mode={cfg.matchRecapMode}
               hour={cfg.matchRecapHour}
@@ -473,7 +476,7 @@ export default function TelegramPage() {
 
             <TypeCard
               title="Balance semanal"
-              subtitle="Aciertos de los últimos 7 días. Se publica los domingos a su hora."
+              info="Aciertos de los últimos 7 días. Se publica los domingos a su hora."
               enabled={cfg.weeklyRecapEnabled}
               mode={cfg.weeklyRecapMode}
               hour={cfg.weeklyRecapHour}
@@ -549,7 +552,13 @@ export default function TelegramPage() {
 
           {/* ── QUEUE ── */}
           <div hidden={tab !== 'queue'} role="tabpanel" id="tabpanel-queue" aria-labelledby="tab-queue">
-            <p className="text-xs text-text-muted font-sans mb-4">Borradores pendientes de aprobación (tipos en modo “Con aprobación”).</p>
+            <p className="text-xs text-text-muted font-sans mb-4 flex items-center gap-1.5">
+              Borradores pendientes de aprobación.
+              <InfoPopover label="Qué llega a la cola">
+                Solo aterrizan aquí los tipos configurados en modo «Con aprobación»; los de modo
+                «Automático» se publican solos y no pasan por la cola.
+              </InfoPopover>
+            </p>
             {queueQ.isLoading ? (
               <p className="text-text-muted text-sm font-sans py-3">Cargando…</p>
             ) : (queueQ.data?.items.length ?? 0) === 0 ? (

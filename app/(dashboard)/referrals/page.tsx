@@ -203,7 +203,7 @@ function ReferralsInner() {
     <div className="p-8 max-w-4xl">
       <PageHeader
         title="Referrals"
-        description="Monitor the referral program, configure its rewards & anti-abuse, and moderate abuse."
+        description="Programa de referidos" info="Monitor the referral program, configure its rewards and anti-abuse, and moderate abuse."
         action={
           tab === 'config' ? (
             <Button
@@ -256,7 +256,7 @@ function ReferralsInner() {
 
       {/* LIST */}
       <div hidden={tab !== 'list'} role="tabpanel" id="tabpanel-list" aria-labelledby="tab-list">
-        <SectionCard title="Referrals" subtitle="Newest first. Void flags a referral as abusive (does not claw back already-paid credits).">
+        <SectionCard title="Referrals" subtitle="Newest first" info="Void flags a referral as abusive. It does not claw back already-paid credits.">
           {listQ.isLoading && <p className="text-sm text-text-muted font-sans py-4 text-center">Loading...</p>}
           {listQ.data && listQ.data.length === 0 && <p className="text-sm text-text-muted font-sans py-4 text-center">No referrals.</p>}
           <div className="space-y-2">
@@ -287,7 +287,7 @@ function ReferralsInner() {
         {abuseQ.isLoading && <p className="text-sm text-text-muted font-sans">Loading...</p>}
         {abuseQ.data && (
           <>
-            <SectionCard title="Device collisions" subtitle="Devices tied to more than one referral. Attribution blocks this, so any hit is worth reviewing.">
+            <SectionCard title="Device collisions" info="Devices tied to more than one referral. Attribution blocks this, so any hit is worth reviewing.">
               {abuseQ.data.deviceCollisions.length === 0 ? (
                 <p className="text-sm text-text-muted font-sans py-4 text-center">No collisions.</p>
               ) : (
@@ -301,7 +301,7 @@ function ReferralsInner() {
                 </div>
               )}
             </SectionCard>
-            <SectionCard title="Suspicious referrers" subtitle="Many pending referrals that never activate — a farm whose accounts never open a prediction.">
+            <SectionCard title="Suspicious referrers" info="Many pending referrals that never activate — a farm whose accounts never open a prediction.">
               {abuseQ.data.suspiciousReferrers.length === 0 ? (
                 <p className="text-sm text-text-muted font-sans py-4 text-center">None flagged.</p>
               ) : (
@@ -326,20 +326,20 @@ function ReferralsInner() {
           <p className="text-sm text-text-muted font-sans py-3">Loading…</p>
         ) : (
           <>
-            <SectionCard title="Referral Program" subtitle="Reward users with credits for inviting new, real users. A referral 'qualifies' the referrer only when the invited user signs up on a unique device (App Check) and opens their first prediction. Credits are an engagement currency — the anti-abuse gates below are what matter.">
-              <Field label="Enabled" subtitle="Master switch. When off, no codes are attributed and no credits are paid.">
+            <SectionCard title="Referral Program" info="Reward users with credits for inviting new, real users. A referral 'qualifies' the referrer only when the invited user signs up on a unique device (App Check) and opens their first prediction. Credits are an engagement currency — the anti-abuse gates below are what matter.">
+              <Field label="Enabled" info="Master switch. When off, no codes are attributed and no credits are paid.">
                 <Toggle value={cfg.referralEnabled} onChange={(v) => setCfg('referralEnabled', v)} />
               </Field>
               <Field label="Credits per referral" subtitle="Paid to the referrer for each qualified referral.">
                 <NumInput value={cfg.referralCreditsPerReferral} onChange={(v) => setCfg('referralCreditsPerReferral', v)} min={0} max={1000} />
               </Field>
-              <Field label="Welcome credits" subtitle="Bonus to the NEW (referred) user on attribution. 0 = single-sided (only the referrer earns).">
+              <Field label="Welcome credits" subtitle="0 = single-sided" info="Bonus to the NEW (referred) user on attribution. Single-sided means only the referrer earns.">
                 <NumInput value={cfg.referralWelcomeCredits} onChange={(v) => setCfg('referralWelcomeCredits', v)} min={0} max={1000} />
               </Field>
             </SectionCard>
 
-            <SectionCard title="Milestone Bonus" subtitle="An extra bonus every N qualified referrals (e.g. every 5). Set size or bonus to 0 to disable.">
-              <Field label="Milestone size" subtitle="Grant the bonus on every multiple of this many qualified referrals.">
+            <SectionCard title="Milestone Bonus" subtitle="0 = apagado" info="An extra bonus every N qualified referrals (e.g. every 5).">
+              <Field label="Milestone size" info="Grant the bonus on every multiple of this many qualified referrals.">
                 <NumInput value={cfg.referralMilestoneSize} onChange={(v) => setCfg('referralMilestoneSize', v)} min={0} max={1000} />
               </Field>
               <Field label="Milestone bonus" subtitle="Extra credits granted to the referrer at each milestone.">
@@ -347,8 +347,8 @@ function ReferralsInner() {
               </Field>
             </SectionCard>
 
-            <SectionCard title="Anti-abuse" subtitle="Guardrails that protect ad/IAP revenue from credit farming. Device dedupe and the activation gate always apply; App Check enforcement is staged below.">
-              <Field label="App Check enforcement" subtitle="disabled = ignore; monitor = record only (recommended for rollout); enforce = unverified installs never reward the referrer.">
+            <SectionCard title="Anti-abuse" info="Guardrails that protect ad/IAP revenue from credit farming. Device dedupe and the activation gate always apply; App Check enforcement is staged below.">
+              <Field label="App Check enforcement" info="disabled = ignore; monitor = record only (recommended for rollout); enforce = unverified installs never reward the referrer.">
                 <div className="flex flex-wrap gap-2">
                   {APP_CHECK_MODES.map((mode) => (
                     <button
@@ -366,31 +366,31 @@ function ReferralsInner() {
                   ))}
                 </div>
               </Field>
-              <Field label="Qualify on first prediction" subtitle="On = referrer is paid only when the referred user opens their first prediction (recommended). Off = qualifies at signup.">
+              <Field label="Qualify on first prediction" info="On = the referrer is paid only when the referred user opens their first prediction (recommended). Off = qualifies at signup.">
                 <Toggle value={cfg.referralQualifyOnFirstPrediction} onChange={(v) => setCfg('referralQualifyOnFirstPrediction', v)} />
               </Field>
-              <Field label="Lifetime cap" subtitle="Max qualified referrals that earn the referrer credits (0 = unlimited).">
+              <Field label="Lifetime cap" subtitle="0 = unlimited" info="Max qualified referrals that earn the referrer credits.">
                 <NumInput value={cfg.referralMaxRewardedReferrals} onChange={(v) => setCfg('referralMaxRewardedReferrals', v)} min={0} max={100000} />
               </Field>
-              <Field label="Attribution window (hours)" subtitle="A code can only be attributed within this many hours after the referred user signs up.">
+              <Field label="Attribution window (hours)" info="A code can only be attributed within this many hours after the referred user signs up.">
                 <NumInput value={cfg.referralAttributionWindowHours} onChange={(v) => setCfg('referralAttributionWindowHours', v)} min={1} max={8760} />
               </Field>
             </SectionCard>
 
-            <SectionCard title="Invite Modal" subtitle="Non-aggressive bottom sheet that nudges users to invite friends for free credits. The cadence is hybrid: low-credit users (and non-subscribers) see it more often; subscribers and users with plenty of credits see it less often. It counts both app opens and store/credits-screen entries, shows at most one promo modal per session (the PRO upsell takes priority), and respects the cooldown after a dismissal. Requires the Referral Program above to be enabled.">
+            <SectionCard title="Invite Modal" subtitle="Requiere el programa activo" info="Non-aggressive bottom sheet that nudges users to invite friends for free credits. The cadence is hybrid: low-credit users and non-subscribers see it more often; subscribers and users with plenty of credits see it less often. It counts both app opens and store/credits-screen entries, shows at most one promo modal per session (the PRO upsell takes priority), and respects the cooldown after a dismissal.">
               <Field label="Modal enabled" subtitle="Master switch. When off, the invite modal never shows.">
                 <Toggle value={cfg.referralModalEnabled} onChange={(v) => setCfg('referralModalEnabled', v)} />
               </Field>
-              <Field label="Frequency — low credits" subtitle="Show every N attempts to non-subscribers below the credit threshold (the more frequent cadence). Lower = more often.">
+              <Field label="Frequency — low credits" subtitle="Lower = more often" info="Show every N attempts to non-subscribers below the credit threshold — the more frequent cadence.">
                 <NumInput value={cfg.referralModalFreqLow} onChange={(v) => setCfg('referralModalFreqLow', v)} min={1} max={100} />
               </Field>
-              <Field label="Frequency — high credits / subscribers" subtitle="Show every N attempts to subscribers and to users at/above the credit threshold (the less frequent cadence). Higher = less often.">
+              <Field label="Frequency — high credits / subscribers" subtitle="Higher = less often" info="Show every N attempts to subscribers and to users at or above the credit threshold — the less frequent cadence.">
                 <NumInput value={cfg.referralModalFreqHigh} onChange={(v) => setCfg('referralModalFreqHigh', v)} min={1} max={100} />
               </Field>
-              <Field label="Low-credit threshold" subtitle="A non-subscriber with fewer credits than this gets the more-frequent cadence. 0 = nobody is 'low-credit' (everyone on the less-frequent cadence).">
+              <Field label="Low-credit threshold" subtitle="0 = nadie es low-credit" info="A non-subscriber with fewer credits than this gets the more-frequent cadence. At 0 everyone is on the less-frequent cadence.">
                 <NumInput value={cfg.referralModalLowCreditThreshold} onChange={(v) => setCfg('referralModalLowCreditThreshold', v)} min={0} max={100000} />
               </Field>
-              <Field label="Cooldown (days)" subtitle="After a dismissal, the modal won't reappear for this many days.">
+              <Field label="Cooldown (days)" info="After a dismissal, the modal won't reappear for this many days.">
                 <NumInput value={cfg.referralModalCooldownDays} onChange={(v) => setCfg('referralModalCooldownDays', v)} min={0} max={365} />
               </Field>
             </SectionCard>

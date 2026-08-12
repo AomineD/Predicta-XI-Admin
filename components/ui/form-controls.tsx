@@ -5,20 +5,47 @@
  */
 
 import { Card } from './Card';
+import { InfoPopover } from './InfoPopover';
 
-export function SectionCard({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
+export function SectionCard({
+  title,
+  subtitle,
+  info,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  /** Explicación larga: va detrás del ⓘ del encabezado, no debajo del título. */
+  info?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
-    <Card title={title} subtitle={subtitle} className="mb-4">
+    <Card title={title} subtitle={subtitle} info={info} className="mb-4">
       {children}
     </Card>
   );
 }
 
-export function Field({ label, subtitle, children }: { label: string; subtitle?: string; children: React.ReactNode }) {
+export function Field({
+  label,
+  subtitle,
+  info,
+  children,
+}: {
+  label: string;
+  /** Dato corto que se consulta a diario (rango, tope, valor por defecto). */
+  subtitle?: string;
+  /** Cómo funciona y por qué: va detrás del ⓘ, no ocupa la pantalla. */
+  info?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
     <div className="flex items-start gap-4 py-3 border-b border-border last:border-0">
       <div className="w-52 flex-none">
-        <span className="text-sm text-text-muted font-sans pt-0.5">{label}</span>
+        <span className="flex items-center gap-1.5 pt-0.5">
+          <span className="text-sm text-text-muted font-sans">{label}</span>
+          {info && <InfoPopover label={`Qué hace "${label}"`}>{info}</InfoPopover>}
+        </span>
         {subtitle && <p className="text-xs text-text-muted/50 font-sans mt-0.5 leading-tight">{subtitle}</p>}
       </div>
       <div className="flex-1">{children}</div>

@@ -133,7 +133,7 @@ export default function FeaturedMatchesPage() {
       <MatchesSubnav />
       <PageHeader
         title="Featured matches"
-        description="Controls the Home featured carousel. Order = (1) manual pin below, (2) most-viewed, (3) soonest kickoff. Only matches in featured leagues appear here."
+        description="Controls the Home featured carousel." info="Order = (1) manual pin below, (2) most-viewed, (3) soonest kickoff. Only matches in featured leagues appear here."
       />
 
       <div className="space-y-6">
@@ -183,7 +183,7 @@ export default function FeaturedMatchesPage() {
         {/* Manual order */}
         <SectionCard
           title="Manual order (forced)"
-          subtitle="Pinned matches show first, in this order. Unpinned matches fall back to view-count order automatically."
+          subtitle="Pinned first" info="Pinned matches show first, in this order. Unpinned matches fall back to view-count order automatically."
         >
           {isLoading ? (
             <p className="text-sm text-text-muted font-sans">Loading…</p>

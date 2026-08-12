@@ -484,7 +484,7 @@ function ForcePicksModal({
               className="h-9 w-full px-3 rounded-xl text-sm bg-surface-2 border border-border text-text-primary font-sans"
             />
             <p className="text-[11px] text-text-muted/60 font-sans mt-1">
-              Debe ser una cuenta existente. Si aún no es miembro del grupo, se agrega automáticamente.
+              Debe ser una cuenta existente; si aún no es miembro, se agrega sola.
             </p>
           </div>
         )}
@@ -939,7 +939,7 @@ function ForceKnockoutPicksModal({
               className="h-9 w-full px-3 rounded-xl text-sm bg-surface-2 border border-border text-text-primary font-sans"
             />
             <p className="text-[11px] text-text-muted/60 font-sans mt-1">
-              Debe ser una cuenta existente. Si aún no es miembro del grupo, se agrega automáticamente.
+              Debe ser una cuenta existente; si aún no es miembro, se agrega sola.
             </p>
           </div>
         )}

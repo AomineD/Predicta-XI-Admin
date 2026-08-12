@@ -5,12 +5,15 @@ import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useMounted } from '@/lib/use-mounted';
+import { InfoPopover } from './InfoPopover';
 
 interface ModalProps {
   open: boolean;
   onClose: () => void;
   title?: React.ReactNode;
   description?: React.ReactNode;
+  /** Explicación larga del diálogo: detrás del ⓘ junto al título. */
+  info?: React.ReactNode;
   children?: React.ReactNode;
   footer?: React.ReactNode;
   size?: 'sm' | 'md' | 'lg' | 'xl';
@@ -34,6 +37,7 @@ export function Modal({
   onClose,
   title,
   description,
+  info,
   children,
   footer,
   size = 'md',
@@ -68,7 +72,16 @@ export function Modal({
       >
         <div className="flex items-start justify-between gap-4 px-5 pt-5 pb-3">
           <div className="min-w-0">
-            {title && <h2 className="text-base font-semibold text-text-primary font-display">{title}</h2>}
+            {(title || info) && (
+              <div className="flex items-center gap-2">
+                {title && <h2 className="text-base font-semibold text-text-primary font-display">{title}</h2>}
+                {info && (
+                  <InfoPopover label={typeof title === 'string' ? `Qué hace "${title}"` : 'Más información'}>
+                    {info}
+                  </InfoPopover>
+                )}
+              </div>
+            )}
             {description && <p className="text-sm text-text-muted font-sans mt-1 leading-snug">{description}</p>}
           </div>
           <button

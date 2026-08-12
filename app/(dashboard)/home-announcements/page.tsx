@@ -225,7 +225,7 @@ export default function HomeAnnouncementsPage() {
     <div>
       <PageHeader
         title="Home announcements"
-        description="Manage the Home carousel announcements (bilingual, image-capable). The app shows the last 5 published, highest priority first."
+        description="Manage the Home carousel announcements (bilingual, image-capable)." info="The app shows the last 5 published, highest priority first."
         action={
           <div className="flex items-center gap-2">
             <Button variant="secondary" onClick={() => setGenOpen(true)}>
@@ -242,7 +242,7 @@ export default function HomeAnnouncementsPage() {
         open={genOpen}
         onClose={() => setGenOpen(false)}
         title="Generar anuncio con IA"
-        description="El modelo redacta un borrador bilingüe. Lo revisas y editas en el formulario antes de guardarlo; nada se publica automáticamente."
+        description="El modelo redacta un borrador bilingüe." info="Lo revisas y editas en el formulario antes de guardarlo; nada se publica automáticamente."
         footer={
           <>
             <Button variant="ghost" onClick={() => setGenOpen(false)} disabled={generate.isPending}>
@@ -288,7 +288,7 @@ export default function HomeAnnouncementsPage() {
       {draft && (
         <SectionCard
           title={draft.id == null ? 'New announcement' : `Edit announcement #${draft.id}`}
-          subtitle="User-friendly copy. Spanish is neutral 'tú' and avoids betting language. Save first, then upload an image."
+          info="User-friendly copy. Spanish is neutral 'tú' and avoids betting language. Save first, then upload an image."
         >
           <Field label="Title (ES)">
             <div>
@@ -314,7 +314,7 @@ export default function HomeAnnouncementsPage() {
               <CharCount value={draft.bodyEn} max={600} />
             </div>
           </Field>
-          <Field label="Link type" subtitle="none = informational; route = internal app path; url = external https link.">
+          <Field label="Link type" info="none = informational; route = internal app path; url = external https link.">
             <Select className="w-40" value={draft.linkType} onChange={(e) => setDraft({ ...draft, linkType: e.target.value as LinkType })}>
               <option value="none">none</option>
               <option value="route">route</option>
@@ -338,7 +338,7 @@ export default function HomeAnnouncementsPage() {
               />
             </Field>
           )}
-          <Field label="Priority" subtitle="Higher shows first (the carousel sorts by priority then recency).">
+          <Field label="Priority" subtitle="Higher shows first" info="The carousel sorts by priority, then recency.">
             <Input type="number" min={0} max={1000} className="w-28" value={draft.priority} onChange={(e) => setDraft({ ...draft, priority: Number(e.target.value) || 0 })} />
           </Field>
           <Field label="Starts at" subtitle="Optional. Empty = visible immediately.">
@@ -347,7 +347,7 @@ export default function HomeAnnouncementsPage() {
           <Field label="Ends at" subtitle="Optional. Empty = no expiry.">
             <Input type="date" className="w-48" value={draft.endsAt} onChange={(e) => setDraft({ ...draft, endsAt: e.target.value })} />
           </Field>
-          <Field label="Published" subtitle="When on, the announcement can appear in the app (if the Home announcements flag is enabled).">
+          <Field label="Published" info="When on, the announcement can appear in the app, as long as the Home announcements flag is enabled.">
             <Toggle value={draft.isPublished} onChange={(v) => setDraft({ ...draft, isPublished: v })} />
           </Field>
 
@@ -384,7 +384,7 @@ export default function HomeAnnouncementsPage() {
         </SectionCard>
       )}
 
-      <SectionCard title="Announcements" subtitle="Highest priority first. Auto 'matches of the day' rows are managed by the scheduler.">
+      <SectionCard title="Announcements" subtitle="Highest priority first" info="Auto 'matches of the day' rows are managed by the scheduler.">
         {isLoading ? (
           <p className="text-text-muted text-sm font-sans py-3">Loading…</p>
         ) : !entries || entries.length === 0 ? (

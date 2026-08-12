@@ -18,9 +18,9 @@ export function CombinadasTab({
     <div>
       <SectionCard
         title="User combinadas — Predicta opinion"
-        subtitle="Kill-switch for the paid AI opinion on user-built parlays (queued to the worker). Off = the app hides the 'Pedir opinión' button and no opinion can be requested."
+        info="Kill-switch for the paid AI opinion on user-built parlays (queued to the worker). Off = the app hides the 'Pedir opinión' button and no opinion can be requested."
       >
-        <Field label="Opinions enabled" subtitle="When off, users cannot request a Predicta opinion (stops all opinion LLM spend)">
+        <Field label="Opinions enabled" info="When off, users cannot request a Predicta opinion, which stops all opinion LLM spend.">
           <Toggle value={form.userCombinadaOpinionsEnabled ?? true} onChange={(v) => setField('userCombinadaOpinionsEnabled', v)} />
         </Field>
       </SectionCard>
@@ -35,7 +35,7 @@ export function CombinadasTab({
         <Field label="Max legs" subtitle="Maximum matches per combinada (2-5)">
           <Input type="number" min={2} max={5} className="w-24" value={form.combinadasMaxLegs ?? 5} onChange={(e) => setField('combinadasMaxLegs', Number(e.target.value))} />
         </Field>
-        <Field label="Risk mode" subtitle="Precise = conservative picks, Bold = avoids ultra-safe odds (<1.30)">
+        <Field label="Risk mode" info="Precise = conservative picks. Bold = avoids ultra-safe odds (under 1.30).">
           <Select className="w-32" value={form.combinadasRiskMode ?? 'precise'} onChange={(e) => setField('combinadasRiskMode', e.target.value)}>
             <option value="precise">Precise</option>
             <option value="bold">Bold</option>
@@ -49,7 +49,7 @@ export function CombinadasTab({
         <Field label="Min confidence (regular)" subtitle="Minimum pick confidence for regular combinadas (1-95)">
           <Input type="number" min={1} max={95} className="w-24" value={form.combinadasMinConfidenceRegular ?? 55} onChange={(e) => setField('combinadasMinConfidenceRegular', Number(e.target.value))} />
         </Field>
-        <Field label="Leagues (regular)" subtitle="Which leagues regular combinadas can cover. Empty = all V1 leagues.">
+        <Field label="Leagues (regular)" subtitle="Vacío = todas las V1" info="Which leagues regular combinadas can cover.">
           <LeagueMultiSelect
             leagues={competitions}
             value={form.combinadasRegularLeagues ?? []}
@@ -57,7 +57,7 @@ export function CombinadasTab({
             emptyLabel="All V1 leagues allowed"
           />
         </Field>
-        <Field label="Max combined odds (regular)" subtitle="Reject regular combinadas whose product of odds exceeds this (1.5–20)">
+        <Field label="Max combined odds (regular)" subtitle="1.5–20" info="Reject regular combinadas whose product of odds exceeds this.">
           <Input type="number" min={1.5} max={20} step={0.1} className="w-24" value={form.combinadasRegularMaxOdds ?? 6.0} onChange={(e) => setField('combinadasRegularMaxOdds', Number(e.target.value))} />
         </Field>
         <Field label="Excluded teams (regular)" subtitle="Skip any regular combinada involving these teams">
@@ -71,7 +71,7 @@ export function CombinadasTab({
         <Field label="Min confidence (premium)" subtitle="Minimum pick confidence for premium combinadas (1-95)">
           <Input type="number" min={1} max={95} className="w-24" value={form.combinadasMinConfidencePremium ?? 45} onChange={(e) => setField('combinadasMinConfidencePremium', Number(e.target.value))} />
         </Field>
-        <Field label="Leagues (premium)" subtitle="Which leagues premium combinadas can cover. Empty = all V1 leagues.">
+        <Field label="Leagues (premium)" subtitle="Vacío = todas las V1" info="Which leagues premium combinadas can cover.">
           <LeagueMultiSelect
             leagues={competitions}
             value={form.combinadasPremiumLeagues ?? []}
@@ -79,7 +79,7 @@ export function CombinadasTab({
             emptyLabel="All V1 leagues allowed"
           />
         </Field>
-        <Field label="Max combined odds (premium)" subtitle="Reject premium combinadas whose product of odds exceeds this (1.5–20)">
+        <Field label="Max combined odds (premium)" subtitle="1.5–20" info="Reject premium combinadas whose product of odds exceeds this.">
           <Input type="number" min={1.5} max={20} step={0.1} className="w-24" value={form.combinadasPremiumMaxOdds ?? 6.0} onChange={(e) => setField('combinadasPremiumMaxOdds', Number(e.target.value))} />
         </Field>
       </SectionCard>

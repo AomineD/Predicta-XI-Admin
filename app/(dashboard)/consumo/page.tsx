@@ -215,7 +215,7 @@ export default function ConsumoPage() {
 
   return (
     <div>
-      <PageHeader title="Consumo" description="LLM API usage — tokens, costs, and debugging. Test predictions are marked as TEST and do not count toward production KPIs/stats." />
+      <PageHeader title="Consumo" description="LLM API usage — tokens, costs, and debugging." info="Test predictions are marked as TEST and do not count toward production KPIs/stats." />
 
       {summary && <SummaryCards summary={summary} daily={daily} />}
 

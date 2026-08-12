@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { InfoPopover } from '@/components/ui/InfoPopover';
 import { Button } from '@/components/ui/Button';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { MetricCard } from '@/components/ui/MetricCard';
@@ -538,10 +539,12 @@ function OverviewTab({
       </SectionCard>
 
       <SectionCard>
-        <h3 className="text-sm font-bold text-text-primary font-sans">Data readiness</h3>
-        <p className="text-xs text-text-muted font-sans mt-0.5">
-          Generation needs recent form, FIFA ranking and team news. Sync these from the Acciones menu before generating.
-        </p>
+        <div className="flex items-center gap-1.5">
+          <h3 className="text-sm font-bold text-text-primary font-sans">Data readiness</h3>
+          <InfoPopover label="Qué necesita la generación">
+            Generation needs recent form, FIFA ranking and team news. Sync these from the Acciones menu before generating.
+          </InfoPopover>
+        </div>
         <Row label="Phase 1 generated" value={formatDateTime(quiniela.phase1GeneratedAt)} />
         <Row label="Phase 2 generated" value={formatDateTime(quiniela.phase2GeneratedAt)} />
         <Row label="Last team-history sync" value={lastHistory ? formatDateTime(lastHistory.finishedAt) : '—'} />
@@ -549,11 +552,11 @@ function OverviewTab({
       </SectionCard>
 
       <SectionCard>
-        <div>
+        <div className="flex items-center gap-1.5">
           <h3 className="text-sm font-bold text-text-primary font-sans">Settlement</h3>
-          <p className="text-xs text-text-muted font-sans mt-0.5">
+          <InfoPopover label="Qué hace el settlement">
             Run, schedule and resolve manual awards from the Settlement tab.
-          </p>
+          </InfoPopover>
         </div>
         <Row label="Settled picks" value={`${settledPicks}/${totalPicks}`} />
         <Row label="Settled at" value={formatDateTime(quiniela.settledAt)} />
@@ -613,12 +616,14 @@ function GroupCategoriesCard({
     <SectionCard>
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h3 className="text-sm font-bold text-text-primary font-sans">Friends-group categories</h3>
-          <p className="text-xs text-text-muted font-sans mt-0.5 max-w-xl leading-snug">
-            Categories friends can predict in competition-mode groups. Only single-subject categories
-            that already have an AI pick can be enabled (the pick carries the official result used to
-            score). While empty, this tournament won&apos;t appear when creating a group.
-          </p>
+          <div className="flex items-center gap-1.5">
+            <h3 className="text-sm font-bold text-text-primary font-sans">Friends-group categories</h3>
+            <InfoPopover label="Qué son las categorías de grupo">
+              Categories friends can predict in competition-mode groups. Only single-subject categories
+              that already have an AI pick can be enabled (the pick carries the official result used to
+              score). While empty, this tournament won&apos;t appear when creating a group.
+            </InfoPopover>
+          </div>
         </div>
         <Button
           variant="primary"
@@ -734,11 +739,13 @@ function SettlementTab({
       <SectionCard>
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h3 className="text-sm font-bold text-text-primary font-sans">Run settlement now</h3>
-            <p className="text-xs text-text-muted font-sans mt-0.5 max-w-xl leading-snug">
-              Evaluates every pick with real results available, ignoring the schedule. Runs in the background
-              (fire-and-forget) — watch the active-job banner and the Jobs tab for the outcome.
-            </p>
+            <div className="flex items-center gap-1.5">
+              <h3 className="text-sm font-bold text-text-primary font-sans">Run settlement now</h3>
+              <InfoPopover label="Qué hace liquidar ahora">
+                Evaluates every pick with real results available, ignoring the schedule. Runs in the background
+                (fire-and-forget) — watch the active-job banner and the Jobs tab for the outcome.
+              </InfoPopover>
+            </div>
           </div>
           <Button variant="primary" onClick={onRunNow} loading={runningNow} disabled={!canSettleAuto}>
             <Gavel size={15} /> Run now
@@ -752,10 +759,12 @@ function SettlementTab({
       <SectionCard>
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-bold text-text-primary font-sans">Scheduled settlement</h3>
-            <p className="text-xs text-text-muted font-sans mt-0.5">
-              When the scheduler auto-settles each phase. Empty = manual only.
-            </p>
+            <div className="flex items-center gap-1.5">
+              <h3 className="text-sm font-bold text-text-primary font-sans">Scheduled settlement</h3>
+              <InfoPopover label="Qué es el settlement programado">
+                When the scheduler auto-settles each phase. Empty = manual only.
+              </InfoPopover>
+            </div>
           </div>
           <Button size="sm" variant="secondary" onClick={onEditSchedule}>
             Edit schedule
@@ -773,10 +782,10 @@ function SettlementTab({
               <span className="ml-2 text-xs font-mono text-warning">{manualPending.length}</span>
             )}
           </h3>
-          <p className="text-xs text-text-muted font-sans mt-0.5">
+          <InfoPopover label="Por qué se liquidan a mano">
             Subjective awards (MVP, best young player, best goalkeeper) have no data source — settle them by hand
             once officially announced.
-          </p>
+          </InfoPopover>
         </div>
         {manualPending.length === 0 ? (
           <p className="text-sm text-text-muted font-sans">
@@ -867,13 +876,13 @@ function SettlementScheduleModal({
         style={{ background: '#121A2B', border: '1px solid rgba(255,255,255,0.08)' }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div>
+        <div className="flex items-center gap-2">
           <h2 className="text-lg font-bold text-text-primary font-sans">Settlement schedule</h2>
-          <p className="text-xs text-text-muted font-sans mt-1 leading-snug">
+          <InfoPopover label="Cómo funciona el settlement programado">
             Pick when the scheduler may start auto-settling each phase. Set Phase 1 for after the group
             stage, Phase 2 for after the final. Picks still only score once real results are in. Clear a
             field to switch that phase back to manual-only.
-          </p>
+          </InfoPopover>
         </div>
 
         <div>
@@ -1660,11 +1669,11 @@ function TeamNewsPickerModal({
           className="flex items-center justify-between px-5 py-4"
           style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}
         >
-          <div>
+          <div className="flex items-center gap-2">
             <h2 className="text-base font-bold text-text-primary font-sans">📰 Pick a team to inject news</h2>
-            <p className="text-xs text-text-muted font-sans">
+            <InfoPopover label="Cómo inyectar noticias">
               Searching across all national teams. Pick one and add injury/suspension notes.
-            </p>
+            </InfoPopover>
           </div>
           <Button variant="ghost" size="sm" onClick={onClose}>Close</Button>
         </div>

@@ -281,19 +281,19 @@ function MonetizationInner() {
           <p className="text-sm text-text-muted font-sans py-3">Loading…</p>
         ) : (
           <>
-            <SectionCard title="PRO Upsell Modal" subtitle="Non-aggressive modal that invites non-subscribers to PRO/Club. Shown only to users without an active subscription, every N app opens, with a cooldown after dismissal. Subscribers never see it.">
+            <SectionCard title="PRO Upsell Modal" info="Non-aggressive modal that invites non-subscribers to PRO/Club. Shown only to users without an active subscription, every N app opens, with a cooldown after dismissal. Subscribers never see it.">
               <Field label="Modal enabled" subtitle="Master switch. When off, the modal never shows.">
                 <Toggle value={cfg.proUpsellModalEnabled} onChange={(v) => setCfg('proUpsellModalEnabled', v)} />
               </Field>
               <Field label="Frequency (app opens)" subtitle="Show the modal once every N eligible app opens (minimum 1).">
                 <NumInput value={cfg.proUpsellFrequency} onChange={(v) => setCfg('proUpsellFrequency', v)} min={1} max={100} />
               </Field>
-              <Field label="Cooldown (days)" subtitle="After it shows or is dismissed, don't show it again for this many days (0 = no cooldown).">
+              <Field label="Cooldown (days)" subtitle="0 = sin cooldown" info="After it shows or is dismissed, don't show it again for this many days.">
                 <NumInput value={cfg.proUpsellCooldownDays} onChange={(v) => setCfg('proUpsellCooldownDays', v)} min={0} max={365} />
               </Field>
             </SectionCard>
 
-            <SectionCard title="Price Offer" subtitle="Surface a Google Play / App Store price promotion. The discount itself is configured in the store; this only controls the in-app badge. The app always shows the real localized store price.">
+            <SectionCard title="Price Offer" info="Surface a Google Play / App Store price promotion. The discount itself is configured in the store; this only controls the in-app badge. The app always shows the real localized store price.">
               <Field label="Offer active" subtitle="Show an offer badge on the modal.">
                 <Toggle value={cfg.proOfferActive} onChange={(v) => setCfg('proOfferActive', v)} />
               </Field>
@@ -309,7 +309,7 @@ function MonetizationInner() {
               </Field>
             </SectionCard>
 
-            <SectionCard title="Free Trial" subtitle="Message a free-trial offer (e.g. 1 month). The trial is granted by Google Play / App Store on the subscription product — this only controls the in-app messaging.">
+            <SectionCard title="Free Trial" info="Message a free-trial offer (e.g. 1 month). The trial is granted by Google Play / App Store on the subscription product — this only controls the in-app messaging.">
               <Field label="Trial enabled" subtitle="Show the trial message on the subscribe CTA.">
                 <Toggle value={cfg.proTrialEnabled} onChange={(v) => setCfg('proTrialEnabled', v)} />
               </Field>
@@ -349,14 +349,17 @@ function MonetizationInner() {
               </Field>
             </SectionCard>
 
-            <SectionCard title="Subscriptions" subtitle="Subscription plans overview">
+            <SectionCard
+              title="Subscriptions"
+              subtitle="Subscription plans overview"
+              info="Monthly subscribers have unlimited prediction access regardless of credits."
+            >
               <div className="flex items-center gap-3 py-3">
                 <span className="text-sm text-text-primary font-sans flex-1">Monthly Pro</span>
                 <span className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-primary/15 text-primary font-sans">
                   <Infinity size={14} /> Unlimited
                 </span>
               </div>
-              <p className="text-xs text-text-muted/50 font-sans">Monthly subscribers have unlimited prediction access regardless of credits.</p>
             </SectionCard>
           </>
         )}

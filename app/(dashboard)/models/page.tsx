@@ -212,7 +212,7 @@ export default function ModelsPage() {
     <div>
       <PageHeader
         title="Models"
-        description="LLM A/B winrate for predictions and combinadas. Switch the active model in Config and revisit weekly."
+        description="LLM A/B winrate for predictions and combinadas." info="Switch the active model in Config and revisit weekly."
         action={
           <Tabs
             value={windowDays}

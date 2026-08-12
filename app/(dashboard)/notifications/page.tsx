@@ -253,8 +253,8 @@ export default function NotificationsPage() {
           <p className="text-text-muted text-sm font-sans py-3">Loading…</p>
         ) : (
           <>
-            <SectionCard title="Push Notifications" subtitle="Master kill-switch for the whole push system (automated triggers + manual sends). Off by default — turn it on ONLY after validating the device-token round-trip and a real test send end-to-end. Per-type opt-in is governed by each user's own notification settings.">
-              <Field label="Notifications enabled" subtitle="When off, no push of any kind is delivered, even if users are opted in.">
+            <SectionCard title="Push Notifications" subtitle="Off by default" info="Master kill-switch for the whole push system: automated triggers and manual sends. Turn it on ONLY after validating the device-token round-trip and a real test send end-to-end. Per-type opt-in is governed by each user's own notification settings.">
+              <Field label="Notifications enabled" info="When off, no push of any kind is delivered, even if users are opted in.">
                 <Toggle value={cfg.notificationsEnabled} onChange={(v) => setCfgForm({ ...cfg, notificationsEnabled: v })} />
               </Field>
               {cfg.notificationsEnabled ? (
@@ -264,26 +264,26 @@ export default function NotificationsPage() {
               )}
             </SectionCard>
 
-            <SectionCard title="Weekly Quiniela Promo" subtitle="Once a week, on Monday at the configured UTC hour, broadcasts a 'new matches for your weekly reta' push when there are eligible weekly matches. Off by default. Honors each user's weeklyQuinielaPromo opt-in.">
+            <SectionCard title="Weekly Quiniela Promo" subtitle="Lunes · off by default" info="Once a week, on Monday at the configured UTC hour, broadcasts a 'new matches for your weekly reta' push when there are eligible weekly matches. Honors each user's weeklyQuinielaPromo opt-in.">
               <Field label="Promo enabled" subtitle="Master switch for the Monday weekly-reta promo broadcast.">
                 <Toggle value={cfg.weeklyQuinielaPromoEnabled} onChange={(v) => setCfgForm({ ...cfg, weeklyQuinielaPromoEnabled: v })} />
               </Field>
-              <Field label="Send hour (UTC)" subtitle="UTC hour (0–23) the Monday broadcast fires. Caracas is UTC−4, so 13 ≈ 9:00 AM Caracas.">
+              <Field label="Send hour (UTC)" subtitle="UTC 0–23" info="Hour the Monday broadcast fires. Caracas is UTC−4, so 13 ≈ 9:00 AM Caracas.">
                 <NumInput value={cfg.weeklyQuinielaPromoHourUtc} onChange={(v) => setCfgForm({ ...cfg, weeklyQuinielaPromoHourUtc: v })} min={0} max={23} />
               </Field>
             </SectionCard>
 
-            <SectionCard title="Acierto del día (te lo perdiste)" subtitle="Once a day, picks the day's prediction with the highest hit rate and notifies users who did NOT open it (non-buyers), so they see the hit they missed. Tapping opens the post-match analysis. Off by default. Honors each user's topPredictionMissed opt-in.">
-              <Field label="Enabled" subtitle="Master switch for the daily 'best hit of the day' engagement push.">
+            <SectionCard title="Acierto del día (te lo perdiste)" subtitle="Off by default" info="Once a day, picks the day's prediction with the highest hit rate and notifies the users who did NOT open it, so they see the hit they missed. Tapping opens the post-match analysis. Honors each user's topPredictionMissed opt-in.">
+              <Field label="Enabled" info="Master switch for the daily 'best hit of the day' engagement push.">
                 <Toggle value={cfg.topPredictionMissedEnabled} onChange={(v) => setCfgForm({ ...cfg, topPredictionMissedEnabled: v })} />
               </Field>
-              <Field label="Min hit rate (%)" subtitle="Only matches whose prediction hit at least this percentage of markets qualify (e.g. 80).">
+              <Field label="Min hit rate (%)" subtitle="p. ej. 80" info="Only matches whose prediction hit at least this percentage of markets qualify.">
                 <NumInput value={cfg.topPredictionMissedMinHitRate} onChange={(v) => setCfgForm({ ...cfg, topPredictionMissedMinHitRate: v })} min={1} max={100} />
               </Field>
-              <Field label="Min settled markets" subtitle="Requires at least this many settled markets, so a trivial 1/1 = 100% never wins (e.g. 6).">
+              <Field label="Min settled markets" subtitle="p. ej. 6" info="Requires at least this many settled markets, so a trivial 1/1 = 100% never wins.">
                 <NumInput value={cfg.topPredictionMissedMinMarkets} onChange={(v) => setCfgForm({ ...cfg, topPredictionMissedMinMarkets: v })} min={1} max={20} />
               </Field>
-              <Field label="Send hour (UTC)" subtitle="UTC hour (0–23) the daily push fires. Caracas is UTC−4, so 2 ≈ 10:00 PM Caracas.">
+              <Field label="Send hour (UTC)" subtitle="UTC 0–23" info="Hour the daily push fires. Caracas is UTC−4, so 2 ≈ 10:00 PM Caracas.">
                 <NumInput value={cfg.topPredictionMissedSendHourUtc} onChange={(v) => setCfgForm({ ...cfg, topPredictionMissedSendHourUtc: v })} min={0} max={23} />
               </Field>
             </SectionCard>
@@ -314,7 +314,7 @@ export default function NotificationsPage() {
               className="w-full px-3 py-2 rounded-xl text-sm bg-surface-2 border border-border text-text-primary font-sans resize-none"
             />
           </Field>
-          <Field label="Image URL" subtitle="Optional. Shown as a big-picture image (must be a public https URL).">
+          <Field label="Image URL" subtitle="Opcional · https" info="Shown as a big-picture image. It must be a public https URL.">
             <input
               type="url"
               value={f.imageUrl}
@@ -325,8 +325,8 @@ export default function NotificationsPage() {
           </Field>
         </SectionCard>
 
-        <SectionCard title="Audience" subtitle="Who receives it. Delivery still respects each user's opt-in for the channel below.">
-          <Field label="Send to" subtitle="“All” broadcasts to every opted-in user; “Users” targets a specific list.">
+        <SectionCard title="Audience" info="Who receives it. Delivery still respects each user's opt-in for the channel below.">
+          <Field label="Send to" info="“All” broadcasts to every opted-in user; “Users” targets a specific list.">
             <Pills options={AUDIENCES} value={f.audience} onChange={(v) => set('audience', (v || 'all') as Audience)} />
           </Field>
           {f.audience === 'users' && (
@@ -345,8 +345,8 @@ export default function NotificationsPage() {
           </Field>
         </SectionCard>
 
-        <SectionCard title="Deep link" subtitle="Where the notification lands when tapped. Optional — defaults to the inbox.">
-          <Field label="Category" subtitle="Destination screen the app maps the tap to. Leave empty for a plain news item.">
+        <SectionCard title="Deep link" subtitle="Opcional" info="Where the notification lands when tapped. It defaults to the inbox.">
+          <Field label="Category" subtitle="Vacío = solo noticia" info="Destination screen the app maps the tap to.">
             <Pills options={CATEGORIES} value={f.category} onChange={(v) => set('category', v as Category | '')} allowClear />
           </Field>
           <Field label="Route override" subtitle='Optional explicit path (e.g. "/store"). Takes precedence over category on the client.'>

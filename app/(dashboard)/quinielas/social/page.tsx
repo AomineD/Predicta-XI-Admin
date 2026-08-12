@@ -6,6 +6,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
+import { InfoPopover } from '@/components/ui/InfoPopover';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Tabs } from '@/components/ui/Tabs';
 import { SectionCard, Field, Toggle, NumInput } from '@/components/ui/form-controls';
@@ -362,7 +363,7 @@ function SocialQuinielaInner() {
     <div className="p-8 max-w-3xl">
       <PageHeader
         title="Social Quiniela"
-        description="Friends quiniela (groups). Enable the feature, tune costs and prizes, and moderate groups."
+        description="Friends quiniela (groups)." info="Enable the feature, tune costs and prizes, and moderate groups."
         action={
           configQ.data ? (
             <span
@@ -435,29 +436,29 @@ function ConfigTab() {
 
       <SectionCard
         title="Master feature"
-        subtitle="Enables or disables the social quiniela across the app. When off, the app hides the entry points (button in Predicta) via /app-config."
+        info="Enables or disables the social quiniela across the app. When off, the app hides the entry points (button in Predicta) via /app-config."
       >
-        <Field label="Social quiniela enabled" subtitle="Master flag (groupsEnabled)">
+        <Field label="Social quiniela enabled" subtitle="groupsEnabled">
           <Toggle value={f.enabled} onChange={(v) => set('enabled', v)} />
         </Field>
-        <Field label="Join interstitial" subtitle="Show an interstitial ad when a guest joins a group">
+        <Field label="Join interstitial" info="Show an interstitial ad when a guest joins a group.">
           <Toggle value={f.joinInterstitialEnabled} onChange={(v) => set('joinInterstitialEnabled', v)} />
         </Field>
       </SectionCard>
 
-      <SectionCard title="Creation costs" subtitle="Credits the owner pays to create a group (free for premium+ per entitlement logic — except knockout, which always charges)">
+      <SectionCard title="Creation costs" info="Credits the owner pays to create a group (free for premium+ per entitlement logic — except knockout, which always charges).">
         <Field label="Weekly group" subtitle="weekly mode">
           <NumInput value={f.createCostWeekly} onChange={(v) => set('createCostWeekly', v)} max={MAX_CREATE_COST} />
         </Field>
         <Field label="Competition group" subtitle="competition mode">
           <NumInput value={f.createCostCompetition} onChange={(v) => set('createCostCompetition', v)} max={MAX_CREATE_COST} />
         </Field>
-        <Field label="Knockout group" subtitle="knockout mode — base cost (premium+ exempt, so PRO/CLUB create free, like the other types)">
+        <Field label="Knockout group" subtitle="knockout mode" info="Base cost. Premium+ exempt, so PRO/CLUB create free, like the other types.">
           <NumInput value={f.createCostKnockout} onChange={(v) => set('createCostKnockout', v)} max={MAX_CREATE_COST} />
         </Field>
       </SectionCard>
 
-      <SectionCard title="Competition prizes (house-funded)" subtitle="Awarded when a competition group settles — full podium. Per-prize cap: 500.">
+      <SectionCard title="Competition prizes (house-funded)" subtitle="Per-prize cap: 500" info="Awarded when a competition group settles — full podium.">
         <Field label="Winner (1st place)">
           <NumInput value={f.prizeWinnerCredits} onChange={(v) => set('prizeWinnerCredits', v)} max={MAX_PRIZE} />
         </Field>
@@ -469,37 +470,37 @@ function ConfigTab() {
         </Field>
       </SectionCard>
 
-      <SectionCard title="Weekly prize (house-funded)" subtitle="Awarded when a weekly group settles. Weekly pays the winner only — usually less than a competition run. Per-prize cap: 500.">
+      <SectionCard title="Weekly prize (house-funded)" subtitle="Per-prize cap: 500" info="Awarded when a weekly group settles. Weekly pays the winner only — usually less than a competition run.">
         <Field label="Winner (1st place)">
           <NumInput value={f.prizeWeeklyWinnerCredits} onChange={(v) => set('prizeWeeklyWinnerCredits', v)} max={MAX_PRIZE} />
         </Field>
       </SectionCard>
 
       <SectionCard title="Anti-abuse" subtitle="Defense against prize farming">
-        <Field label="Minimum real members" subtitle="Real members required for a group to pay a prize (1–1000)">
+        <Field label="Minimum real members" subtitle="1–1000" info="Real members required for a group to pay a prize.">
           <NumInput value={f.minRealMembersForPrize} onChange={(v) => set('minRealMembersForPrize', v)} min={1} max={MAX_GROUP_SIZE} />
         </Field>
         <Field
           label="Minimum participation %"
-          subtitle="Share of the group that must actually play to count toward the prize gate. 0–100; 0 disables. Default 60."
+          subtitle="0–100 · def. 60" info="Share of the group that must actually play to count toward the prize gate. 0 disables the gate."
         >
           <NumInput value={f.minParticipationPctForPrize} onChange={(v) => set('minParticipationPctForPrize', v)} min={0} max={100} />
         </Field>
         <Field
           label="Weekly: picks % to count as played"
-          subtitle="Weekly groups close one day at a time, so a member counts as having played once they predict this share of the week's matches (“the majority”), not all of them — otherwise missing one day makes the gate unreachable. Floor of 1 pick. Competition still needs every category. 0–100; default 50."
+          subtitle="0–100 · def. 50" info="Weekly groups close one day at a time, so a member counts as having played once they predict this share of the week's matches (“the majority”), not all of them — otherwise missing one day makes the gate unreachable. Floor of 1 pick. Competition still needs every category."
         >
           <NumInput value={f.minWeeklyPicksPctForParticipation} onChange={(v) => set('minWeeklyPicksPctForParticipation', v)} min={0} max={100} />
         </Field>
-        <Field label="Daily prize cap per user" subtitle="Max prize credits a user can earn per day (cap: 2000)">
+        <Field label="Daily prize cap per user" subtitle="cap: 2000" info="Max prize credits a user can earn per day.">
           <NumInput value={f.dailyPrizeCapPerUser} onChange={(v) => set('dailyPrizeCapPerUser', v)} max={MAX_DAILY_CAP} />
         </Field>
-        <Field label="Max groups per competition" subtitle="Max competition groups a user can join per tournament. -1 = unlimited">
+        <Field label="Max groups per competition" subtitle="-1 = unlimited" info="Max competition groups a user can join per tournament.">
           <NumInput value={f.maxGroupsPerCompetition} onChange={(v) => set('maxGroupsPerCompetition', v)} min={-1} max={50} />
         </Field>
         <Field
           label="App Check enforcement"
-          subtitle="Anti-spoofing for the prize gate. disabled = ignore App Check; monitor = verify & record adoption, gate counts all; enforce = prize gate counts only members who joined from a genuine app (Play Integrity / App Attest). Roll out: release the app → monitor → enforce."
+          info="Anti-spoofing for the prize gate. disabled = ignore App Check; monitor = verify & record adoption, gate counts all; enforce = prize gate counts only members who joined from a genuine app (Play Integrity / App Attest). Roll out: release the app → monitor → enforce."
         >
           <select
             value={f.appCheckEnforcementMode}
@@ -513,7 +514,7 @@ function ConfigTab() {
         </Field>
       </SectionCard>
 
-      <SectionCard title="Limits by tier" subtitle="Group size and active-group count by the owner's tier. -1 = unlimited.">
+      <SectionCard title="Limits by tier" subtitle="-1 = unlimited" info="Group size and active-group count by the owner's tier.">
         <Field label="Max group size">
           <TierMap value={f.maxGroupSizeByTier} onChange={(v) => set('maxGroupSizeByTier', v)} min={1} max={MAX_GROUP_SIZE} allowUnlimited />
         </Field>
@@ -522,19 +523,19 @@ function ConfigTab() {
         </Field>
       </SectionCard>
 
-      <SectionCard title="Weekly quiniela" subtitle="Range of matches the owner can pick when building a weekly group (1–50)">
+      <SectionCard title="Weekly quiniela" subtitle="1–50" info="Range of matches the owner can pick when building a weekly group.">
         <Field label="Minimum matches">
           <NumInput value={f.weeklyMinMatches} onChange={(v) => set('weeklyMinMatches', v)} min={1} max={50} />
         </Field>
         <Field
           label="Maximum matches by tier"
-          subtitle="Cap per owner tier (free / PRO / Club). -1 = unlimited (the only ceiling is how many eligible matches the week has). A finite cap must not be below the minimum above."
+          subtitle="-1 = unlimited" info="Cap per owner tier (free / PRO / Club). Unlimited means the only ceiling is how many eligible matches the week has. A finite cap must not be below the minimum above."
         >
           <TierMap value={f.weeklyMaxMatchesByTier} onChange={(v) => set('weeklyMaxMatchesByTier', v)} max={50} allowUnlimited />
         </Field>
         <Field
           label="Maximum matches (legacy fallback)"
-          subtitle="Used only when a tier is missing from the per-tier map above. New apps read the per-tier map; this stays as a safety net."
+          info="Used only when a tier is missing from the per-tier map above. New apps read the per-tier map; this stays as a safety net."
         >
           <NumInput value={f.weeklyMaxMatches} onChange={(v) => set('weeklyMaxMatches', v)} min={1} max={50} />
         </Field>
@@ -542,89 +543,89 @@ function ConfigTab() {
 
       <SectionCard
         title="Weekly scoring (points)"
-        subtitle="Layered “marcador por capas” points for weekly groups. A wrong 1X2 is always 0 (not configurable). The app shows these in its “Cómo se puntúa” legend (read from /app-config). Range 0–100."
+        subtitle="0–100" info="Layered “marcador por capas” points for weekly groups. A wrong 1X2 is always 0 (not configurable). The app shows these in its “Cómo se puntúa” legend, read from /app-config."
       >
         <Field label="Exact scoreline (winner)" subtitle="Exact result with a winner, e.g. 2-1">
           <NumInput value={f.weeklyExactScorePoints} onChange={(v) => set('weeklyExactScorePoints', v)} min={0} max={100} />
         </Field>
-        <Field label="Exact draw" subtitle="Exact tied scoreline, e.g. 1-1 or 0-0. Set higher than the exact win to reward it as a draw bonus.">
+        <Field label="Exact draw" subtitle="e.g. 1-1 o 0-0" info="Exact tied scoreline. Set it higher than the exact win to reward it as a draw bonus.">
           <NumInput value={f.weeklyExactDrawPoints} onChange={(v) => set('weeklyExactDrawPoints', v)} min={0} max={100} />
         </Field>
         <Field label="Correct outcome (1X2 only)" subtitle="Right 1X2 but wrong scoreline">
           <NumInput value={f.weeklyCorrectOutcomePoints} onChange={(v) => set('weeklyCorrectOutcomePoints', v)} min={0} max={100} />
         </Field>
-        <Field label="Proximity bonus (points)" subtitle="Extra points when the 1X2 is right but the scoreline is off by at most the goal-error below. 0 disables the bonus. The app shows a “Cerca +N” chip.">
+        <Field label="Proximity bonus (points)" subtitle="0 = off" info="Extra points when the 1X2 is right but the scoreline is off by at most the goal-error below. The app shows a “Cerca +N” chip.">
           <NumInput value={f.weeklyProximityPoints} onChange={(v) => set('weeklyProximityPoints', v)} min={0} max={100} />
         </Field>
-        <Field label="Proximity max goal error" subtitle="Max total goal error (|Δhome| + |Δaway|) that still earns the bonus. 1 = off by exactly one goal (real 4-1: both 3-1 and 5-1 qualify; 2-1 does not).">
+        <Field label="Proximity max goal error" subtitle="|Δlocal| + |Δvisitante|" info="Max total goal error that still earns the bonus. 1 = off by exactly one goal (real 4-1: both 3-1 and 5-1 qualify; 2-1 does not).">
           <NumInput value={f.weeklyProximityMaxGoalError} onChange={(v) => set('weeklyProximityMaxGoalError', v)} min={0} max={20} />
         </Field>
       </SectionCard>
 
       <SectionCard
         title="Tipos habilitados (idea #21 Fase 3)"
-        subtitle="Interruptores por tipo de quiniela social. Apágalos para desactivar remotamente un tipo: la app oculta la opción de crearlo y el backend rechaza la creación. Default ON (comportamiento previo). Team y running tienen su propio flag en sus cards."
+        subtitle="Default ON" info="Interruptores por tipo de quiniela social. Apágalos para desactivar remotamente un tipo: la app oculta la opción de crearlo y el backend rechaza la creación. Team y running tienen su propio flag en sus cards."
       >
-        <Field label="Weekly quinielas enabled" subtitle="Master flag por tipo (weeklyQuinielasEnabled).">
+        <Field label="Weekly quinielas enabled" subtitle="weeklyQuinielasEnabled">
           <Toggle value={f.weeklyQuinielasEnabled} onChange={(v) => set('weeklyQuinielasEnabled', v)} />
         </Field>
-        <Field label="Competition quinielas enabled" subtitle="DEPRECADO — lo reemplaza la quiniela de campeonato (idea #29). Se apagó en la migración 0150; los grupos ya creados siguen liquidando con normalidad. Encenderlo vuelve a ofrecer el tipo viejo.">
+        <Field label="Competition quinielas enabled" subtitle="DEPRECADO" info="Lo reemplaza la quiniela de campeonato (idea #29). Se apagó en la migración 0150; los grupos ya creados siguen liquidando con normalidad. Encenderlo vuelve a ofrecer el tipo viejo.">
           <Toggle value={f.competitionQuinielasEnabled} onChange={(v) => set('competitionQuinielasEnabled', v)} />
         </Field>
-        <Field label="Knockout quinielas enabled" subtitle="DEPRECADO — lo reemplaza la quiniela de campeonato (idea #29), cuya fase de llaves es idéntica. Se apagó en la migración 0150; los grupos ya creados siguen liquidando.">
+        <Field label="Knockout quinielas enabled" subtitle="DEPRECADO" info="Lo reemplaza la quiniela de campeonato (idea #29), cuya fase de llaves es idéntica. Se apagó en la migración 0150; los grupos ya creados siguen liquidando.">
           <Toggle value={f.knockoutQuinielasEnabled} onChange={(v) => set('knockoutQuinielasEnabled', v)} />
         </Field>
       </SectionCard>
 
       <SectionCard
         title="Team quinielas (idea #9)"
-        subtitle="Club-only group type: members predict scorelines and the score is aggregated per team, with phase-by-phase elimination until a champion. Off by default (inert until enabled). The app gates the “create teams quiniela” option on this flag + Club tier."
+        subtitle="Off by default" info="Club-only group type: members predict scorelines and the score is aggregated per team, with phase-by-phase elimination until a champion. Inert until enabled. The app gates the “create teams quiniela” option on this flag + Club tier."
       >
-        <Field label="Team quinielas enabled" subtitle="Master flag (teamQuinielasEnabled). Only Club owners can create.">
+        <Field label="Team quinielas enabled" subtitle="teamQuinielasEnabled" info="Only Club owners can create.">
           <Toggle value={f.teamQuinielasEnabled} onChange={(v) => set('teamQuinielasEnabled', v)} />
         </Field>
-        <Field label="Max teams" subtitle="Upper bound on teams per quiniela (2–8).">
+        <Field label="Max teams" subtitle="2–8" info="Upper bound on teams per quiniela.">
           <NumInput value={f.teamMaxTeams} onChange={(v) => set('teamMaxTeams', v)} min={2} max={8} />
         </Field>
-        <Field label="Max members per team" subtitle="Upper bound on the per-team size the creator can choose (1–100).">
+        <Field label="Max members per team" subtitle="1–100" info="Upper bound on the per-team size the creator can choose.">
           <NumInput value={f.teamMaxMembersPerTeam} onChange={(v) => set('teamMaxMembersPerTeam', v)} min={1} max={100} />
         </Field>
-        <Field label="Creation cost (credits)" subtitle="Charged to create one (premium+ exempt, so Club creates free). 0 = free.">
+        <Field label="Creation cost (credits)" subtitle="0 = free" info="Charged to create one. Premium+ exempt, so Club creates free.">
           <NumInput value={f.teamCreateCost} onChange={(v) => set('teamCreateCost', v)} min={0} max={MAX_CREATE_COST} />
         </Field>
-        <Field label="Champion prize (credits)" subtitle="House-funded credits paid to each member of the winning team. Per-prize cap: 500.">
+        <Field label="Champion prize (credits)" subtitle="Per-prize cap: 500" info="House-funded credits paid to each member of the winning team.">
           <NumInput value={f.teamPrizeWinnerCredits} onChange={(v) => set('teamPrizeWinnerCredits', v)} min={0} max={MAX_PRIZE} />
         </Field>
       </SectionCard>
 
       <SectionCard
         title="Running pools (idea #10)"
-        subtitle="Continuous multi-week pool: the creator (PRO/Club) picks competitions and each week their matches auto-enter as a new week of the same group. Two tables (weekly + accumulated overall); the weekly podium adds bonus points to the overall. One scaled final prize goes to the overall champion when the run ends. Off by default (inert until enabled). The app gates the “create running pool” option on this flag + PRO/Club tier."
+        subtitle="Off by default" info="Continuous multi-week pool: the creator (PRO/Club) picks competitions and each week their matches auto-enter as a new week of the same group. Two tables (weekly + accumulated overall); the weekly podium adds bonus points to the overall. One scaled final prize goes to the overall champion when the run ends. Inert until enabled. The app gates the “create running pool” option on this flag + PRO/Club tier."
       >
-        <Field label="Running pools enabled" subtitle="Master flag (runningQuinielasEnabled). PRO and Club can create; Free can only join.">
+        <Field label="Running pools enabled" subtitle="runningQuinielasEnabled" info="PRO and Club can create; Free can only join.">
           <Toggle value={f.runningQuinielasEnabled} onChange={(v) => set('runningQuinielasEnabled', v)} />
         </Field>
-        <Field label="Creation cost (credits)" subtitle="Charged to create one (premium+ exempt, so PRO/Club create free). 0 = free.">
+        <Field label="Creation cost (credits)" subtitle="0 = free" info="Charged to create one. Premium+ exempt, so PRO/Club create free.">
           <NumInput value={f.createCostRunning} onChange={(v) => set('createCostRunning', v)} min={0} max={MAX_CREATE_COST} />
         </Field>
-        <Field label="Max weeks" subtitle="Upper bound on how long a run can last (the end date can't exceed this from now). 1–52.">
+        <Field label="Max weeks" subtitle="1–52" info="Upper bound on how long a run can last: the end date can't exceed this from now.">
           <NumInput value={f.runningMaxWeeks} onChange={(v) => set('runningMaxWeeks', v)} min={1} max={52} />
         </Field>
         <Field
           label="Final prize: base (credits)"
-          subtitle="Scaled final prize to the overall champion = min(max, base + perWeek × weeks lived). Per-prize cap: 500."
+          subtitle="Per-prize cap: 500" info="Scaled final prize to the overall champion = min(max, base + perWeek × weeks lived)."
         >
           <NumInput value={f.runningBasePrizeCredits} onChange={(v) => set('runningBasePrizeCredits', v)} min={0} max={MAX_PRIZE} />
         </Field>
-        <Field label="Final prize: per week (credits)" subtitle="Added per settled week to the base, before the max cap.">
+        <Field label="Final prize: per week (credits)" info="Added per settled week to the base, before the max cap.">
           <NumInput value={f.runningPerWeekPrizeCredits} onChange={(v) => set('runningPerWeekPrizeCredits', v)} min={0} max={MAX_PRIZE} />
         </Field>
-        <Field label="Final prize: max (credits)" subtitle="Ceiling on the scaled final prize. Per-prize cap: 500.">
+        <Field label="Final prize: max (credits)" subtitle="Per-prize cap: 500" info="Ceiling on the scaled final prize.">
           <NumInput value={f.runningMaxPrizeCredits} onChange={(v) => set('runningMaxPrizeCredits', v)} min={0} max={MAX_PRIZE} />
         </Field>
         <Field
           label="Default weekly podium bonus"
-          subtitle="Bonus points the weekly podium adds to the overall table, for PRO-created runs (Club creators set their own per pool). Points, not credits."
+          subtitle="Puntos, no créditos" info="Bonus points the weekly podium adds to the overall table, for PRO-created runs. Club creators set their own per pool."
         >
           <div className="flex gap-2">
             <NumInput value={f.runningDefaultPodiumBonus['1'] ?? 0} onChange={(v) => set('runningDefaultPodiumBonus', { ...f.runningDefaultPodiumBonus, '1': v })} min={0} max={MAX_PRIZE} />
@@ -636,7 +637,7 @@ function ConfigTab() {
 
       <SectionCard
         title="Knockout scoring (idea #21)"
-        subtitle="Puntos por cruce de la quiniela de eliminatorias. Ejes ADITIVOS: quién avanza + marcador 90' + riesgos (prórroga/penales). Cambiarlos recalcula las quinielas EN curso; las ya terminadas quedan congeladas. Rango 0–100 (la penalización de riesgo es negativa)."
+        subtitle="0–100 · recalcula las quinielas EN curso" info="Puntos por cruce de la quiniela de eliminatorias. Ejes ADITIVOS: quién avanza + marcador 90' + riesgos (prórroga/penales). Las quinielas ya terminadas quedan congeladas. La penalización de riesgo es negativa."
       >
         <Field label="Quién avanza" subtitle="Eje principal, aditivo: acertar el clasificado del cruce">
           <NumInput value={f.knockoutAdvancerPoints} onChange={(v) => set('knockoutAdvancerPoints', v)} min={0} max={100} />
@@ -647,7 +648,7 @@ function ConfigTab() {
         <Field label="Tendencia (1X2 del 90')" subtitle="Acertar el resultado del 90' sin el marcador exacto">
           <NumInput value={f.knockoutCorrectOutcomePoints} onChange={(v) => set('knockoutCorrectOutcomePoints', v)} min={0} max={100} />
         </Field>
-        <Field label="Bonus de cercanía" subtitle="Extra cuando la tendencia acierta y el marcador queda a ≤ el error de goles de abajo. 0 = off.">
+        <Field label="Bonus de cercanía" subtitle="0 = off" info="Extra cuando la tendencia acierta y el marcador queda a ≤ el error de goles de abajo.">
           <NumInput value={f.knockoutProximityPoints} onChange={(v) => set('knockoutProximityPoints', v)} min={0} max={100} />
         </Field>
         <Field label="Cercanía: error máx de goles" subtitle="|Δlocal|+|Δvisitante| que aún gana el bonus">
@@ -665,14 +666,14 @@ function ConfigTab() {
         <Field label="Penales (reducido)" subtitle="Riesgo penales acertado pero fallando el clasificado">
           <NumInput value={f.knockoutPenaltiesReducedPoints} onChange={(v) => set('knockoutPenaltiesReducedPoints', v)} min={0} max={100} />
         </Field>
-        <Field label="Penalización de riesgo fallido" subtitle="Resta al marcar un riesgo (prórroga/penales) que no ocurrió. Valor negativo (−100 a 0).">
+        <Field label="Penalización de riesgo fallido" subtitle="−100 a 0" info="Resta al marcar un riesgo (prórroga/penales) que no ocurrió. El valor es negativo.">
           <NumInput value={f.knockoutRiskMissPenalty} onChange={(v) => set('knockoutRiskMissPenalty', v)} min={-100} max={0} />
         </Field>
       </SectionCard>
 
       <SectionCard
         title="Competition category weights (idea #21)"
-        subtitle="Peso de cada categoría de la quiniela de competición. Un veredicto 'parcial' (solo el marcador final) paga la mitad, redondeado hacia abajo, mínimo 1. Rango 0–100."
+        subtitle="0–100" info="Peso de cada categoría de la quiniela de competición. Un veredicto 'parcial' (solo el marcador final) paga la mitad, redondeado hacia abajo, mínimo 1."
       >
         {WEIGHTED_CATEGORIES.map((c) => (
           <Field key={c.key} label={c.label} subtitle={c.key}>
@@ -691,9 +692,9 @@ function ConfigTab() {
 
       <SectionCard
         title="All-time ranking points (idea #21)"
-        subtitle="Curva de puntos del leaderboard de por vida por posición final del grupo, escalada por participación real (sqrt, acotada). Los grupos con menos participantes que el mínimo dan 0 (anti-farming)."
+        info="Curva de puntos del leaderboard de por vida por posición final del grupo, escalada por participación real (sqrt, acotada). Los grupos con menos participantes que el mínimo dan 0 (anti-farming)."
       >
-        <Field label="Puntos base por posición" subtitle="Lista separada por comas (posición 1, 2, 3…); más allá de la lista se usa el último valor.">
+        <Field label="Puntos base por posición" subtitle="1, 2, 3…" info="Lista separada por comas. Más allá de la lista se usa el último valor.">
           <input
             value={f.rankingParams.basePoints.join(', ')}
             onChange={(e) => {
@@ -737,9 +738,9 @@ function ConfigTab() {
 
       <SectionCard
         title="Risk picks (idea #21)"
-        subtitle="Switches opcionales en el modal de predicción de cada partido (¿habrá penal? / ¿habrá roja? / gol de un jugador) que suman/restan puntos INDEPENDIENTES del resultado, en cualquier quiniela. Master flag OFF = la app no muestra los switches. Cada 'acierto' suma; cada 'fallo' resta (valor negativo). Se anulan (0) si falta el dato del partido."
+        info="Switches opcionales en el modal de predicción de cada partido (¿habrá penal? / ¿habrá roja? / gol de un jugador) que suman o restan puntos INDEPENDIENTES del resultado, en cualquier quiniela. Con el master flag en OFF la app no muestra los switches. Cada 'acierto' suma; cada 'fallo' resta (valor negativo). Se anulan (0) si falta el dato del partido."
       >
-        <Field label="Risk picks enabled" subtitle="Master flag (riskPicksEnabled). Off = inerte (la app oculta los switches).">
+        <Field label="Risk picks enabled" subtitle="riskPicksEnabled" info="Off = inerte: la app oculta los switches.">
           <Toggle value={f.riskPicksEnabled} onChange={(v) => set('riskPicksEnabled', v)} />
         </Field>
         <Field label="¿Habrá penal? — acierto" subtitle="Puntos si el usuario lo activa y SÍ hubo penal">
@@ -764,15 +765,15 @@ function ConfigTab() {
 
       <SectionCard
         title="Championship quiniela (idea #29)"
-        subtitle="Reemplaza a las quinielas de torneo y de eliminatoria: un solo tipo con tres fases — las categorías del torneo, la tabla de la fase de liga y las llaves — solo para PRO/CLUB. Las dos primeras fases cierran juntas antes del primer partido; las llaves, cada una en su kickoff. Los cortes de rango de la tabla se definen POR COMPETICIÓN en su editor; sin ellos, la fase de tabla no se ofrece."
+        subtitle="Solo PRO/CLUB" info="Reemplaza a las quinielas de torneo y de eliminatoria: un solo tipo con tres fases — las categorías del torneo, la tabla de la fase de liga y las llaves. Las dos primeras fases cierran juntas antes del primer partido; las llaves, cada una en su kickoff. Los cortes de rango de la tabla se definen POR COMPETICIÓN en su editor; sin ellos, la fase de tabla no se ofrece."
       >
-        <Field label="Championship quinielas enabled" subtitle="Master flag. Off = la app no ofrece crear campeonatos (los ya creados siguen liquidando).">
+        <Field label="Championship quinielas enabled" info="Master flag. Off = la app no ofrece crear campeonatos; los ya creados siguen liquidando.">
           <Toggle
             value={f.championshipQuinielasEnabled}
             onChange={(v) => set('championshipQuinielasEnabled', v)}
           />
         </Field>
-        <Field label="Costo de creación" subtitle="Créditos. Los suscriptores (PRO/CLUB) están exentos — y son los únicos que pueden crearla.">
+        <Field label="Costo de creación" subtitle="Créditos" info="Los suscriptores (PRO/CLUB) están exentos — y son los únicos que pueden crearla.">
           <NumInput
             value={f.createCostChampionship}
             onChange={(v) => set('createCostChampionship', v)}
@@ -780,7 +781,7 @@ function ConfigTab() {
             max={MAX_CREATE_COST}
           />
         </Field>
-        <Field label="Premio al ganador" subtitle="Créditos para el 1.º (clave propia; no reusa la de las quinielas de equipo).">
+        <Field label="Premio al ganador" subtitle="Créditos para el 1.º" info="Clave propia; no reusa la de las quinielas de equipo.">
           <NumInput
             value={f.prizeChampionshipWinnerCredits}
             onChange={(v) => set('prizeChampionshipWinnerCredits', v)}
@@ -808,7 +809,7 @@ function ConfigTab() {
             max={MAX_PRIZE}
           />
         </Field>
-        <Field label="Cierre de la ventana inicial" subtitle="Minutos antes del PRIMER partido del torneo en que cierran las categorías y la tabla (default 60).">
+        <Field label="Cierre de la ventana inicial" subtitle="def. 60 min" info="Minutos antes del PRIMER partido del torneo en que cierran las categorías y la tabla.">
           <NumInput
             value={f.championshipInitialCloseLeadMinutes}
             onChange={(v) => set('championshipInitialCloseLeadMinutes', v)}
@@ -820,7 +821,7 @@ function ConfigTab() {
 
       <SectionCard
         title="Tabla de la fase de liga — puntos (idea #29)"
-        subtitle="Puntos por club al predecir la tabla completa. Por cada club se toma el MEJOR nivel alcanzado, no la suma. Deben ir de mayor a menor (exacta ≥ ±1 ≥ tramo estrecho ≥ tramo amplio): el server rechaza el guardado si no cuadran."
+        subtitle="De mayor a menor" info="Puntos por club al predecir la tabla completa. Por cada club se toma el MEJOR nivel alcanzado, no la suma. Deben ir de mayor a menor (exacta ≥ ±1 ≥ tramo estrecho ≥ tramo amplio): el server rechaza el guardado si no cuadran."
       >
         <Field label="Posición exacta" subtitle="El club terminó justo donde el usuario lo puso.">
           <NumInput value={f.standingsExactPoints} onChange={(v) => set('standingsExactPoints', v)} min={0} max={100} />
@@ -1341,10 +1342,10 @@ function AddMemberSection({
         <span className="text-xs font-semibold text-text-secondary uppercase tracking-wider font-sans">
           Añadir miembro
         </span>
+        <InfoPopover label="Cómo añadir un miembro">
+          Busca un usuario registrado y agrégalo al grupo sin invitación.
+        </InfoPopover>
       </div>
-      <p className="text-[11px] text-text-muted/60 font-sans mb-2">
-        Busca un usuario registrado y agrégalo al grupo sin invitación.
-      </p>
       <UserPicker selected={user} onSelect={setUser} />
       <div className="flex justify-end mt-2">
         <Button
@@ -1415,11 +1416,11 @@ function CreateKnockoutModal({ onClose }: { onClose: () => void }) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4">
-          <div>
+          <div className="flex items-center gap-2">
             <h3 className="text-lg font-bold text-text-primary font-sans">Crear quiniela eliminatorias</h3>
-            <p className="text-xs text-text-muted font-sans mt-1">
+            <InfoPopover label="Qué hace crear una quiniela de eliminatorias">
               Atribuida a un usuario. Siembra los cruces de la ronda elegida; los ya jugados se incluyen bloqueados.
-            </p>
+            </InfoPopover>
           </div>
           <button
             type="button"
@@ -1564,7 +1565,7 @@ function AntiAbuseTab() {
 
       <SectionCard
         title="Device collisions"
-        subtitle="Same device used by more than one distinct user: possible collusion / sockpuppets."
+        info="Same device used by more than one distinct user: possible collusion / sockpuppets."
       >
         {d.deviceCollisions.length === 0 ? (
           <p className="text-sm text-text-muted font-sans">No collisions detected.</p>
@@ -1584,7 +1585,7 @@ function AntiAbuseTab() {
 
       <SectionCard
         title="Top earners (7 days)"
-        subtitle="Users with the most prize credits earned in the last week: possible farmers."
+        info="Users with the most prize credits earned in the last week: possible farmers."
       >
         {d.topEarnersLast7d.length === 0 ? (
           <p className="text-sm text-text-muted font-sans">No prizes paid in the last 7 days.</p>

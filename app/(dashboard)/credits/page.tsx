@@ -432,8 +432,8 @@ function CreditsPageInner() {
       </SectionCard>
 
       {/* ── Section A2: Weekly Activity Bonus ── */}
-      <SectionCard title="Weekly Activity Bonus" subtitle="Auto-granted (no manual claim) when the user completes a consecutive-day streak, once every 7 days. Doubles to ×2 after a streak longer than 14 consecutive days — lost when the streak breaks. Set amount to 0 to disable.">
-        <Field label="Bonus credits" subtitle="Base credits per cycle. Loyal users (15+ day streak) earn ×2 this amount.">
+      <SectionCard title="Weekly Activity Bonus" subtitle="0 = apagado" info="Auto-granted (no manual claim) when the user completes a consecutive-day streak, once every 7 days. Doubles to ×2 after a streak longer than 14 consecutive days, and is lost when the streak breaks.">
+        <Field label="Bonus credits" info="Base credits per cycle. Loyal users (15+ day streak) earn ×2 this amount.">
           <NumInput value={f.weeklyActivityBonus} onChange={(v) => set('weeklyActivityBonus', v)} />
         </Field>
         <Field label="Minimum active days" subtitle="Consecutive days the user must open the app to qualify (1–7)">
@@ -445,8 +445,8 @@ function CreditsPageInner() {
       {/* REWARDS TAB */}
       <div hidden={tab !== 'rewards'} role="tabpanel" id="tabpanel-rewards" aria-labelledby="tab-rewards">
       {/* ── Daily login reward ── */}
-      <SectionCard title="Daily Login Reward" subtitle="A small credit once per UTC day just for opening the app — non-subscribers only (server-gated). SEPARATE from the weekly bonus; both coexist. The amount escalates with a daily streak: day d grants min(base + (d-1), max), resetting to day 1 after a missed day. Off by default.">
-        <Field label="Enabled" subtitle="Master switch. When off, no daily reward is granted and the welcome-back modal never shows.">
+      <SectionCard title="Daily Login Reward" subtitle="Solo no suscriptores" info="A small credit once per UTC day just for opening the app, server-gated to non-subscribers. SEPARATE from the weekly bonus; both coexist. The amount escalates with a daily streak: day d grants min(base + (d-1), max), resetting to day 1 after a missed day. Off by default.">
+        <Field label="Enabled" info="Master switch. When off, no daily reward is granted and the welcome-back modal never shows.">
           <Toggle value={f.dailyLoginRewardEnabled} onChange={(v) => set('dailyLoginRewardEnabled', v)} />
         </Field>
         <Field label="Base credits (day 1)" subtitle="Credits granted on the first day of a streak.">
@@ -455,7 +455,7 @@ function CreditsPageInner() {
         <Field label="Max credits (streak cap)" subtitle="Ceiling the escalating amount tops out at on long streaks.">
           <NumInput value={f.dailyLoginRewardMaxCredits} onChange={(v) => set('dailyLoginRewardMaxCredits', v)} min={0} max={50} />
         </Field>
-        <Field label="Streak length (days)" subtitle="How many days the streak counter climbs before holding at the cap.">
+        <Field label="Streak length (days)" info="How many days the streak counter climbs before holding at the cap.">
           <NumInput value={f.dailyLoginStreakDays} onChange={(v) => set('dailyLoginStreakDays', v)} min={1} max={60} />
         </Field>
       </SectionCard>
@@ -468,7 +468,7 @@ function CreditsPageInner() {
       </SectionCard>
 
       {/* ── One-time action rewards ── */}
-      <SectionCard title="Action Rewards (one-time)" subtitle="Credits granted ONCE per action (enforced server-side). Eligibility is verified on claim: notifications need a registered push token; profile needs at least one favourite team or league; share has no precondition. Each off by default.">
+      <SectionCard title="Action Rewards (one-time)" subtitle="Una sola vez por acción" info="Credits granted once per action, enforced server-side. Eligibility is verified on claim: notifications need a registered push token; profile needs at least one favourite team or league; share has no precondition. Each off by default.">
         <Field label="Enable notifications — enabled" subtitle="Reward for turning on push notifications.">
           <Toggle value={f.actionRewardNotificationsEnabled} onChange={(v) => set('actionRewardNotificationsEnabled', v)} />
         </Field>
@@ -497,14 +497,14 @@ function CreditsPageInner() {
         <Field label="Regular combinada cost" subtitle="Credits deducted for non-premium combinadas">
           <NumInput value={f.combinadaRegularCost} onChange={(v) => set('combinadaRegularCost', v)} />
         </Field>
-        <Field label="Premium combinada cost" subtitle="Credits deducted for premium combinadas (0 = free for subscribers)">
+        <Field label="Premium combinada cost" subtitle="0 = gratis" info="Credits deducted for premium combinadas.">
           <NumInput value={f.combinadaPremiumCost} onChange={(v) => set('combinadaPremiumCost', v)} />
         </Field>
       </SectionCard>
 
       {/* ── User-built combinadas (open model) ── */}
-      <SectionCard title="User Combinadas" subtitle="Parlays the user builds themselves from any week match + their own picks.">
-        <Field label="Create cost (free users)" subtitle="Credits to save a combinada. Subscribers (any tier) create free + unlimited.">
+      <SectionCard title="User Combinadas" info="Parlays the user builds themselves from any week match, with their own picks.">
+        <Field label="Create cost (free users)" info="Credits to save a combinada. Subscribers (any tier) create free and unlimited.">
           <NumInput value={f.userCombinadaCreationCost} onChange={(v) => set('userCombinadaCreationCost', v)} min={0} />
         </Field>
       </SectionCard>
@@ -512,7 +512,7 @@ function CreditsPageInner() {
       {/* ── Predicta opinion — flexible, always charged (even subscribers) ── */}
       <SectionCard
         title="Predicta opinion cost"
-        subtitle="Each opinion is a real LLM call, so it's ALWAYS charged (even PRO/Club). Cost = min(max, base + perLeg×matches + perExtraMarket×extra markets)."
+        subtitle="Siempre se cobra" info="Each opinion is a real LLM call, so it is always charged, even to PRO/Club. Cost = min(max, base + perLeg×matches + perExtraMarket×extra markets)."
       >
         <Field label="Base cost" subtitle="Flat credits added to every opinion">
           <NumInput value={f.combinadaOpinionBaseCost} onChange={(v) => set('combinadaOpinionBaseCost', v)} min={0} />
@@ -531,11 +531,11 @@ function CreditsPageInner() {
 
       {/* QUINIELA TAB */}
       <div hidden={tab !== 'quiniela'} role="tabpanel" id="tabpanel-quiniela" aria-labelledby="tab-quiniela">
-      <SectionCard title="Tournament Quiniela" subtitle="Credit cost to unlock the AI-generated tournament quiniela. Premium / unlimited subscribers always access it for free.">
-        <Field label="Quiniela access cost" subtitle="Credits deducted the first time a user opens a quiniela (0 = free for everyone)">
+      <SectionCard title="Tournament Quiniela" info="Credit cost to unlock the AI-generated tournament quiniela. Premium / unlimited subscribers always access it for free.">
+        <Field label="Quiniela access cost" subtitle="0 = gratis" info="Credits deducted the first time a user opens a quiniela.">
           <NumInput value={f.quinielaAccessCost} onChange={(v) => set('quinielaAccessCost', v)} min={0} />
         </Field>
-        <Field label="Allow phase 2 regeneration" subtitle="Let users regenerate their picks when the second phase opens, without paying again">
+        <Field label="Allow phase 2 regeneration" info="Let users regenerate their picks when the second phase opens, without paying again.">
           <Toggle value={f.quinielaPhase2RegenerateAllowed} onChange={(v) => set('quinielaPhase2RegenerateAllowed', v)} />
         </Field>
       </SectionCard>
@@ -544,7 +544,7 @@ function CreditsPageInner() {
       {/* TIERS TAB */}
       <div hidden={tab !== 'tiers'} role="tabpanel" id="tabpanel-tiers" aria-labelledby="tab-tiers">
       {/* ── Section D: Market Tiers ── */}
-      <SectionCard title="Market Tiers" subtitle="Configure prediction access tiers with different markets and costs">
+      <SectionCard title="Market Tiers" info="Configure prediction access tiers with different markets and costs.">
         <div className="flex justify-end mb-3">
           <Button
             variant="secondary"

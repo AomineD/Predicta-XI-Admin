@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { SectionCard } from '@/components/ui/form-controls';
+import { InfoPopover } from '@/components/ui/InfoPopover';
 import { Input, Select } from '@/components/ui/inputs';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
@@ -145,7 +146,7 @@ export function ApiKeysTab() {
         </div>
       </SectionCard>
 
-      <SectionCard title="App API Key" subtitle="Authentication key for the Flutter app to communicate with the backend API">
+      <SectionCard title="App API Key" info="Authentication key for the Flutter app to communicate with the backend API.">
         {appKeyInfo ? (
           <div className="flex items-center justify-between py-2">
             <div>
@@ -195,13 +196,15 @@ export function ApiKeysTab() {
           </div>
         )}
 
-        <div className="mt-4">
+        <div className="mt-4 flex items-center gap-2">
           <Button variant="danger" loading={regenerateAppKey.isPending} onClick={() => setShowRegenerateConfirm(true)}>
             Regenerate Key
           </Button>
-          <p className="text-xs text-text-muted/50 font-sans mt-2">
+          {/* La consecuencia queda visible sin hover: es una acción irreversible. */}
+          <span className="text-xs text-text-muted/60 font-sans">Revoca la clave activa</span>
+          <InfoPopover label="Qué hace regenerar la clave">
             This will revoke the current key and generate a new one. The Flutter app will need to be updated with the new key.
-          </p>
+          </InfoPopover>
         </div>
       </SectionCard>
 

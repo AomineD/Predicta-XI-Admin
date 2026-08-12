@@ -1066,7 +1066,7 @@ export default function JobsPage() {
 
   return (
     <div>
-      <PageHeader title="Jobs" description="Scheduler job history — auto-refreshes every 10s. Test prediction jobs are marked as TEST and excluded from KPIs/stats." />
+      <PageHeader title="Jobs" description="Scheduler job history — auto-refreshes every 10s." info="Test prediction jobs are marked as TEST and excluded from KPIs/stats." />
 
       {schedulerStatus && <SchedulerBanners status={schedulerStatus} />}
 

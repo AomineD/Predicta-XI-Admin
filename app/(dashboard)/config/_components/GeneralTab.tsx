@@ -23,7 +23,7 @@ export function GeneralTab({ form, setField }: { form: PredictionConfig; setFiel
           </Select>
         </Field>
 
-        <Field label="Reasoning effort" subtitle="Depth of reasoning for supported models (DeepSeek R1, GPT Think)">
+        <Field label="Reasoning effort" info="Depth of reasoning for supported models (DeepSeek R1, GPT Think).">
           <Select
             className="w-64"
             value={form.reasoningEffort ?? ''}
@@ -37,7 +37,7 @@ export function GeneralTab({ form, setField }: { form: PredictionConfig; setFiel
           </Select>
         </Field>
 
-        <Field label="LLM Timeout (seconds)" subtitle="Max wait time per LLM call (increase for reasoning models like DeepSeek R1)">
+        <Field label="LLM Timeout (seconds)" info="Max wait time per LLM call. Increase it for reasoning models like DeepSeek R1.">
           <Input
             type="number"
             min={15}
@@ -55,7 +55,7 @@ export function GeneralTab({ form, setField }: { form: PredictionConfig; setFiel
 
       <SectionCard
         title="Output Token Limits"
-        subtitle="Per-model max output tokens. Leave blank to use the backend default. Raise when you see prediction_jobs failing with finishReason=length."
+        subtitle="Vacío = default" info="Per-model max output tokens. Raise it when you see prediction_jobs failing with finishReason=length."
       >
         {MODELS.map((model) => {
           const override = form.llmMaxTokens?.[model];
@@ -149,18 +149,18 @@ function RecommendationsCard({ form, setField }: { form: PredictionConfig; setFi
   return (
     <SectionCard
       title="Recomendaciones por mercado (idea #24)"
-      subtitle="Muestra a los suscriptores (PRO/CLUB), dentro de la sección de estadísticas/winrate, los mercados en los que el motor viene acertando más. Se calcula del winrate real por mercado (prediction_pick_stats), sin nada inventado. Apagado = el endpoint /stats/recommendations no expone nada."
+      subtitle="Solo PRO/CLUB" info="Muestra a los suscriptores, dentro de la sección de estadísticas/winrate, los mercados en los que el motor viene acertando más. Se calcula del winrate real por mercado (prediction_pick_stats), sin nada inventado. Apagado = el endpoint /stats/recommendations no expone nada."
     >
       <Field
         label="Recomendaciones habilitadas"
-        subtitle="Interruptor maestro (recommendationsEnabled). Apagado = la app no muestra el bloque de recomendaciones."
+        subtitle="recommendationsEnabled" info="Apagado = la app no muestra el bloque de recomendaciones."
       >
         <Toggle value={form.recommendationsEnabled} onChange={(v) => setField('recommendationsEnabled', v)} />
       </Field>
 
       <Field
         label="Muestra mínima"
-        subtitle="Mínimo de picks liquidados de un mercado para que sea recomendable (evita recomendar con muestra ridícula). Default 20."
+        subtitle="def. 20" info="Mínimo de picks liquidados de un mercado para que sea recomendable. Evita recomendar con una muestra ridícula."
       >
         <Input
           type="number"
@@ -174,7 +174,7 @@ function RecommendationsCard({ form, setField }: { form: PredictionConfig; setFi
 
       <Field
         label="Winrate mínimo (%)"
-        subtitle="Winrate mínimo (0–100) para que un mercado se recomiende. Default 55."
+        subtitle="0–100 · def. 55" info="Winrate mínimo para que un mercado se recomiende."
       >
         <Input
           type="number"
@@ -199,7 +199,7 @@ function RecommendationsCard({ form, setField }: { form: PredictionConfig; setFi
 
       <Field
         label="Ventana (días)"
-        subtitle="Días hacia atrás sobre los que se mide el rendimiento por mercado (1–365). Default 90."
+        subtitle="1–365 · def. 90" info="Días hacia atrás sobre los que se mide el rendimiento por mercado."
       >
         <Input
           type="number"

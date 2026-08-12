@@ -164,7 +164,7 @@ export default function ChangelogPage() {
       {draft && (
         <SectionCard
           title={draft.id == null ? 'New entry' : `Edit entry #${draft.id}`}
-          subtitle="User-friendly copy. Spanish is neutral 'tú' and avoids betting language. Only published entries are shown in the app."
+          info="User-friendly copy. Spanish is neutral 'tú' and avoids betting language. Only published entries are shown in the app."
         >
           <TextField label="Title (ES)" value={draft.titleEs} onChange={(v) => setDraft({ ...draft, titleEs: v })} max={120} placeholder="Comparte tus combinadas" />
           <TextField label="Title (EN)" value={draft.titleEn} onChange={(v) => setDraft({ ...draft, titleEn: v })} max={120} placeholder="Share your combinadas" />
