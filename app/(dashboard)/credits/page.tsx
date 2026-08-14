@@ -133,7 +133,21 @@ interface TierInput {
   isActive: boolean;
 }
 
-const MARKETS = ['match_result', 'over_under_2_5', 'over_under_1_5', 'total_goals', 'btts', 'double_chance', 'asian_handicap', 'correct_score', 'first_goal', 'corners', 'handicap', 'cards_over_under', 'penalty', 'red_card'];
+// Debe seguir a `VALID_MARKETS` del backend (`prediction/llm/llm.types.ts`), que
+// es quien valida al guardar el tier. Cuando esta lista se quedó corta, las claves
+// que faltaban no se podían asignar a ningún tier y el filtro fail-closed las
+// descartaba: el motor las emitía y no llegaban nunca al usuario, con el flag
+// encendido y sin ningún error visible.
+const MARKETS = [
+  'match_result', 'over_under_2_5', 'over_under_1_5', 'total_goals', 'btts', 'double_chance',
+  'asian_handicap', 'correct_score', 'first_goal', 'corners', 'handicap', 'cards_over_under',
+  'penalty', 'red_card',
+  // Exóticos (idea #1, fase A) — requieren `special_markets_enabled`.
+  'team_total_goals', 'team_goals_odd_even', 'result_and_total', 'result_and_btts',
+  'double_chance_and_total', 'btts_and_total', 'team_clean_sheet', 'win_to_nil',
+  // Jugador (idea #1, fase C) — requieren `player_markets_enabled`.
+  'anytime_scorer', 'player_assist',
+];
 const MARKET_LABELS: Record<string, string> = {
   match_result: '1X2',
   over_under_2_5: 'O/U 2.5',
@@ -149,6 +163,16 @@ const MARKET_LABELS: Record<string, string> = {
   cards_over_under: 'Cards O/U',
   penalty: 'Penalty',
   red_card: 'Red Card',
+  team_total_goals: 'Team Total',
+  team_goals_odd_even: 'Team Odd/Even',
+  result_and_total: 'Result + Total',
+  result_and_btts: 'Result + BTTS',
+  double_chance_and_total: 'DC + Total',
+  btts_and_total: 'BTTS + Total',
+  team_clean_sheet: 'Clean Sheet',
+  win_to_nil: 'Win to Nil',
+  anytime_scorer: 'Anytime Scorer',
+  player_assist: 'Player Assist',
 };
 
 const EMPTY_TIER: TierInput = {
