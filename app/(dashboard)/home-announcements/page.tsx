@@ -10,6 +10,9 @@ import { Input, Select, Textarea } from '@/components/ui/inputs';
 import { Modal } from '@/components/ui/Modal';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useToast } from '@/components/ui/ToastProvider';
+// Mismo catálogo que expone la página Config: se importa en vez de copiarse para
+// que no vuelva a quedar desfasado. '' = usar el modelo activo global.
+import { MODELS } from '../config/_components/constants';
 
 type LinkType = 'none' | 'route' | 'url';
 
@@ -87,19 +90,6 @@ function CharCount({ value, max }: { value: string; max: number }) {
     </div>
   );
 }
-
-// Same catalogue the Config page exposes. '' = use the globally active model.
-const MODELS = [
-  'deepseek-v4-flash',
-  'deepseek-v4-pro',
-  'gpt-5.4-mini',
-  'gpt-5.4',
-  'gpt-5.4-think',
-  'gemini-3.1-pro',
-  'gemini-3.1-flash-lite-preview',
-  'glm-5',
-  'kimi-k2.5',
-];
 
 interface GeneratedDraft {
   titleEs: string;
