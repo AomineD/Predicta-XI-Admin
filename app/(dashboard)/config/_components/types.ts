@@ -56,6 +56,11 @@ export interface PredictionConfig {
   recommendationsEnabled: boolean;
   // Umbrales del generador (round-tripped; tuned via API). Optional en el form.
   recommendationsConfig?: RecommendationsConfig;
+  // Umbral de BAJA CONVICCIÓN de los binarios simétricos (btts, over/under,
+  // córners, tarjetas). Por debajo, el pick se sigue emitiendo pero marcado
+  // `lowConviction`, y la app lo muestra como "muy parejo" con el reparto real de
+  // probabilidad en vez de un número que aparenta convicción. 0 = desactivado.
+  lowConvictionThreshold: number;
   // Quiniela IA: master switch + motor para la generación de llaves de eliminatoria
   // ronda por ronda (automatización de la quiniela de la IA).
   quinielaKnockoutAutomationEnabled: boolean;

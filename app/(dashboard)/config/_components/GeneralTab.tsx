@@ -132,6 +132,8 @@ export function GeneralTab({ form, setField }: { form: PredictionConfig; setFiel
 
       <RecommendationsCard form={form} setField={setField} />
 
+      <LowConvictionCard form={form} setField={setField} />
+
       <SectionCard title="Input Data Fields" subtitle="Data sources the model receives to generate predictions">
         <MultiCheckbox options={DATA_FIELDS} value={form.inputDataFields} onChange={(v) => setField('inputDataFields', v)} />
       </SectionCard>
@@ -142,6 +144,41 @@ export function GeneralTab({ form, setField }: { form: PredictionConfig; setFiel
 /** Recomendaciones por mercado para suscriptores (idea #24): flag maestro + umbrales
  *  del generador. El backend expone /stats/recommendations con el winrate real por
  *  mercado cuando el flag está encendido. */
+function LowConvictionCard({ form, setField }: { form: PredictionConfig; setField: SetField }) {
+  return (
+    <SectionCard
+      title="Picks de baja convicción"
+      subtitle="Presentación, no cálculo"
+      info={
+        'Marca los picks binarios simétricos (ambos marcan, over/under, córners, tarjetas) cuya confianza queda por debajo del umbral. La app los muestra como "MUY PAREJO" y enseña el reparto real de probabilidad (p. ej. 46% / 54%) en vez de un único número que aparenta convicción. NO cambia el pick ni la confianza: solo cómo se presenta. Existe porque un "ambos marcan: no" a 53 se veía tan rotundo como uno a 80, y junto a un marcador modal 1-1 se leía como una contradicción (no lo es: el marcador modal es UNA casilla y "ambos marcan" es la suma de todas). No aplica a penalti ni roja, cuyos topes son asimétricos a propósito.'
+      }
+    >
+      <Field
+        label="Umbral de confianza"
+        subtitle="0–70 · def. 56 · 0 desactiva"
+        info="Por debajo de este número el pick se marca como parejo. Subirlo marca más picks; pasado ~60 casi todo queda marcado y la etiqueta deja de significar algo. Ponerlo en 0 apaga la marca por completo y los picks vuelven a verse todos iguales."
+      >
+        <Input
+          type="number"
+          min={0}
+          max={70}
+          className="w-28"
+          value={form.lowConvictionThreshold}
+          // Clamp explícito: vaciar el input daría Number('') === 0, que apaga la
+          // marca en silencio (0 es un valor legítimo), y un valor > 70 pasaría el
+          // min/max del HTML para que lo rechace el zod al guardar.
+          onChange={(e) =>
+            setField(
+              'lowConvictionThreshold',
+              Math.min(70, Math.max(0, Number(e.target.value) || 0)),
+            )
+          }
+        />
+      </Field>
+    </SectionCard>
+  );
+}
+
 function RecommendationsCard({ form, setField }: { form: PredictionConfig; setField: SetField }) {
   const rc = form.recommendationsConfig ?? DEFAULT_RECOMMENDATIONS_CONFIG;
   const setRc = (patch: Partial<RecommendationsConfig>) => setField('recommendationsConfig', { ...rc, ...patch });

@@ -106,6 +106,7 @@ function ConfigPageInner() {
       playerMarketsEnabled: cfg.playerMarketsEnabled ?? false,
       recommendationsEnabled: cfg.recommendationsEnabled ?? false,
       recommendationsConfig: cfg.recommendationsConfig ?? { minSample: 20, minWinratePct: 55, topK: 4, windowDays: 90 },
+      lowConvictionThreshold: cfg.lowConvictionThreshold ?? 56,
       quinielaKnockoutAutomationEnabled: cfg.quinielaKnockoutAutomationEnabled ?? false,
       quinielaKnockoutEngine: cfg.quinielaKnockoutEngine ?? 'claude_routine',
       llmTimeoutSeconds: cfg.llmTimeoutSeconds ?? 30,
