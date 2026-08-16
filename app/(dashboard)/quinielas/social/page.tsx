@@ -114,6 +114,7 @@ interface SocialConfig {
   prizeChampionshipWinnerCredits: number;
   prizeChampionshipPodiumCredits: Record<string, number>;
   championshipInitialCloseLeadMinutes: number;
+  championshipMaxCreationRound: number;
   standingsExactPoints: number;
   standingsOffByOnePoints: number;
   standingsNarrowBandPoints: number;
@@ -815,6 +816,18 @@ function ConfigTab() {
             onChange={(v) => set('championshipInitialCloseLeadMinutes', v)}
             min={5}
             max={10080}
+          />
+        </Field>
+        <Field
+          label="Jornada tope para crear"
+          subtitle="def. 10 · 0 = solo pretemporada"
+          info="Hasta qué jornada se puede crear un campeonato con el torneo YA arrancado. Con 10 se puede crear durante las jornadas 1 a 10; en cuanto arranca la 11 esa competición desaparece del selector hasta la temporada siguiente. Con 0 vuelve a valer solo la pretemporada. Dentro de la prórroga el grupo cierra sus predicciones al arrancar la jornada SIGUIENTE (con el mismo lead de arriba), no al llegar al tope: cada jornada que pasa es información sobre el desenlace. Se apoya en las jornadas etiquetadas del calendario, así que en una competición que no las tenga (copa a eliminatoria directa) la prórroga no se abre y sigue siendo solo pretemporada."
+        >
+          <NumInput
+            value={f.championshipMaxCreationRound}
+            onChange={(v) => set('championshipMaxCreationRound', v)}
+            min={0}
+            max={45}
           />
         </Field>
       </SectionCard>
