@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { InfoPopover } from '@/components/ui/InfoPopover';
 import { useToast } from '@/components/ui/ToastProvider';
-import type { MaintenanceCreditsConfig, MatchRatingsConfig } from './types';
+import type { MaintenanceCreditsConfig, MatchRatingsConfig, PredictionGradeScale } from './types';
 
 type ReEnrichPreview = {
   dryRun: true;
@@ -268,6 +268,54 @@ export function MaintenanceTab() {
       matchRatingsConfig: { ...matchRatings.matchRatingsConfig, [key]: value },
     });
   };
+
+  // ── Escala de grados de la predicción ──
+  const [gradeScaleForm, setGradeScaleForm] = useState<PredictionGradeScale | null>(null);
+  const gradeScale = gradeScaleForm ?? maintCfg?.predictionGradeScale ?? null;
+
+  const saveGradeScale = useMutation({
+    mutationFn: (body: { predictionGradeScale: PredictionGradeScale }) =>
+      api.put('/admin/credits-config', body),
+    onSuccess: () => {
+      setGradeScaleForm(null);
+      toast.success('Prediction grade scale saved.');
+      invalidateMaint();
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const setGradeCut = (key: keyof PredictionGradeScale, value: number) => {
+    if (!gradeScale) return;
+    setGradeScaleForm({ ...gradeScale, [key]: value });
+  };
+
+  // Los cortes tienen que ir estrictamente descendentes. El backend lo corrige
+  // al guardar, pero avisarlo aquí evita que Diego guarde algo que reaparece
+  // cambiado sin explicación.
+  const gradeScaleOutOfOrder =
+    !!gradeScale && !(gradeScale.excelente > gradeScale.bueno && gradeScale.bueno > gradeScale.medio);
+
+  /** Cuántos aciertos de 14 caen en cada grado con los cortes actuales. */
+  const gradePreview = (() => {
+    if (!gradeScale) return null;
+    const gradeOf = (won: number): string => {
+      if (won <= 0) return 'FATAL';
+      const pct = Math.round((won / 14) * 100);
+      if (pct >= 100) return 'PERFECTO';
+      if (pct >= gradeScale.excelente) return 'EXCELENTE';
+      if (pct >= gradeScale.bueno) return 'BUENO';
+      if (pct >= gradeScale.medio) return 'MEDIO';
+      return 'BAJO';
+    };
+    const rows: { grade: string; from: number; to: number }[] = [];
+    for (let won = 14; won >= 0; won--) {
+      const grade = gradeOf(won);
+      const last = rows[rows.length - 1];
+      if (last && last.grade === grade) last.to = won;
+      else rows.push({ grade, from: won, to: won });
+    }
+    return rows;
+  })();
 
   // ── Data Maintenance: backfill stats ──
   const [showBackfillConfirm, setShowBackfillConfirm] = useState(false);
@@ -683,6 +731,91 @@ export function MaintenanceTab() {
                   Match ratings are on for users on a build that includes it.
                 </span>
               )}
+            </div>
+          </>
+        )}
+      </SectionCard>
+
+      {/* Escala de grados de la predicción */}
+      <SectionCard
+        title="Prediction grade scale"
+        subtitle="Cortes en % de aciertos"
+        info="How a settled prediction is graded from its hit rate (won markets / settled markets). The same scale is used by the app badge, the settled-result push and the badge in Predictions here, so moving a cut changes all three at once — no new app build needed. Only the three middle cuts are configurable: PERFECTO is always 100% (every market hit) and FATAL is always 0 hits, and anything between the last cut and FATAL is BAJO. The names themselves ship in the app build."
+      >
+        {!gradeScale ? (
+          <p className="text-text-muted text-sm font-sans py-3">Loading…</p>
+        ) : (
+          <>
+            <Field
+              label="EXCELENTE from (%)"
+              subtitle="def. 75" info="Lowest hit rate that still counts as EXCELENTE. Anything at or above 100% is PERFECTO instead."
+            >
+              <Input
+                type="number"
+                min={1}
+                max={99}
+                value={gradeScale.excelente}
+                onChange={(e) => setGradeCut('excelente', Number(e.target.value))}
+              />
+            </Field>
+            <Field
+              label="BUENO from (%)"
+              subtitle="def. 60" info="Lowest hit rate that counts as BUENO. Must be below the EXCELENTE cut."
+            >
+              <Input
+                type="number"
+                min={1}
+                max={99}
+                value={gradeScale.bueno}
+                onChange={(e) => setGradeCut('bueno', Number(e.target.value))}
+              />
+            </Field>
+            <Field
+              label="MEDIO from (%)"
+              subtitle="def. 40" info="Lowest hit rate that counts as MEDIO. Below this, with at least one hit, the prediction is BAJO. Must be below the BUENO cut."
+            >
+              <Input
+                type="number"
+                min={1}
+                max={99}
+                value={gradeScale.medio}
+                onChange={(e) => setGradeCut('medio', Number(e.target.value))}
+              />
+            </Field>
+
+            {gradeScaleOutOfOrder && (
+              <p className="text-xs font-sans text-warning pt-2">
+                The cuts must go strictly down: EXCELENTE &gt; BUENO &gt; MEDIO. Saving as-is will push the
+                lower cuts down to fit, so a grade doesn&apos;t become unreachable.
+              </p>
+            )}
+
+            {gradePreview && (
+              <div className="pt-3">
+                <p className="text-xs font-sans text-text-muted pb-1.5">
+                  With these cuts, a 14-market prediction grades like this:
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {gradePreview.map((r) => (
+                    <span
+                      key={r.grade}
+                      className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-mono bg-surface-2 text-text-secondary"
+                    >
+                      {r.grade} {r.from === r.to ? `${r.from}` : `${r.to}-${r.from}`}/14
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center gap-3 pt-3">
+              <Button
+                variant="primary"
+                loading={saveGradeScale.isPending}
+                onClick={() => saveGradeScale.mutate({ predictionGradeScale: gradeScale })}
+              >
+                Save grade scale
+              </Button>
             </div>
           </>
         )}

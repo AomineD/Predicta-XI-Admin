@@ -37,6 +37,20 @@ interface FilterOptions {
 
 const SETTLEMENT_OPTIONS = ['', 'won', 'lost', 'partial', 'pending', 'void'];
 
+/**
+ * Cortes (en % de aciertos) de la escala de grados, tal como los guarda el admin
+ * en Config → Prediction grade scale. Los extremos no viajan porque son
+ * definitorios: PERFECTO es 100% y FATAL es 0 aciertos.
+ */
+interface PredictionGradeScale {
+  excelente: number;
+  bueno: number;
+  medio: number;
+}
+
+/** Espejo de DEFAULT_PREDICTION_GRADE_SCALE del backend, para pintar mientras carga. */
+const DEFAULT_GRADE_SCALE: PredictionGradeScale = { excelente: 75, bueno: 60, medio: 40 };
+
 type AccuracyBucket = '' | 'high' | 'mid' | 'low';
 type SortKey =
   | 'createdAt:desc'
@@ -64,6 +78,17 @@ export default function PredictionsPage() {
   const [to, setTo] = useState('');
   const [accuracyBucket, setAccuracyBucket] = useState<AccuracyBucket>('');
   const [sort, setSort] = useState<SortKey>('createdAt:desc');
+
+  // La escala de grados vive en credits_config (Config → Prediction grade scale).
+  // Se lee aquí para que el badge gradúe con los mismos cortes que la app y el
+  // push, en vez de con una copia hardcodeada que se desincroniza al primer
+  // cambio en el panel.
+  const { data: gradeConfig } = useQuery<{ predictionGradeScale?: PredictionGradeScale }>({
+    queryKey: ['credits-config-grade-scale'],
+    queryFn: () => api.get('/admin/credits-config'),
+    staleTime: 5 * 60_000,
+  });
+  const gradeScale = gradeConfig?.predictionGradeScale ?? DEFAULT_GRADE_SCALE;
 
   const { data: options } = useQuery<FilterOptions>({
     queryKey: ['predictions-filter-options'],
@@ -141,15 +166,19 @@ export default function PredictionsPage() {
           const pct = Math.round((row.wonMarkets / row.settledMarkets) * 100);
           let label: string;
           let colorClass: string;
-          // Escala única compartida con la app (prediction_grade.dart): mismos
-          // umbrales, mismos nombres, mismos colores.
-          if (pct >= 100) {
-            label = 'PLENO'; colorClass = 'bg-success/15 text-success';
-          } else if (pct >= 75) {
-            label = 'ALTO'; colorClass = 'bg-success/15 text-success';
-          } else if (pct >= 50) {
+          // Escala única compartida con la app (prediction_grade.dart) y el push
+          // de resultado (shared/prediction-grade.ts): mismos cortes (los del
+          // admin), mismos nombres, mismos colores. Cero aciertos es su propio
+          // grado: no es "poco", es no haber acertado nada.
+          if (row.wonMarkets <= 0) {
+            label = 'FATAL'; colorClass = 'bg-danger/15 text-danger';
+          } else if (pct >= 100) {
+            label = 'PERFECTO'; colorClass = 'bg-success/15 text-success';
+          } else if (pct >= gradeScale.excelente) {
+            label = 'EXCELENTE'; colorClass = 'bg-success/15 text-success';
+          } else if (pct >= gradeScale.bueno) {
             label = 'BUENO'; colorClass = 'bg-secondary/15 text-secondary';
-          } else if (pct >= 25) {
+          } else if (pct >= gradeScale.medio) {
             label = 'MEDIO'; colorClass = 'bg-warning/15 text-warning';
           } else {
             label = 'BAJO'; colorClass = 'bg-danger/15 text-danger';

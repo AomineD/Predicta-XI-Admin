@@ -187,6 +187,23 @@ export interface MaintenanceCreditsConfig {
   matchRatingsConfig: MatchRatingsConfig;
   // Celebración de gol en vivo (idea #28). Depende de liveScoresEnabled.
   goalCelebrationEnabled: boolean;
+  // Cortes de la escala de grados de una predicción liquidada.
+  predictionGradeScale: PredictionGradeScale;
+}
+
+/**
+ * Cortes (en % de aciertos) de la escala de grados de una predicción liquidada.
+ * Solo los tres intermedios: PERFECTO es 100% y FATAL es 0 aciertos, y entre el
+ * último corte y FATAL queda BAJO. Deben ir estrictamente descendentes — el
+ * backend lo fuerza al guardar.
+ */
+export interface PredictionGradeScale {
+  /** Piso de EXCELENTE. Por defecto 75 → 11-13 de 14 aciertos. */
+  excelente: number;
+  /** Piso de BUENO. Por defecto 60 → 9-10 de 14. */
+  bueno: number;
+  /** Piso de MEDIO. Por defecto 40 → 6-8 de 14. */
+  medio: number;
 }
 
 /** Tunables de la calificación comunitaria del partido (idea #30). */
