@@ -69,6 +69,7 @@ interface SocialConfig {
   teamPrizeWinnerCredits: number;
   // Running pools (idea #10) — continuous multi-week pool (PRO/Club create).
   runningQuinielasEnabled: boolean;
+  runningManualCurationEnabled: boolean;
   createCostRunning: number;
   runningMaxWeeks: number;
   runningBasePrizeCredits: number;
@@ -448,7 +449,7 @@ function ConfigTab() {
       </SectionCard>
 
       <SectionCard title="Creation costs" info="Credits the owner pays to create a group (free for premium+ per entitlement logic — except knockout, which always charges).">
-        <Field label="Weekly group" subtitle="weekly mode">
+        <Field label="Quiniela de una jornada" subtitle="weekly mode">
           <NumInput value={f.createCostWeekly} onChange={(v) => set('createCostWeekly', v)} max={MAX_CREATE_COST} />
         </Field>
         <Field label="Competition group" subtitle="competition mode">
@@ -471,7 +472,7 @@ function ConfigTab() {
         </Field>
       </SectionCard>
 
-      <SectionCard title="Weekly prize (house-funded)" subtitle="Per-prize cap: 500" info="Awarded when a weekly group settles. Weekly pays the winner only — usually less than a competition run.">
+      <SectionCard title="Premio de una jornada (house-funded)" subtitle="Per-prize cap: 500" info="Se paga al liquidar una quiniela de UNA jornada: solo al ganador. Las de varias semanas (corrida) pagan el premio escalado de su propia card, no este.">
         <Field label="Winner (1st place)">
           <NumInput value={f.prizeWeeklyWinnerCredits} onChange={(v) => set('prizeWeeklyWinnerCredits', v)} max={MAX_PRIZE} />
         </Field>
@@ -524,7 +525,7 @@ function ConfigTab() {
         </Field>
       </SectionCard>
 
-      <SectionCard title="Weekly quiniela" subtitle="1–50" info="Range of matches the owner can pick when building a weekly group.">
+      <SectionCard title="Quinielas de jornada · partidos" subtitle="1–50" info="Rango de partidos que el dueño puede elegir al armar una quiniela de jornada. El mínimo NO aplica a una corrida (una jornada suya puede tener un solo partido); el tope por tier sí aplica a las dos.">
         <Field label="Minimum matches">
           <NumInput value={f.weeklyMinMatches} onChange={(v) => set('weeklyMinMatches', v)} min={1} max={50} />
         </Field>
@@ -543,8 +544,8 @@ function ConfigTab() {
       </SectionCard>
 
       <SectionCard
-        title="Weekly scoring (points)"
-        subtitle="0–100" info="Layered “marcador por capas” points for weekly groups. A wrong 1X2 is always 0 (not configurable). The app shows these in its “Cómo se puntúa” legend, read from /app-config."
+        title="Quinielas de jornada · puntos"
+        subtitle="0–100" info="Puntos del “marcador por capas”. Los usan TODAS las quinielas que puntúan marcador: una jornada, corrida y de equipo. A wrong 1X2 is always 0 (not configurable). The app shows these in its “Cómo se puntúa” legend, read from /app-config."
       >
         <Field label="Exact scoreline (winner)" subtitle="Exact result with a winner, e.g. 2-1">
           <NumInput value={f.weeklyExactScorePoints} onChange={(v) => set('weeklyExactScorePoints', v)} min={0} max={100} />
@@ -564,47 +565,18 @@ function ConfigTab() {
       </SectionCard>
 
       <SectionCard
-        title="Tipos habilitados (idea #21 Fase 3)"
-        subtitle="Default ON" info="Interruptores por tipo de quiniela social. Apágalos para desactivar remotamente un tipo: la app oculta la opción de crearlo y el backend rechaza la creación. Team y running tienen su propio flag en sus cards."
-      >
-        <Field label="Weekly quinielas enabled" subtitle="weeklyQuinielasEnabled">
-          <Toggle value={f.weeklyQuinielasEnabled} onChange={(v) => set('weeklyQuinielasEnabled', v)} />
-        </Field>
-        <Field label="Competition quinielas enabled" subtitle="DEPRECADO" info="Lo reemplaza la quiniela de campeonato (idea #29). Se apagó en la migración 0150; los grupos ya creados siguen liquidando con normalidad. Encenderlo vuelve a ofrecer el tipo viejo.">
-          <Toggle value={f.competitionQuinielasEnabled} onChange={(v) => set('competitionQuinielasEnabled', v)} />
-        </Field>
-        <Field label="Knockout quinielas enabled" subtitle="DEPRECADO" info="Lo reemplaza la quiniela de campeonato (idea #29), cuya fase de llaves es idéntica. Se apagó en la migración 0150; los grupos ya creados siguen liquidando.">
-          <Toggle value={f.knockoutQuinielasEnabled} onChange={(v) => set('knockoutQuinielasEnabled', v)} />
-        </Field>
-      </SectionCard>
-
-      <SectionCard
-        title="Team quinielas (idea #9)"
-        subtitle="Off by default" info="Club-only group type: members predict scorelines and the score is aggregated per team, with phase-by-phase elimination until a champion. Inert until enabled. The app gates the “create teams quiniela” option on this flag + Club tier."
-      >
-        <Field label="Team quinielas enabled" subtitle="teamQuinielasEnabled" info="Only Club owners can create.">
-          <Toggle value={f.teamQuinielasEnabled} onChange={(v) => set('teamQuinielasEnabled', v)} />
-        </Field>
-        <Field label="Max teams" subtitle="2–8" info="Upper bound on teams per quiniela.">
-          <NumInput value={f.teamMaxTeams} onChange={(v) => set('teamMaxTeams', v)} min={2} max={8} />
-        </Field>
-        <Field label="Max members per team" subtitle="1–100" info="Upper bound on the per-team size the creator can choose.">
-          <NumInput value={f.teamMaxMembersPerTeam} onChange={(v) => set('teamMaxMembersPerTeam', v)} min={1} max={100} />
-        </Field>
-        <Field label="Creation cost (credits)" subtitle="0 = free" info="Charged to create one. Premium+ exempt, so Club creates free.">
-          <NumInput value={f.teamCreateCost} onChange={(v) => set('teamCreateCost', v)} min={0} max={MAX_CREATE_COST} />
-        </Field>
-        <Field label="Champion prize (credits)" subtitle="Per-prize cap: 500" info="House-funded credits paid to each member of the winning team.">
-          <NumInput value={f.teamPrizeWinnerCredits} onChange={(v) => set('teamPrizeWinnerCredits', v)} min={0} max={MAX_PRIZE} />
-        </Field>
-      </SectionCard>
-
-      <SectionCard
-        title="Running pools (idea #10)"
-        subtitle="Off by default" info="Continuous multi-week pool: the creator (PRO/Club) picks competitions and each week their matches auto-enter as a new week of the same group. Two tables (weekly + accumulated overall); the weekly podium adds bonus points to the overall. One scaled final prize goes to the overall champion when the run ends. Inert until enabled. The app gates the “create running pool” option on this flag + PRO/Club tier."
+        title="Quinielas de jornada · varias semanas (corrida)"
+        subtitle="Off by default" info="La MISMA quiniela de jornada, pero durando varias semanas. El creador (PRO/Club) elige competiciones y cada semana sus partidos entran como una jornada nueva del mismo grupo — o, con curaduría manual, las pone él. Dos tablas (semanal + general acumulada); el podio de cada semana suma puntos a la general. Al terminar, un único premio escalado va al campeón general. Puntúa con los MISMOS puntos de la card de arriba. Inerte hasta encenderlo: el creador de la app solo ofrece la opción de varias jornadas con este flag + tier PRO/Club."
       >
         <Field label="Running pools enabled" subtitle="runningQuinielasEnabled" info="PRO and Club can create; Free can only join.">
           <Toggle value={f.runningQuinielasEnabled} onChange={(v) => set('runningQuinielasEnabled', v)} />
+        </Field>
+        <Field
+          label="Curaduria manual de jornada"
+          subtitle="runningManualCurationEnabled"
+          info="Deja que un dueno Club elija a mano los partidos de cada jornada en vez de que los ingiera el scheduler. Es el camino que abre jornadas nuevas y, por tanto, el que decide cuantas semanas cuenta el premio final escalado: apagalo si detectas abuso, sin tener que apagar toda la modalidad. Las corridas manuales ya creadas dejan de poder abrir jornadas nuevas; las jornadas ya abiertas siguen su curso."
+        >
+          <Toggle value={f.runningManualCurationEnabled} onChange={(v) => set('runningManualCurationEnabled', v)} />
         </Field>
         <Field label="Creation cost (credits)" subtitle="0 = free" info="Charged to create one. Premium+ exempt, so PRO/Club create free.">
           <NumInput value={f.createCostRunning} onChange={(v) => set('createCostRunning', v)} min={0} max={MAX_CREATE_COST} />
@@ -633,6 +605,42 @@ function ConfigTab() {
             <NumInput value={f.runningDefaultPodiumBonus['2'] ?? 0} onChange={(v) => set('runningDefaultPodiumBonus', { ...f.runningDefaultPodiumBonus, '2': v })} min={0} max={MAX_PRIZE} />
             <NumInput value={f.runningDefaultPodiumBonus['3'] ?? 0} onChange={(v) => set('runningDefaultPodiumBonus', { ...f.runningDefaultPodiumBonus, '3': v })} min={0} max={MAX_PRIZE} />
           </div>
+        </Field>
+      </SectionCard>
+
+      <SectionCard
+        title="Tipos habilitados (idea #21 Fase 3)"
+        subtitle="Default ON" info="Interruptores por tipo de quiniela social. Apágalos para desactivar remotamente un tipo: la app oculta la opción de crearlo y el backend rechaza la creación. Team y running tienen su propio flag en sus cards."
+      >
+        <Field label="Quinielas de jornada enabled" subtitle="weeklyQuinielasEnabled" info="Enciende la modalidad de jornada en el creador. La duración de varias semanas tiene además su propio flag en la card de la corrida.">
+          <Toggle value={f.weeklyQuinielasEnabled} onChange={(v) => set('weeklyQuinielasEnabled', v)} />
+        </Field>
+        <Field label="Competition quinielas enabled" subtitle="DEPRECADO" info="Lo reemplaza la quiniela de campeonato (idea #29). Se apagó en la migración 0150; los grupos ya creados siguen liquidando con normalidad. Encenderlo vuelve a ofrecer el tipo viejo.">
+          <Toggle value={f.competitionQuinielasEnabled} onChange={(v) => set('competitionQuinielasEnabled', v)} />
+        </Field>
+        <Field label="Knockout quinielas enabled" subtitle="DEPRECADO" info="Lo reemplaza la quiniela de campeonato (idea #29), cuya fase de llaves es idéntica. Se apagó en la migración 0150; los grupos ya creados siguen liquidando.">
+          <Toggle value={f.knockoutQuinielasEnabled} onChange={(v) => set('knockoutQuinielasEnabled', v)} />
+        </Field>
+      </SectionCard>
+
+      <SectionCard
+        title="Team quinielas (idea #9)"
+        subtitle="Off by default" info="Club-only group type: members predict scorelines and the score is aggregated per team, with phase-by-phase elimination until a champion. Inert until enabled. The app gates the “create teams quiniela” option on this flag + Club tier."
+      >
+        <Field label="Team quinielas enabled" subtitle="teamQuinielasEnabled" info="Only Club owners can create.">
+          <Toggle value={f.teamQuinielasEnabled} onChange={(v) => set('teamQuinielasEnabled', v)} />
+        </Field>
+        <Field label="Max teams" subtitle="2–8" info="Upper bound on teams per quiniela.">
+          <NumInput value={f.teamMaxTeams} onChange={(v) => set('teamMaxTeams', v)} min={2} max={8} />
+        </Field>
+        <Field label="Max members per team" subtitle="1–100" info="Upper bound on the per-team size the creator can choose.">
+          <NumInput value={f.teamMaxMembersPerTeam} onChange={(v) => set('teamMaxMembersPerTeam', v)} min={1} max={100} />
+        </Field>
+        <Field label="Creation cost (credits)" subtitle="0 = free" info="Charged to create one. Premium+ exempt, so Club creates free.">
+          <NumInput value={f.teamCreateCost} onChange={(v) => set('teamCreateCost', v)} min={0} max={MAX_CREATE_COST} />
+        </Field>
+        <Field label="Champion prize (credits)" subtitle="Per-prize cap: 500" info="House-funded credits paid to each member of the winning team.">
+          <NumInput value={f.teamPrizeWinnerCredits} onChange={(v) => set('teamPrizeWinnerCredits', v)} min={0} max={MAX_PRIZE} />
         </Field>
       </SectionCard>
 
