@@ -9,7 +9,12 @@ import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { InfoPopover } from '@/components/ui/InfoPopover';
 import { useToast } from '@/components/ui/ToastProvider';
-import type { MaintenanceCreditsConfig, MatchRatingsConfig, PredictionGradeScale } from './types';
+import type {
+  HomeNewsCuratorConfig,
+  MaintenanceCreditsConfig,
+  MatchRatingsConfig,
+  PredictionGradeScale,
+} from './types';
 
 type ReEnrichPreview = {
   dryRun: true;
@@ -268,6 +273,117 @@ export function MaintenanceTab() {
       matchRatingsConfig: { ...matchRatings.matchRatingsConfig, [key]: value },
     });
   };
+
+  // ── Mejores calificados (idea #31) ──
+  const [topRatedForm, setTopRatedForm] = useState<{
+    topRatedMatchesEnabled: boolean;
+    topRatedMaxItems: number;
+  } | null>(null);
+  const topRatedInitial = useMemo(
+    () =>
+      maintCfg
+        ? {
+            topRatedMatchesEnabled: maintCfg.topRatedMatchesEnabled,
+            topRatedMaxItems: maintCfg.topRatedMaxItems,
+          }
+        : null,
+    [maintCfg],
+  );
+  const topRated = topRatedForm ?? topRatedInitial;
+
+  const saveTopRated = useMutation({
+    mutationFn: (body: { topRatedMatchesEnabled: boolean; topRatedMaxItems: number }) =>
+      api.put('/admin/credits-config', body),
+    onSuccess: () => {
+      setTopRatedForm(null);
+      toast.success('Top rated setting saved.');
+      invalidateMaint();
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  // ── Curador de noticias de la Home (idea #17) ──
+  const [curatorForm, setCuratorForm] = useState<{
+    homeNewsCuratorEnabled: boolean;
+    homeNewsCuratorConfig: HomeNewsCuratorConfig;
+  } | null>(null);
+  const curatorInitial = useMemo(
+    () =>
+      maintCfg
+        ? {
+            homeNewsCuratorEnabled: maintCfg.homeNewsCuratorEnabled,
+            homeNewsCuratorConfig: maintCfg.homeNewsCuratorConfig,
+          }
+        : null,
+    [maintCfg],
+  );
+  const curator = curatorForm ?? curatorInitial;
+
+  const saveCurator = useMutation({
+    mutationFn: (body: {
+      homeNewsCuratorEnabled: boolean;
+      homeNewsCuratorConfig: HomeNewsCuratorConfig;
+    }) => api.put('/admin/credits-config', body),
+    onSuccess: () => {
+      setCuratorForm(null);
+      toast.success('Home news curator setting saved.');
+      invalidateMaint();
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  /**
+   * `hourUtc` es el ÚNICO tunable del curador que necesita defensa en el
+   * cliente. Vaciar el input daría `Number('') === 0`, y 0 es una hora
+   * **válida**: el backend no tendría nada que clampar, se guardaría con toast
+   * de éxito y la corrida se mudaría a las 00:00 UTC — después de casi todos
+   * los kickoffs. Como cada tarjeta caduca en el kickoff, lo que generase
+   * caducaría al nacer y el curador dejaría de producir sin que nada lo
+   * señale. Los demás tunables tienen mínimo 1 y el backend los acota, así que
+   * un vacío ahí se corrige solo al refetchear.
+   */
+  const setCuratorHourUtc = (raw: string) => {
+    const parsed = Number(raw);
+    if (raw === '' || !Number.isFinite(parsed)) return;
+    setCuratorTunable('hourUtc', parsed);
+  };
+
+  const setCuratorTunable = <K extends keyof HomeNewsCuratorConfig>(
+    key: K,
+    value: HomeNewsCuratorConfig[K],
+  ) => {
+    if (!curator) return;
+    setCuratorForm({
+      ...curator,
+      homeNewsCuratorConfig: { ...curator.homeNewsCuratorConfig, [key]: value },
+    });
+  };
+
+  // Disparo manual del curador, para probar la configuración sin esperar a su
+  // hora. Gasta lo mismo que una corrida real.
+  const [showCuratorRunConfirm, setShowCuratorRunConfirm] = useState(false);
+  const runCurator = useMutation({
+    mutationFn: () =>
+      api.post<{
+        examined: number;
+        selected: number;
+        published: number;
+        skippedNoNews: number;
+        unpublishedExpired: number;
+        llmFallbacks: number;
+      }>('/admin/home-announcements/run-curator', {}),
+    onSuccess: (data) => {
+      setShowCuratorRunConfirm(false);
+      toast.success(
+        `Curator run: ${data.published} published, ${data.skippedNoNews} skipped (no news), ` +
+          `${data.unpublishedExpired} expired unpublished.`,
+      );
+    },
+    onError: (err: Error) => {
+      setShowCuratorRunConfirm(false);
+      toast.error(err.message);
+    },
+  });
 
   // ── Escala de grados de la predicción ──
   const [gradeScaleForm, setGradeScaleForm] = useState<PredictionGradeScale | null>(null);
@@ -736,6 +852,173 @@ export function MaintenanceTab() {
         )}
       </SectionCard>
 
+      {/* Mejores calificados (idea #31) */}
+      <SectionCard
+        title="Top rated matches"
+        subtitle="Depende de Match ratings"
+        info="The 'best rated matches' list (idea #31): a compact block on Home plus a full screen with day / week / season tabs, a league filter and a share-as-image button. It reads the same Bayesian score as the match detail, so a match only shows up once it passes 'Minimum votes to publish' above. This switch is applied in AND with Match ratings — turning ratings off also hides the list, since without votes there is nothing to rank."
+      >
+        {!topRated ? (
+          <p className="text-text-muted text-sm font-sans py-3">Loading…</p>
+        ) : (
+          <>
+            <Field
+              label="Top rated enabled"
+              info="When on, the app shows the Home block and the full list. Off = the block disappears and the endpoint rejects fail-closed. Ratings keep being collected either way."
+            >
+              <Toggle
+                value={topRated.topRatedMatchesEnabled}
+                onChange={(v) => setTopRatedForm({ ...topRated, topRatedMatchesEnabled: v })}
+              />
+            </Field>
+            <Field
+              label="Max rows returned"
+              subtitle="def. 20"
+              info="Cap for the full list. The endpoint has its own hard ceiling of 50, so a larger number here has no extra effect."
+            >
+              <Input
+                type="number"
+                min={1}
+                max={50}
+                value={topRated.topRatedMaxItems}
+                onChange={(e) =>
+                  setTopRatedForm({ ...topRated, topRatedMaxItems: Number(e.target.value) })
+                }
+              />
+            </Field>
+            <div className="flex items-center gap-3 pt-3">
+              <Button
+                variant="primary"
+                loading={saveTopRated.isPending}
+                onClick={() => saveTopRated.mutate(topRated)}
+              >
+                Save top rated
+              </Button>
+              {topRated.topRatedMatchesEnabled && !matchRatings?.matchRatingsEnabled && (
+                <span className="text-xs font-sans text-warning">
+                  Inert: Match ratings is off, so the list stays hidden.
+                </span>
+              )}
+            </div>
+          </>
+        )}
+      </SectionCard>
+
+      {/* Curador de noticias de la Home (idea #17) */}
+      <SectionCard
+        title="Home news curator"
+        subtitle="Depende de Home announcements"
+        info="Fills the Home carousel with the real pre-match news of the day's most popular matches — injuries, suspensions, line-up news — which is what the featured-fixtures section does not tell. It runs once a day, picks matches by how many users follow the two teams, and only publishes when there is news worth telling: no news, no card. Every card it creates expires at kickoff and each run unpublishes the expired ones, so the carousel can't pile up stale cards like the old 'matches of the day' announcement did. Applied in AND with Home announcements: without the carousel there is nowhere to show them."
+      >
+        {!curator ? (
+          <p className="text-text-muted text-sm font-sans py-3">Loading…</p>
+        ) : (
+          <>
+            <Field
+              label="Curator enabled"
+              info="Master switch of the DAILY run. Off = the scheduled run scrapes, writes and spends nothing, and cards already published stay until they expire. It does not gate 'Run now' on the server, which is why that button is disabled here while this is off."
+            >
+              <Toggle
+                value={curator.homeNewsCuratorEnabled}
+                onChange={(v) => setCuratorForm({ ...curator, homeNewsCuratorEnabled: v })}
+              />
+            </Field>
+            <Field
+              label="Write with AI"
+              info="On = the active LLM writes the bilingual card from the real news (one call per match, at most 'Matches per day'). Off = a deterministic template built from the news type and the affected players — free and predictable, but it reads the same every day. The template is also the automatic fallback whenever the model call fails, so a provider outage never leaves the carousel empty."
+            >
+              <Toggle
+                value={curator.homeNewsCuratorConfig.useLlm}
+                onChange={(v) => setCuratorTunable('useLlm', v)}
+              />
+            </Field>
+            <Field
+              label="Run hour (UTC)"
+              subtitle="def. 11"
+              info="Hour of the daily run. Pick one early enough to be well before the day's kickoffs: a card for a match that already started expires immediately."
+            >
+              <Input
+                type="number"
+                min={0}
+                max={23}
+                value={curator.homeNewsCuratorConfig.hourUtc}
+                onChange={(e) => setCuratorHourUtc(e.target.value)}
+              />
+            </Field>
+            <Field
+              label="Matches per day"
+              subtitle="def. 3"
+              info="How many cards a SINGLE run may publish. This is the knob that bounds the cost: each match means one news scrape per team plus, with AI on, one model call. The daily run happens once, so this is also the daily ceiling — but repeated 'Run now' clicks each get their own budget, and a run whose candidate ranking shifted adds new cards instead of reusing the old ones."
+            >
+              <Input
+                type="number"
+                min={1}
+                max={10}
+                value={curator.homeNewsCuratorConfig.maxMatchesPerDay}
+                onChange={(e) => setCuratorTunable('maxMatchesPerDay', Number(e.target.value))}
+              />
+            </Field>
+            <Field
+              label="Max news age (days)"
+              subtitle="def. 3"
+              info="Older news can't feed a card. Raising it fills the carousel more often but with staler context."
+            >
+              <Input
+                type="number"
+                min={1}
+                max={30}
+                value={curator.homeNewsCuratorConfig.maxNewsAgeDays}
+                onChange={(e) => setCuratorTunable('maxNewsAgeDays', Number(e.target.value))}
+              />
+            </Field>
+            <Field
+              label="News freshness window (hours)"
+              subtitle="def. 12"
+              info="A team whose news was synced within this window is not scraped again. Lower = fresher news and more scraping."
+            >
+              <Input
+                type="number"
+                min={1}
+                max={168}
+                value={curator.homeNewsCuratorConfig.newsFreshnessHours}
+                onChange={(e) => setCuratorTunable('newsFreshnessHours', Number(e.target.value))}
+              />
+            </Field>
+            <div className="flex flex-wrap items-center gap-3 pt-3">
+              <Button
+                variant="primary"
+                loading={saveCurator.isPending}
+                onClick={() => saveCurator.mutate(curator)}
+              >
+                Save curator
+              </Button>
+              <Button
+                variant="danger"
+                loading={runCurator.isPending}
+                // Los gates del curador (flag, hora, lock) viven en el `tick()`
+                // del scheduler; el disparo manual entra por debajo de ellos y
+                // publicaría igual con todo apagado. Se frena aquí.
+                disabled={
+                  !curator.homeNewsCuratorEnabled || !homeAnnouncements?.homeAnnouncementsEnabled
+                }
+                onClick={() => setShowCuratorRunConfirm(true)}
+              >
+                Run now
+              </Button>
+              <span className="text-xs font-sans text-text-muted">
+                Running it now spends the same as a real run (scrape + AI). It publishes into the
+                live carousel.
+              </span>
+              {curator.homeNewsCuratorEnabled && !homeAnnouncements?.homeAnnouncementsEnabled && (
+                <span className="text-xs font-sans text-warning">
+                  Inert: Home announcements is off, so nothing it publishes would be shown.
+                </span>
+              )}
+            </div>
+          </>
+        )}
+      </SectionCard>
+
       {/* Escala de grados de la predicción */}
       <SectionCard
         title="Prediction grade scale"
@@ -979,6 +1262,26 @@ export function MaintenanceTab() {
           reEnrichRunMutation.mutate(reEnrichIds);
         }}
         onClose={() => setShowReEnrichConfirm(false)}
+      />
+
+      <ConfirmDialog
+        open={showCuratorRunConfirm}
+        title="Run the news curator now?"
+        message={
+          <span>
+            This runs the curator outside its schedule: it scrapes news and, with{' '}
+            <strong className="text-text-primary">Write with AI</strong> on, spends one model call
+            per match. Whatever it writes is{' '}
+            <strong className="text-text-primary">published straight into the live carousel</strong>
+            , and each run gets its own budget — clicking twice can stack cards past{' '}
+            <strong className="text-text-primary">Matches per day</strong>.
+          </span>
+        }
+        confirmLabel="Run curator now"
+        variant="danger"
+        loading={runCurator.isPending}
+        onConfirm={() => runCurator.mutate()}
+        onClose={() => setShowCuratorRunConfirm(false)}
       />
 
       <ConfirmDialog

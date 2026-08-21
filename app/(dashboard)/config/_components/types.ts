@@ -185,6 +185,12 @@ export interface MaintenanceCreditsConfig {
   // Calificar el partido 1-10 (idea #30).
   matchRatingsEnabled: boolean;
   matchRatingsConfig: MatchRatingsConfig;
+  // Mejores calificados (idea #31). Depende de matchRatingsEnabled.
+  topRatedMatchesEnabled: boolean;
+  topRatedMaxItems: number;
+  // Curador de noticias de la Home (idea #17). Depende de homeAnnouncementsEnabled.
+  homeNewsCuratorEnabled: boolean;
+  homeNewsCuratorConfig: HomeNewsCuratorConfig;
   // Celebración de gol en vivo (idea #28). Depende de liveScoresEnabled.
   goalCelebrationEnabled: boolean;
   // Cortes de la escala de grados de una predicción liquidada.
@@ -218,6 +224,20 @@ export interface MatchRatingsConfig {
   priorMean: number;
   /** Tope de calificaciones por usuario y hora. */
   maxPerHour: number;
+}
+
+/** Tunables del curador de noticias de la Home (idea #17). */
+export interface HomeNewsCuratorConfig {
+  /** Redactar con IA. false = plantilla determinista (sin costo de LLM). */
+  useLlm: boolean;
+  /** Hora UTC de la corrida diaria. */
+  hourUtc: number;
+  /** Tope de anuncios automáticos por día. Acota el gasto. */
+  maxMatchesPerDay: number;
+  /** Antigüedad máxima (días) de la noticia que puede alimentar un anuncio. */
+  maxNewsAgeDays: number;
+  /** No re-scrapear un equipo sincronizado dentro de esta ventana. */
+  newsFreshnessHours: number;
 }
 
 export type SetField = <K extends keyof PredictionConfig>(key: K, value: PredictionConfig[K]) => void;

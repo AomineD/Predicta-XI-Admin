@@ -29,7 +29,7 @@ interface HomeAnnouncement {
   isPublished: boolean;
   startsAt: string | null;
   endsAt: string | null;
-  source: 'manual' | 'auto_today';
+  source: 'manual' | 'auto_today' | 'auto_news';
   dayKey: string | null;
   createdAt: string;
   updatedAt: string;
@@ -391,6 +391,9 @@ export default function HomeAnnouncementsPage() {
                   <div className="flex items-center gap-2 mb-0.5">
                     <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface-3 text-text-secondary">P{e.priority}</span>
                     {e.source === 'auto_today' && <span className="text-[10px] font-sans px-1.5 py-0.5 rounded bg-surface-3 text-text-secondary">AUTO</span>}
+                    {/* Anuncio del curador de noticias (idea #17): se distingue
+                        del manual porque caduca solo y lo reescribe cada corrida. */}
+                    {e.source === 'auto_news' && <span className="text-[10px] font-sans px-1.5 py-0.5 rounded bg-surface-3 text-primary" title="Publicado por el curador de noticias. Caduca en el kickoff.">NOTICIA</span>}
                     {!e.isPublished && <span className="text-[10px] font-sans px-1.5 py-0.5 rounded bg-surface-3 text-warning">DRAFT</span>}
                     {e.linkType !== 'none' && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface-3 text-text-secondary">{e.linkType}</span>}
                   </div>
