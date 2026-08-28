@@ -9,6 +9,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Button } from '@/components/ui/Button';
 import { formatDateTime } from '@/lib/utils';
 import Link from 'next/link';
+import { MarketReturnsCard } from './_components/MarketReturnsCard';
 
 interface Prediction {
   id: string;
@@ -225,6 +226,8 @@ export default function PredictionsPage() {
   return (
     <div>
       <PageHeader title="Predictions" description="All generated predictions" />
+
+      <MarketReturnsCard />
 
       {/* Filters */}
       <div className="flex items-center gap-3 mb-4 flex-wrap">

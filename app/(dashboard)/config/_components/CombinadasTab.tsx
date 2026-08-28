@@ -82,6 +82,24 @@ export function CombinadasTab({
         <Field label="Max combined odds (premium)" subtitle="1.5–20" info="Reject premium combinadas whose product of odds exceeds this.">
           <Input type="number" min={1.5} max={20} step={0.1} className="w-24" value={form.combinadasPremiumMaxOdds ?? 6.0} onChange={(e) => setField('combinadasPremiumMaxOdds', Number(e.target.value))} />
         </Field>
+
+        <Field
+          label="Cuota mínima por pata (premium)"
+          subtitle="1–10 · def. 1.35"
+          info="Cada pata de una combinada premium debe pagar al menos esto. Es lo que hace premium a una combinada de verdad y, a diferencia del edge de abajo, no depende de superar al mercado: una pata a 1.05 no aporta nada a una combinada ambiciosa. Este piso se mantiene SIEMPRE, incluso en la segunda pasada del pool."
+        >
+          <Input type="number" min={1} max={10} step={0.05} className="w-24" value={form.combinadasPremiumOddsFloor ?? 1.35} onChange={(e) => setField('combinadasPremiumOddsFloor', Number(e.target.value))} />
+        </Field>
+
+        <Field
+          label="Edge mínimo (premium)"
+          subtitle="0–50 % · def. 3"
+          info={
+            'Filtro de valor del pool premium. OJO con subirlo: mientras el modelo independiente esté apagado, ese “edge” se calcula como (confianza/100) × cuota − 1, y con la calibración activa (que solo BAJA la confianza) más el anclaje a la probabilidad de mercado, la confianza tiende a 1/cuota — así que la fórmula acaba midiendo el margen de la casa con signo negativo, no valor. Medido sobre 100 combinadas el 2026-08-27: edge medio de pata −7,7 % y 96 % negativos. Pedir +3 % vaciaba el pool y dejó CERO combinadas premium desde el 5 de julio. Ahora, si este filtro deja el pool vacío, el pool se rearma sin él (manteniendo la cuota mínima por pata) y queda anotado en las notas del job.'
+          }
+        >
+          <Input type="number" min={0} max={50} step={0.5} className="w-24" value={form.combinadasPremiumMinEdgePct ?? 3} onChange={(e) => setField('combinadasPremiumMinEdgePct', Number(e.target.value))} />
+        </Field>
       </SectionCard>
     </div>
   );

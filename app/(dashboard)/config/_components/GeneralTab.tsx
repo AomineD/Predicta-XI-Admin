@@ -8,6 +8,14 @@ import { MODELS, MODEL_DEFAULT_MAX_TOKENS, MARKETS, DATA_FIELDS, REASONING_OPTIO
 import type { PredictionConfig, RecommendationsConfig, SetField } from './types';
 
 const DEFAULT_RECOMMENDATIONS_CONFIG: RecommendationsConfig = { minSample: 20, minWinratePct: 55, topK: 4, windowDays: 90 };
+const DEFAULT_SPECIAL_SELECTOR = {
+  maxPicks: 3,
+  minConfidence: 0.55,
+  minEdge: 0.05,
+  oddsFloor: 1.5,
+  requirePricedOdds: true,
+  dedupeEquivalentEvents: true,
+};
 
 export function GeneralTab({ form, setField }: { form: PredictionConfig; setField: SetField }) {
   return (
@@ -130,6 +138,8 @@ export function GeneralTab({ form, setField }: { form: PredictionConfig; setFiel
 
       <PredictionEngineCard form={form} setField={setField} />
 
+      <SpecialMarketsSelectorCard form={form} setField={setField} />
+
       <RecommendationsCard form={form} setField={setField} />
 
       <LowConvictionCard form={form} setField={setField} />
@@ -174,6 +184,60 @@ function LowConvictionCard({ form, setField }: { form: PredictionConfig; setFiel
             )
           }
         />
+      </Field>
+    </SectionCard>
+  );
+}
+
+/** Selector de mercados exóticos (idea #1): los cuatro parámetros que deciden qué
+ *  exóticos llegan al informe, incluidos los dos interruptores anti-relleno. */
+function SpecialMarketsSelectorCard({ form, setField }: { form: PredictionConfig; setField: SetField }) {
+  const sel = form.specialMarketsSelector ?? DEFAULT_SPECIAL_SELECTOR;
+  const setSel = (patch: Partial<NonNullable<PredictionConfig['specialMarketsSelector']>>) =>
+    setField('specialMarketsSelector', { ...sel, ...patch });
+
+  return (
+    <SectionCard
+      title="Selector de mercados exóticos"
+      subtitle="Requiere Special markets ON"
+      info={
+        'Decide cuáles de los mercados exóticos derivados de la matriz Poisson (goles por equipo, portería a cero, gana a cero, combos) llegan al informe. Medido en producción el 2026-08-27 sobre 7 informes: salían SIEMPRE los mismos tres, dos de ellos el mismo suceso ("el local marca" contado como goles del local y como que el visitante no deja la portería a cero), con cuotas de hasta 1.02 pese a que el piso estaba en 1.50 — porque el piso solo se aplicaba a los candidatos con valor y ninguno lo tenía nunca. Estos controles cierran esa puerta.'
+      }
+    >
+      <Field label="Máx. picks por partido" subtitle="0–8 · def. 3" info="Tope de exóticos añadidos a cada informe. Con los filtros de abajo puede emitir MENOS que este número: si nada pasa el filtro se emiten menos exóticos en vez de rellenar con eco barato del favorito.">
+        <Input type="number" min={0} max={8} className="w-24" value={sel.maxPicks}
+          onChange={(e) => setSel({ maxPicks: Math.min(8, Math.max(0, Number(e.target.value) || 0)) })} />
+      </Field>
+
+      <Field label="Cuota mínima" subtitle="1–10 · def. 1.5" info="Piso de cuota. Aplica a TODOS los candidatos, tengan valor o no: por debajo de esto el pick no es un pronóstico, es describir al favorito. Antes solo se aplicaba a los que ya tenían valor y por eso colaban picks a 1.02.">
+        <Input type="number" min={1} max={10} step={0.05} className="w-24" value={sel.oddsFloor}
+          onChange={(e) => setSel({ oddsFloor: Math.min(10, Math.max(1, Number(e.target.value) || 1)) })} />
+      </Field>
+
+      <Field label="Confianza mínima" subtitle="0–0.95 · def. 0.55" info="Piso de confianza para los candidatos SIN valor declarado. Los que sí tienen valor se saltan este piso a propósito: su mérito es el edge, no la probabilidad (un combo a cuota 6 que acierta el 20% es justo lo que busca la feature).">
+        <Input type="number" min={0} max={0.95} step={0.05} className="w-24" value={sel.minConfidence}
+          onChange={(e) => setSel({ minConfidence: Math.min(0.95, Math.max(0, Number(e.target.value) || 0)) })} />
+      </Field>
+
+      <Field label="Edge mínimo" subtitle="0–1 · def. 0.05" info="Edge contra la cuota de Sportium a partir del cual un candidato cuenta como 'con valor' y rankea primero.">
+        <Input type="number" min={0} max={1} step={0.01} className="w-24" value={sel.minEdge}
+          onChange={(e) => setSel({ minEdge: Math.min(1, Math.max(0, Number(e.target.value) || 0)) })} />
+      </Field>
+
+      <Field
+        label="Exigir cuota conocida"
+        subtitle="def. ON"
+        info="Descarta los candidatos que Sportium no cotiza. Importa más de lo que parece: de portería a cero y gana a cero, Sportium SOLO publica el lado 'sí', así que el lado 'no' (el más probable, el aburrido) se quedaba sin precio, no se podía valorar y aun así entraba con confianza 80. Encendido, el selector se queda con el lado 'sí' — que además es el que se sale de lo normal. Apagarlo recupera el comportamiento anterior."
+      >
+        <Toggle value={sel.requirePricedOdds ?? true} onChange={(v) => setSel({ requirePricedOdds: v })} />
+      </Field>
+
+      <Field
+        label="Unificar eventos equivalentes"
+        subtitle="def. ON"
+        info="Dos mercados que describen el mismo suceso cuentan como un solo pick. Hoy 'el local marca' y 'el visitante no deja la portería a cero' son la misma cosa y salían las dos en todos los informes. Solo une equivalencias exactas: gana a cero NO se une con portería a cero, porque no son el mismo suceso."
+      >
+        <Toggle value={sel.dedupeEquivalentEvents ?? true} onChange={(v) => setSel({ dedupeEquivalentEvents: v })} />
       </Field>
     </SectionCard>
   );

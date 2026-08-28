@@ -46,7 +46,17 @@ export interface PredictionConfig {
   // matrix, anchors them to Sportium odds (edge) and emits the best ones to MAX/CLUB.
   specialMarketsEnabled: boolean;
   // Value selector config (round-tripped; tuned via API). Optional in the admin form.
-  specialMarketsSelector?: { maxPicks: number; minConfidence: number; minEdge: number; oddsFloor: number };
+  specialMarketsSelector?: {
+    maxPicks: number;
+    minConfidence: number;
+    minEdge: number;
+    /** Aplica a TODOS los candidatos, no solo a los que tienen valor. */
+    oddsFloor: number;
+    /** Sin cuota conocida no se emite el pick. */
+    requirePricedOdds?: boolean;
+    /** Dos mercados que describen el mismo suceso cuentan como uno. */
+    dedupeEquivalentEvents?: boolean;
+  };
   // Player markets (idea #1, Fase C): engine anchors to Sportium player odds (anytime
   // scorer + assist) and emits the most likely player per market, to MAX/CLUB.
   playerMarketsEnabled: boolean;
@@ -82,6 +92,8 @@ export interface PredictionConfig {
   combinadasRegularExcludedTeams?: number[];
   combinadasRegularMaxOdds?: number;
   combinadasPremiumMaxOdds?: number;
+  combinadasPremiumMinEdgePct?: number;
+  combinadasPremiumOddsFloor?: number;
   enrichmentMode?: string;
   earlyEnrichmentHourUtc?: number;
   /** Per-model max output token override. Empty/missing → backend uses baked-in default. */
