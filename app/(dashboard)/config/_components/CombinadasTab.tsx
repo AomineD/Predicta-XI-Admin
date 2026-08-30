@@ -1,9 +1,22 @@
 'use client';
 
+import { useMutation } from '@tanstack/react-query';
 import { SectionCard, Field, SubHeading, Toggle } from '@/components/ui/form-controls';
 import { Input, Select } from '@/components/ui/inputs';
+import { Button } from '@/components/ui/Button';
+import { api } from '@/lib/api';
 import { LeagueMultiSelect, TeamBlacklistPicker } from './controls';
 import type { CompetitionLite, PredictionConfig, SetField } from './types';
+
+const WEEKDAYS = [
+  { value: 0, label: 'Domingo' },
+  { value: 1, label: 'Lunes' },
+  { value: 2, label: 'Martes' },
+  { value: 3, label: 'Miercoles' },
+  { value: 4, label: 'Jueves' },
+  { value: 5, label: 'Viernes' },
+  { value: 6, label: 'Sabado' },
+];
 
 export function CombinadasTab({
   form,
@@ -14,6 +27,16 @@ export function CombinadasTab({
   setField: SetField;
   competitions: CompetitionLite[];
 }) {
+  // Los disparos manuales entran POR DEBAJO del gate de dia/hora del scheduler,
+  // pero NO por debajo del flag: el backend rechaza ambos con 400 si su switch
+  // esta apagado. Aqui se deshabilita el boton para no gastar el viaje.
+  const runWeeklyStudy = useMutation({
+    mutationFn: () => api.post('/admin/combinadas/weekly/study', {}),
+  });
+  const runWeeklyBuild = useMutation({
+    mutationFn: () => api.post('/admin/combinadas/weekly/generate', {}),
+  });
+
   return (
     <div>
       <SectionCard
@@ -100,6 +123,116 @@ export function CombinadasTab({
         >
           <Input type="number" min={0} max={50} step={0.5} className="w-24" value={form.combinadasPremiumMinEdgePct ?? 3} onChange={(e) => setField('combinadasPremiumMinEdgePct', Number(e.target.value))} />
         </Field>
+
+        <SubHeading>Rango de patas y anti-solapamiento</SubHeading>
+        <Field label="Patas min/max (regular)" subtitle="Dentro del tope global de arriba">
+          <div className="flex items-center gap-2">
+            <Input type="number" min={2} max={8} className="w-20" value={form.combinadasRegularMinLegs ?? 2} onChange={(e) => setField('combinadasRegularMinLegs', Number(e.target.value))} />
+            <span className="text-xs text-text-muted">a</span>
+            <Input type="number" min={2} max={8} className="w-20" value={form.combinadasRegularMaxLegs ?? 3} onChange={(e) => setField('combinadasRegularMaxLegs', Number(e.target.value))} />
+          </div>
+        </Field>
+        <Field label="Patas min/max (premium)" subtitle="Dentro del tope global de arriba">
+          <div className="flex items-center gap-2">
+            <Input type="number" min={2} max={8} className="w-20" value={form.combinadasPremiumMinLegs ?? 2} onChange={(e) => setField('combinadasPremiumMinLegs', Number(e.target.value))} />
+            <span className="text-xs text-text-muted">a</span>
+            <Input type="number" min={2} max={8} className="w-20" value={form.combinadasPremiumMaxLegs ?? 4} onChange={(e) => setField('combinadasPremiumMaxLegs', Number(e.target.value))} />
+          </div>
+        </Field>
+        <Field
+          label="Max. premium por partido"
+          subtitle="def. 1"
+          info="En cuantas combinadas premium distintas puede aparecer un mismo partido. Evita que todas las premium del dia giren alrededor del mismo partido ancla. Es un limite blando: el builder lo relaja a valor+1 si respetarlo dejaria el dia en cero combinadas premium, y lo anota en las notas del job."
+        >
+          <Input type="number" min={1} max={5} className="w-24" value={form.combinadasMaxPremiumPerMatch ?? 1} onChange={(e) => setField('combinadasMaxPremiumPerMatch', Number(e.target.value))} />
+        </Field>
+        <Field label="Equipos excluidos (premium)" subtitle="Salta cualquier combinada premium con estos equipos">
+          <TeamBlacklistPicker value={form.combinadasPremiumExcludedTeams ?? []} onChange={(v) => setField('combinadasPremiumExcludedTeams', v)} />
+        </Field>
+      </SectionCard>
+
+      <SectionCard
+        title="Combinada semanal"
+        subtitle="Producto aparte de la diaria, con winrate propio"
+        info="Una combinada de 3-6 patas escogidas entre los mejores partidos de toda la semana (lunes a domingo, horario de Caracas): una gratis y una premium. Se mide en un winrate separado del de las diarias, porque tiene mas patas y muchisima menos muestra (una por semana). Son DOS corridas: el estudio enriquece los partidos de la semana y la construccion arma la combinada con ese pool. Las patas quedan congeladas al generarse: aunque despues mejore la prediccion de un partido, la combinada publicada no se regenera."
+      >
+        <SubHeading>Estudio de la semana</SubHeading>
+        <Field
+          label="Enabled"
+          subtitle="Enriquece todos los partidos de la semana"
+          info="Sin este pase, la combinada semanal solo podria elegir entre los partidos ya enriquecidos (los de hoy), que es justo lo que hace la diaria. Sube el horizonte de alineaciones probables en la pestana Automations si quieres que alcance al fin de semana."
+        >
+          <Toggle value={form.weeklyStudyEnabled ?? false} onChange={(v) => setField('weeklyStudyEnabled', v)} />
+        </Field>
+        <Field label="Dia" subtitle="Dia (en Caracas) en que corre el estudio">
+          <Select className="w-40" value={String(form.weeklyStudyDayOfWeek ?? 1)} onChange={(e) => setField('weeklyStudyDayOfWeek', Number(e.target.value))}>
+            {WEEKDAYS.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
+          </Select>
+        </Field>
+        <Field
+          label="Hora (Caracas)"
+          subtitle="0-23 - def. 2"
+          info="El dia y la hora se interpretan en horario de Caracas, la misma zona en la que se define la semana (lunes a domingo). Debe ir por delante de la hora de construccion para que el builder encuentre predicciones ya generadas."
+        >
+          <Input type="number" min={0} max={23} className="w-24" value={form.weeklyStudyHourCaracas ?? 2} onChange={(e) => setField('weeklyStudyHourCaracas', Number(e.target.value))} />
+        </Field>
+
+        <SubHeading>Construccion</SubHeading>
+        <Field label="Enabled" subtitle="Genera la combinada de la semana">
+          <Toggle value={form.weeklyCombinadasEnabled ?? false} onChange={(v) => setField('weeklyCombinadasEnabled', v)} />
+        </Field>
+        <Field label="Dia" subtitle="Dia (en Caracas) en que se construye">
+          <Select className="w-40" value={String(form.weeklyCombinadasDayOfWeek ?? 1)} onChange={(e) => setField('weeklyCombinadasDayOfWeek', Number(e.target.value))}>
+            {WEEKDAYS.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
+          </Select>
+        </Field>
+        <Field label="Hora (Caracas)" subtitle="0-23 - def. 6" info="En horario de Caracas, igual que el estudio.">
+          <Input type="number" min={0} max={23} className="w-24" value={form.weeklyCombinadasHourCaracas ?? 6} onChange={(e) => setField('weeklyCombinadasHourCaracas', Number(e.target.value))} />
+        </Field>
+        <Field label="Patas min/max" subtitle="def. 3 a 6">
+          <div className="flex items-center gap-2">
+            <Input type="number" min={2} max={8} className="w-20" value={form.weeklyCombinadasMinLegs ?? 3} onChange={(e) => setField('weeklyCombinadasMinLegs', Number(e.target.value))} />
+            <span className="text-xs text-text-muted">a</span>
+            <Input type="number" min={2} max={8} className="w-20" value={form.weeklyCombinadasMaxLegs ?? 6} onChange={(e) => setField('weeklyCombinadasMaxLegs', Number(e.target.value))} />
+          </div>
+        </Field>
+        <Field label="Cuantas generar" subtitle="Gratis / premium - def. 1 y 1">
+          <div className="flex items-center gap-2">
+            <Input type="number" min={0} max={5} className="w-20" value={form.weeklyCombinadasCountRegular ?? 1} onChange={(e) => setField('weeklyCombinadasCountRegular', Number(e.target.value))} />
+            <span className="text-xs text-text-muted">/</span>
+            <Input type="number" min={0} max={5} className="w-20" value={form.weeklyCombinadasCountPremium ?? 1} onChange={(e) => setField('weeklyCombinadasCountPremium', Number(e.target.value))} />
+          </div>
+        </Field>
+        <Field
+          label="Minimo de predicciones V1"
+          subtitle="def. 12"
+          info="Cuantas predicciones de la semana debe haber antes de construir. Sin este minimo, una corrida que se adelante al estudio armaria la combinada de la semana con los pocos partidos ya enriquecidos, que ademas serian todos del mismo dia. Si no se alcanza, se reintenta en el siguiente minuto."
+        >
+          <Input type="number" min={2} max={200} className="w-24" value={form.weeklyCombinadasMinV1 ?? 12} onChange={(e) => setField('weeklyCombinadasMinV1', Number(e.target.value))} />
+        </Field>
+
+        <div className="flex flex-wrap items-center gap-3 pt-3">
+          <Button
+            variant="secondary"
+            loading={runWeeklyStudy.isPending}
+            disabled={!form.weeklyStudyEnabled}
+            onClick={() => runWeeklyStudy.mutate()}
+          >
+            Run study now
+          </Button>
+          <Button
+            variant="danger"
+            loading={runWeeklyBuild.isPending}
+            disabled={!form.weeklyCombinadasEnabled}
+            onClick={() => runWeeklyBuild.mutate()}
+          >
+            Build weekly now
+          </Button>
+          <span className="text-xs font-sans text-text-muted">
+            Guarda los cambios antes de disparar: los botones leen la config ya
+            persistida. El estudio tarda (un scrape por partido); construye despues.
+          </span>
+        </div>
       </SectionCard>
     </div>
   );

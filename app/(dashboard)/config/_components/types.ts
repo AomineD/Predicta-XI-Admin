@@ -96,6 +96,25 @@ export interface PredictionConfig {
   combinadasPremiumOddsFloor?: number;
   enrichmentMode?: string;
   earlyEnrichmentHourUtc?: number;
+  earlyEnrichmentTargetDayOffset?: number;
+  earlyLineupsMaxHoursBeforeKickoff?: number;
+  weeklyStudyEnabled?: boolean;
+  weeklyStudyDayOfWeek?: number;
+  weeklyStudyHourCaracas?: number;
+  weeklyCombinadasEnabled?: boolean;
+  weeklyCombinadasDayOfWeek?: number;
+  weeklyCombinadasHourCaracas?: number;
+  weeklyCombinadasMinLegs?: number;
+  weeklyCombinadasMaxLegs?: number;
+  weeklyCombinadasCountRegular?: number;
+  weeklyCombinadasCountPremium?: number;
+  weeklyCombinadasMinV1?: number;
+  combinadasRegularMinLegs?: number;
+  combinadasRegularMaxLegs?: number;
+  combinadasPremiumMinLegs?: number;
+  combinadasPremiumMaxLegs?: number;
+  combinadasMaxPremiumPerMatch?: number;
+  combinadasPremiumExcludedTeams?: number[];
   /** Per-model max output token override. Empty/missing → backend uses baked-in default. */
   llmMaxTokens?: Record<string, number>;
 }

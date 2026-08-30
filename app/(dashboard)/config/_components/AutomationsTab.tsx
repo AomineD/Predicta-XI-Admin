@@ -81,10 +81,32 @@ export function AutomationsTab({
         </Field>
 
         {(form.enrichmentMode === 'early' || form.enrichmentMode === 'both') && (
-          <Field label="Early enrichment hour (UTC)" subtitle="0–23" info="When to enrich all today's matches. Generates V1 predictions without lineups.">
-            <Input type="number" min={0} max={23} className="w-24" value={form.earlyEnrichmentHourUtc ?? 7} onChange={(e) => setField('earlyEnrichmentHourUtc', Number(e.target.value))} />
-          </Field>
+          <>
+            <Field label="Early enrichment hour (UTC)" subtitle="0–23" info="Hora a partir de la cual corre el pase temprano. Genera predicciones V1 (sin alineación confirmada), que son las que alimentan las combinadas.">
+              <Input type="number" min={0} max={23} className="w-24" value={form.earlyEnrichmentHourUtc ?? 7} onChange={(e) => setField('earlyEnrichmentHourUtc', Number(e.target.value))} />
+            </Field>
+
+            <Field
+              label="Día que estudia"
+              subtitle="Relativo a hoy, en horario de Caracas"
+              info="Qué día enriquece el pase temprano. «Mañana» combinado con una hora temprana deja las predicciones del día siguiente listas antes de la noche del usuario LATAM, en vez de empezar a generarlas de madrugada. OJO: cuanto más lejos se estudie, menos casas tienen cuotas publicadas, y sin cuotas la predicción no se genera. Verifica la cobertura antes de mover esto a «pasado mañana»."
+            >
+              <Select className="w-48" value={String(form.earlyEnrichmentTargetDayOffset ?? 0)} onChange={(e) => setField('earlyEnrichmentTargetDayOffset', Number(e.target.value))}>
+                <option value="0">Hoy</option>
+                <option value="1">Mañana</option>
+                <option value="2">Pasado mañana</option>
+              </Select>
+            </Field>
+          </>
         )}
+
+        <Field
+          label="Horizonte de alineaciones probables (h)"
+          subtitle="6–168 · def. 48"
+          info="Cuántas horas antes del partido se intenta traer la alineación PROBABLE de Flashscore en la fase 2. Flashscore la publica días antes, pero no para todos los partidos: más allá de este tope el scrape sale en balde y cuesta una navegación por partido y por reintento. La combinada semanal necesita subirlo (mira hasta 7 días vista); 168 = una semana completa."
+        >
+          <Input type="number" min={6} max={168} className="w-24" value={form.earlyLineupsMaxHoursBeforeKickoff ?? 48} onChange={(e) => setField('earlyLineupsMaxHoursBeforeKickoff', Number(e.target.value))} />
+        </Field>
 
         <Field label="Minutes before kickoff" subtitle="How early before kickoff to trigger enrichment">
           <Input type="number" min={15} max={180} className="w-24" value={form.enrichmentQueueMinutesBefore ?? 60} onChange={(e) => setField('enrichmentQueueMinutesBefore', Number(e.target.value))} />
