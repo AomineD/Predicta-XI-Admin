@@ -78,17 +78,22 @@ export function NumInput({
   onChange,
   min = 0,
   max,
+  step,
 }: {
   value: number;
   onChange: (v: number) => void;
   min?: number;
   max?: number;
+  /** Paso del input. Necesario para los campos DECIMALES: sin él, el navegador
+   *  asume paso 1 y marca como inválido cualquier valor con coma. */
+  step?: number;
 }) {
   return (
     <input
       type="number"
       min={min}
       max={max}
+      step={step}
       value={value}
       onChange={(e) => onChange(Number(e.target.value))}
       className="h-9 w-24 px-3 rounded-xl text-sm bg-surface-2 border border-border text-text-primary font-sans transition-colors focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/30"

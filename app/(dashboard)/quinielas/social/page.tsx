@@ -120,6 +120,48 @@ interface SocialConfig {
   standingsOffByOnePoints: number;
   standingsNarrowBandPoints: number;
   standingsWideBandPoints: number;
+  // Escuadras: grupos sociales PERSISTENTES de amigos (no caducan, no liquidan).
+  squadsEnabled: boolean;
+  squadCreationCost: number;
+  maxSquadSizeByTier: Record<string, number>;
+  maxSquadsByTier: Record<string, number>;
+  squadJoinInterstitialEnabled: boolean;
+  // Puntos por combinada armada ganada + su clasificatoria.
+  combinadaPointsEnabled: boolean;
+  combinadaPointsParams: {
+    k: number;
+    legBonus: number;
+    minLegs: number;
+    oddsFloor: number;
+    weeklyScorableCap: number;
+    maxPointsPerCombinada: number;
+  };
+}
+
+/** Vista previa de la fórmula de puntos, con los valores del formulario en vivo.
+ *  Sin esto, mover `k` es a ciegas: el admin no puede saber si acaba de duplicar
+ *  todos los puntajes del ranking. */
+function combinadaPointsPreview(p: {
+  k: number;
+  legBonus: number;
+  minLegs: number;
+  oddsFloor: number;
+  maxPointsPerCombinada: number;
+}): { label: string; points: number }[] {
+  const samples: [number, number][] = [
+    [1.6, 2],
+    [4.0, 3],
+    [12.0, 4],
+    [60.0, 5],
+  ];
+  return samples.map(([odds, legs]) => {
+    const eligible = odds >= p.oddsFloor && legs >= p.minLegs;
+    const raw = p.k * Math.log2(odds) * (1 + p.legBonus * (legs - p.minLegs));
+    const points = eligible
+      ? Math.min(p.maxPointsPerCombinada, Math.max(0, Math.round(raw)))
+      : 0;
+    return { label: `${legs} patas @${odds.toFixed(2)}`, points };
+  });
 }
 
 /* ── competition categories that carry a weight (mirror of scoring.ts) ──────── */
@@ -769,6 +811,77 @@ function ConfigTab() {
         </Field>
         <Field label="Gol de jugador — fallo" subtitle="Resta si el jugador elegido NO marcó (negativo)">
           <NumInput value={f.riskPlayerGoalMissPenalty} onChange={(v) => set('riskPlayerGoalMissPenalty', v)} min={-100} max={0} />
+        </Field>
+      </SectionCard>
+
+      <SectionCard
+        title="Escuadras"
+        subtitle="Grupos sociales persistentes"
+        info="Una escuadra es un grupo de amigos que NO caduca: se crea una vez y desde ahí se invita de golpe a una quiniela o se comparte una combinada con todos. No tiene picks, ni cierre, ni premios — eso sigue siendo cosa de las quinielas. Con el master flag en OFF la app no muestra ninguna entrada a Escuadras y los endpoints responden 403."
+      >
+        <Field label="Squads enabled" subtitle="squadsEnabled" info="Off = inerte. Requiere además que el master social de arriba esté encendido.">
+          <Toggle value={f.squadsEnabled} onChange={(v) => set('squadsEnabled', v)} />
+        </Field>
+        <Field label="Costo de creación" subtitle="Créditos" info="Los suscriptores (PRO/CLUB) están exentos, igual que al crear una quiniela. 0 = gratis para todos.">
+          <NumInput value={f.squadCreationCost} onChange={(v) => set('squadCreationCost', v)} min={0} max={MAX_CREATE_COST} />
+        </Field>
+        <Field label="Miembros máx. — free" info="Se CONGELA al crear: si el dueño baja de plan, la escuadra no expulsa a nadie.">
+          <NumInput value={f.maxSquadSizeByTier.free ?? 10} onChange={(v) => set('maxSquadSizeByTier', { ...f.maxSquadSizeByTier, free: v })} min={1} max={200} />
+        </Field>
+        <Field label="Miembros máx. — PRO">
+          <NumInput value={f.maxSquadSizeByTier.premium ?? 30} onChange={(v) => set('maxSquadSizeByTier', { ...f.maxSquadSizeByTier, premium: v })} min={1} max={200} />
+        </Field>
+        <Field label="Miembros máx. — CLUB">
+          <NumInput value={f.maxSquadSizeByTier.club ?? 100} onChange={(v) => set('maxSquadSizeByTier', { ...f.maxSquadSizeByTier, club: v })} min={1} max={200} />
+        </Field>
+        <Field label="Escuadras propias — free" subtitle="-1 = sin límite">
+          <NumInput value={f.maxSquadsByTier.free ?? 2} onChange={(v) => set('maxSquadsByTier', { ...f.maxSquadsByTier, free: v })} min={-1} max={100} />
+        </Field>
+        <Field label="Escuadras propias — PRO" subtitle="-1 = sin límite">
+          <NumInput value={f.maxSquadsByTier.premium ?? 5} onChange={(v) => set('maxSquadsByTier', { ...f.maxSquadsByTier, premium: v })} min={-1} max={100} />
+        </Field>
+        <Field label="Escuadras propias — CLUB" subtitle="-1 = sin límite">
+          <NumInput value={f.maxSquadsByTier.club ?? -1} onChange={(v) => set('maxSquadsByTier', { ...f.maxSquadsByTier, club: v })} min={-1} max={100} />
+        </Field>
+        <Field label="Interstitial al unirse" subtitle="squadJoinInterstitialEnabled" info="Anuncio a pantalla completa al entrar a una escuadra. Nunca se muestra a suscriptores. Flag propio, separado del de quinielas, para poder apagar uno sin el otro.">
+          <Toggle value={f.squadJoinInterstitialEnabled} onChange={(v) => set('squadJoinInterstitialEnabled', v)} />
+        </Field>
+      </SectionCard>
+
+      <SectionCard
+        title="Puntos por combinada armada"
+        subtitle="Clasificatoria de escuadra"
+        info="Una combinada armada por el usuario que resulta ACIERTO otorga puntos según su cuota total y su número de patas, y esos puntos ordenan la clasificatoria de la escuadra. La curva es LOGARÍTMICA a propósito: con un pago proporcional a la cuota, una sola combinada de cuota alta borra el ranking y gana la suerte en vez del acierto sostenido. Perder no resta puntos (crear ya cuesta créditos); el freno al volumen es el cupo semanal."
+      >
+        <Field label="Combinada points enabled" subtitle="combinadaPointsEnabled" info="Off = inerte: el settlement no otorga nada y la app no muestra puntos ni clasificatoria.">
+          <Toggle value={f.combinadaPointsEnabled} onChange={(v) => set('combinadaPointsEnabled', v)} />
+        </Field>
+        <Field label="Escala (k)" subtitle="Multiplica todos los puntajes" info="pts = k × log2(cuota) × (1 + bono×(patas − mínimo)). Subirlo infla el ranking entero por igual; no cambia el orden.">
+          <NumInput value={f.combinadaPointsParams.k} onChange={(v) => set('combinadaPointsParams', { ...f.combinadaPointsParams, k: v })} min={1} max={100} />
+        </Field>
+        <Field label="Bono por pata extra" subtitle="0.10 = +10% por pata sobre el mínimo">
+          <NumInput value={f.combinadaPointsParams.legBonus} onChange={(v) => set('combinadaPointsParams', { ...f.combinadaPointsParams, legBonus: v })} min={0} max={2} step={0.05} />
+        </Field>
+        <Field label="Patas mínimas" info="Con menos patas la combinada se juega igual, pero no puntúa.">
+          <NumInput value={f.combinadaPointsParams.minLegs} onChange={(v) => set('combinadaPointsParams', { ...f.combinadaPointsParams, minLegs: v })} min={2} max={10} />
+        </Field>
+        <Field label="Piso de cuota total" subtitle="Anti-chalk" info="Por debajo de esta cuota no se otorgan puntos: evita farmear el ranking con combinadas casi seguras.">
+          <NumInput value={f.combinadaPointsParams.oddsFloor} onChange={(v) => set('combinadaPointsParams', { ...f.combinadaPointsParams, oddsFloor: v })} min={1.01} max={100} step={0.1} />
+        </Field>
+        <Field label="Combinadas puntuables por semana" subtitle="Anti-volumen" info="Mínimo 1: con 0 ninguna combinada puntuaría y la feature quedaría muda con el toggle en ON. Solo las N primeras combinadas CREADAS de cada semana (lunes a domingo, hora de Caracas) otorgan puntos. Las demás se juegan igual y cuentan como victoria, pero suman 0. La semana es la de CREACIÓN de la combinada, no la de liquidación.">
+          <NumInput value={f.combinadaPointsParams.weeklyScorableCap} onChange={(v) => set('combinadaPointsParams', { ...f.combinadaPointsParams, weeklyScorableCap: v })} min={1} max={100} />
+        </Field>
+        <Field label="Techo por combinada" subtitle="Puntos máximos de una sola" info="Tope duro contra una cuota desmedida.">
+          <NumInput value={f.combinadaPointsParams.maxPointsPerCombinada} onChange={(v) => set('combinadaPointsParams', { ...f.combinadaPointsParams, maxPointsPerCombinada: v })} min={1} max={10000} />
+        </Field>
+        <Field label="Vista previa" subtitle="Con los valores de arriba">
+          <div className="flex flex-wrap gap-2">
+            {combinadaPointsPreview(f.combinadaPointsParams).map((row) => (
+              <span key={row.label} className="rounded border border-white/10 px-2 py-1 text-xs text-zinc-300">
+                {row.label} → <strong className="text-zinc-100">{row.points} pts</strong>
+              </span>
+            ))}
+          </div>
         </Field>
       </SectionCard>
 
