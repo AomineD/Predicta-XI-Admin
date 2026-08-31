@@ -95,6 +95,10 @@ export interface PredictionConfig {
   featuredLeagueIds: number[];
   combinadasEnabled?: boolean;
   combinadasBasePredictionHourUtc?: number;
+  /** Intentos fallidos maximos por dia/semana antes de dejar de reintentar (bucle del 2026-08-30). */
+  combinadasMaxDailyAttempts?: number;
+  /** Minutos minimos entre dos intentos del scheduler de combinadas. */
+  combinadasRetryMinutes?: number;
   combinadasMaxLegs?: number;
   combinadasMinConfidence?: number;
   combinadasCountRegular?: number;

@@ -58,6 +58,20 @@ export function CombinadasTab({
         <Field label="Max legs" subtitle="Maximum matches per combinada (2-5)">
           <Input type="number" min={2} max={5} className="w-24" value={form.combinadasMaxLegs ?? 5} onChange={(e) => setField('combinadasMaxLegs', Number(e.target.value))} />
         </Field>
+        <Field
+          label="Max attempts per day"
+          subtitle="Failed attempts before giving up for the day (1-50)"
+          info="The cron ticks every minute and only a completed run closes the day, so a long outage retries forever. On 2026-08-30 a DeepSeek balance error produced 428 attempts (957 rejected LLM calls) between 08:30 and 15:07 UTC. This cap bounds the worst case whatever the cause. Also applies to the weekly combinada."
+        >
+          <Input type="number" min={1} max={50} className="w-24" value={form.combinadasMaxDailyAttempts ?? 5} onChange={(e) => setField('combinadasMaxDailyAttempts', Number(e.target.value))} />
+        </Field>
+        <Field
+          label="Retry spacing (minutes)"
+          subtitle="Minimum gap between two attempts (1-240)"
+          info="Backoff between retries. The cron itself runs every minute because the hour gate lives inside the tick, so without this a retry means hammering the provider 60 times an hour. Default 15 min: 5 attempts cover ~1 h of transient failure before the day closes."
+        >
+          <Input type="number" min={1} max={240} className="w-24" value={form.combinadasRetryMinutes ?? 15} onChange={(e) => setField('combinadasRetryMinutes', Number(e.target.value))} />
+        </Field>
         <Field label="Risk mode" info="Precise = conservative picks. Bold = avoids ultra-safe odds (under 1.30).">
           <Select className="w-32" value={form.combinadasRiskMode ?? 'precise'} onChange={(e) => setField('combinadasRiskMode', e.target.value)}>
             <option value="precise">Precise</option>
