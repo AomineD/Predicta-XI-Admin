@@ -56,10 +56,25 @@ export interface PredictionConfig {
     requirePricedOdds?: boolean;
     /** Dos mercados que describen el mismo suceso cuentan como uno. */
     dedupeEquivalentEvents?: boolean;
+    /** Cuota desde la que un candidato cuenta como "no obvio" y entra por valor. */
+    longshotOddsFloor?: number;
+    /** Retorno esperado mínimo (p × cuota) para admitir un no-obvio. */
+    minExpectedReturn?: number;
+    /** Plazas reservadas a no-obvios para que el favorito no se lleve todas. */
+    reserveLongshotSlots?: number;
   };
   // Player markets (idea #1, Fase C): engine anchors to Sportium player odds (anytime
   // scorer + assist) and emits the most likely player per market, to MAX/CLUB.
   playerMarketsEnabled: boolean;
+  // Umbrales del inyector de jugador. `bookTargetSum` son los goleadores distintos
+  // esperados por partido (el mercado no es excluyente: su suma justa ronda 2.4, no 1).
+  playerMarketsConfig?: {
+    maxPicks: number;
+    minConfidence: number;
+    /** Corrige la probabilidad implícita por el margen del libro antes de calibrar. */
+    devigEnabled?: boolean;
+    bookTargetSum?: number;
+  };
   // Recomendaciones por mercado (idea #24): flag maestro + umbrales del generador.
   // Con ON, el endpoint premium /stats/recommendations expone los mercados donde el
   // motor viene acertando más (winrate real de prediction_pick_stats).

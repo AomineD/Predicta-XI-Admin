@@ -15,6 +15,15 @@ const DEFAULT_SPECIAL_SELECTOR = {
   oddsFloor: 1.5,
   requirePricedOdds: true,
   dedupeEquivalentEvents: true,
+  longshotOddsFloor: 2.5,
+  minExpectedReturn: 0.85,
+  reserveLongshotSlots: 1,
+};
+const DEFAULT_PLAYER_MARKETS_CONFIG = {
+  maxPicks: 2,
+  minConfidence: 0.2,
+  devigEnabled: true,
+  bookTargetSum: 2.4,
 };
 
 export function GeneralTab({ form, setField }: { form: PredictionConfig; setField: SetField }) {
@@ -140,6 +149,8 @@ export function GeneralTab({ form, setField }: { form: PredictionConfig; setFiel
 
       <SpecialMarketsSelectorCard form={form} setField={setField} />
 
+      <PlayerMarketsCard form={form} setField={setField} />
+
       <RecommendationsCard form={form} setField={setField} />
 
       <LowConvictionCard form={form} setField={setField} />
@@ -238,6 +249,78 @@ function SpecialMarketsSelectorCard({ form, setField }: { form: PredictionConfig
         info="Dos mercados que describen el mismo suceso cuentan como un solo pick. Hoy 'el local marca' y 'el visitante no deja la portería a cero' son la misma cosa y salían las dos en todos los informes. Solo une equivalencias exactas: gana a cero NO se une con portería a cero, porque no son el mismo suceso."
       >
         <Toggle value={sel.dedupeEquivalentEvents ?? true} onChange={(v) => setSel({ dedupeEquivalentEvents: v })} />
+      </Field>
+
+      <Field
+        label="Cuota de pick no obvio"
+        subtitle="1.8–20 · def. 2.5"
+        info="Cuota a partir de la cual un candidato entra al informe por lo que PAGA en vez de por lo probable que es. Existe porque el piso de confianza, por definición, elige al favorito: medido en producción, los combos ('ambos marcan y total', 'resultado y ambos marcan') tenían cuota en 112 de 128 partidos y no se emitieron NI UNA VEZ, porque un combo a 2.75 implica un 33% y nunca llegaba al 55% exigido. CUIDADO al bajarlo: esta puerta se salta el piso de confianza, así que acercarlo a la cuota mínima de arriba no relaja el filtro, lo apaga — todo candidato con precio pasaría a ser 'no obvio'. Por eso el servidor no lo deja bajar de 1.8."
+      >
+        <Input type="number" min={1.8} max={20} step={0.1} className="w-24" value={sel.longshotOddsFloor ?? 2.5}
+          onChange={(e) => setSel({ longshotOddsFloor: Math.min(20, Math.max(1.8, Number(e.target.value) || 1.8)) })} />
+      </Field>
+
+      <Field
+        label="Retorno mínimo del no obvio"
+        subtitle="0.5–2 · def. 0.85"
+        info="Filtro de calidad del pick no obvio: probabilidad × cuota. NO hay que subirlo por encima de 1 — mientras la probabilidad del motor salga de la matriz anclada al mercado, el retorno de cualquier candidato honesto queda por debajo de 1 por el margen de la casa, así que exigir 1 apagaría la puerta entera. Lo que filtra es la basura: el candidato que el motor ve mucho peor de lo que lo cotiza Sportium. El servidor no lo deja bajar de 0.5, porque en 0 entraría cualquier cosa."
+      >
+        <Input type="number" min={0.5} max={2} step={0.01} className="w-24" value={sel.minExpectedReturn ?? 0.85}
+          onChange={(e) => setSel({ minExpectedReturn: Math.min(2, Math.max(0.5, Number(e.target.value) || 0.5)) })} />
+      </Field>
+
+      <Field
+        label="Plazas reservadas a no obvios"
+        subtitle="0–8 · def. 1"
+        info="Cuántas de las plazas de arriba se guardan para un pick no obvio. Sin reserva el favorito gana igual: ordenar por retorno esperado premia al barato (un 1.60 al 60% rinde 0.96; un 5.50 al 17% rinde 0.94), así que el chalk se llevaba las tres plazas. Si no hay ningún no obvio admisible no reserva nada — nunca hace que salgan menos picks. En 0 vuelve al comportamiento anterior."
+      >
+        <Input type="number" min={0} max={8} className="w-24" value={sel.reserveLongshotSlots ?? 1}
+          onChange={(e) => setSel({ reserveLongshotSlots: Math.min(8, Math.max(0, Number(e.target.value) || 0)) })} />
+      </Field>
+    </SectionCard>
+  );
+}
+
+/** Umbrales del inyector de mercados de jugador (idea #1, Fase C), incluida la
+ *  corrección del margen del libro de goleador. */
+function PlayerMarketsCard({ form, setField }: { form: PredictionConfig; setField: SetField }) {
+  const pm = form.playerMarketsConfig ?? DEFAULT_PLAYER_MARKETS_CONFIG;
+  const setPm = (patch: Partial<NonNullable<PredictionConfig['playerMarketsConfig']>>) =>
+    setField('playerMarketsConfig', { ...pm, ...patch });
+
+  return (
+    <SectionCard
+      title="Mercados de jugador"
+      subtitle="Requiere Player markets ON"
+      info={
+        'Controla los picks de goleador y asistencia. El ajuste importante es la corrección del margen: el libro de goleador de Sportium lista unos 40 jugadores cuyas probabilidades implícitas suman entre 4.7 y 8.6, cuando la suma honesta ronda 2.4. Tomarlas crudas inflaba la confianza: medido sobre 180 picks ya liquidados con el settlement arreglado, declaraban un 41.5% de acierto y acertaban el 29.4% — el peor mercado del catálogo.'
+      }
+    >
+      <Field label="Máx. picks por partido" subtitle="0–6 · def. 2" info="Tope de picks de jugador por informe (como mucho uno por mercado: goleador y asistencia).">
+        <Input type="number" min={0} max={6} className="w-24" value={pm.maxPicks}
+          onChange={(e) => setPm({ maxPicks: Math.min(6, Math.max(0, Number(e.target.value) || 0)) })} />
+      </Field>
+
+      <Field label="Confianza mínima" subtitle="0–0.95 · def. 0.2" info="Piso de confianza para emitir un pick de jugador, ya corregido el margen. Con la corrección encendida las confianzas bajan bastante, así que un piso alto deja de emitir picks de jugador — que es el comportamiento correcto cuando el mercado no da para más.">
+        <Input type="number" min={0} max={0.95} step={0.05} className="w-24" value={pm.minConfidence}
+          onChange={(e) => setPm({ minConfidence: Math.min(0.95, Math.max(0, Number(e.target.value) || 0)) })} />
+      </Field>
+
+      <Field
+        label="Corregir margen del libro"
+        subtitle="def. ON"
+        info="Reparte el margen del libro entre todos los jugadores antes de calibrar, en vez de tomar 1/cuota tal cual. Apagarlo recupera el comportamiento anterior, que está medido en ROI −30.8%."
+      >
+        <Toggle value={pm.devigEnabled ?? true} onChange={(v) => setPm({ devigEnabled: v })} />
+      </Field>
+
+      <Field
+        label="Goleadores esperados"
+        subtitle="0.5–10 · def. 2.4"
+        info="Suma objetivo del libro, en goleadores DISTINTOS esperados por partido. No es una probabilidad y no debe valer 1: el mercado no es excluyente (varios jugadores pueden marcar en el mismo partido), así que su suma justa se parece al número de goleadores que se espera ver. Bajarlo hace la corrección más agresiva; subirlo, más suave. Nunca escala hacia arriba: si un libro ya suma menos que esto, se deja intacto."
+      >
+        <Input type="number" min={0.5} max={10} step={0.1} className="w-24" value={pm.bookTargetSum ?? 2.4}
+          onChange={(e) => setPm({ bookTargetSum: Math.min(10, Math.max(0.5, Number(e.target.value) || 0.5)) })} />
       </Field>
     </SectionCard>
   );
