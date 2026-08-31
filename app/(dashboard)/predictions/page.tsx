@@ -19,6 +19,13 @@ interface Prediction {
   settlement: string;
   settledMarkets: number | null;
   wonMarkets: number | null;
+  /** Conteo del grado: el mismo, pero sin los picks de longshot (elegidos por la cuota
+   *  que pagan y no por su probabilidad). Es el que ve el usuario en la app, y el que
+   *  usan el badge, el filtro "Accuracy range" y el orden por Accuracy. La columna
+   *  "Markets" sigue mostrando el conteo COMPLETO a propósito: ahí interesa saber cuántos
+   *  mercados se evaluaron de verdad. */
+  gradeSettledMarkets?: number | null;
+  gradeWonMarkets?: number | null;
   createdAt: string | null;
   homeTeam?: { id: number; name: string; short_name: string; logo: string } | string;
   awayTeam?: { id: number; name: string; short_name: string; logo: string } | string;
@@ -163,15 +170,25 @@ export default function PredictionsPage() {
         if (row.settlement === 'pending' || row.settlement === 'void') {
           return <StatusBadge status={row.settlement} />;
         }
-        if (row.wonMarkets != null && row.settledMarkets != null && row.settledMarkets > 0) {
-          const pct = Math.round((row.wonMarkets / row.settledMarkets) * 100);
+        // El badge grada con el MISMO conteo que la app: el del grado, que excluye los
+        // picks de valor. Se cae al completo en lo liquidado antes de la migración 0168.
+        const gradeSettled =
+          row.gradeSettledMarkets != null && row.gradeSettledMarkets > 0
+            ? row.gradeSettledMarkets
+            : row.settledMarkets;
+        const gradeWon =
+          row.gradeSettledMarkets != null && row.gradeSettledMarkets > 0
+            ? (row.gradeWonMarkets ?? 0)
+            : row.wonMarkets;
+        if (gradeWon != null && gradeSettled != null && gradeSettled > 0) {
+          const pct = Math.round((gradeWon / gradeSettled) * 100);
           let label: string;
           let colorClass: string;
           // Escala única compartida con la app (prediction_grade.dart) y el push
           // de resultado (shared/prediction-grade.ts): mismos cortes (los del
           // admin), mismos nombres, mismos colores. Cero aciertos es su propio
           // grado: no es "poco", es no haber acertado nada.
-          if (row.wonMarkets <= 0) {
+          if (gradeWon <= 0) {
             label = 'FATAL'; colorClass = 'bg-danger/15 text-danger';
           } else if (pct >= 100) {
             label = 'PERFECTO'; colorClass = 'bg-success/15 text-success';
