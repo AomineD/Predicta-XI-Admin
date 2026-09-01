@@ -832,6 +832,16 @@ export function MaintenanceTab() {
                 onChange={(e) => setBadgesCfg({ combinadaGlobalMinScored: Number(e.target.value) })}
               />
             </Field>
+            <Field
+              label="Exigir App Check en el anti-farming"
+              subtitle="def. activado"
+              info="Para contar como participante real de una quiniela que otorga insignias, el miembro tiene que haber entrado desde una instalación verificada de la app (Play Integrity / App Attest). Sin esto, lo único que separa a un amigo de una segunda cuenta es el identificador de dispositivo, que lo manda el propio cliente y un script puede cambiar a voluntad: tres cuentas bastarían para desbloquear Campeón, Perfecto y, repitiendo dos semanas, Perfección — todas permanentes. ⚠️ Con esto activado, un miembro solo cuenta si su entrada al grupo quedó verificada. Eso incluye a los que YA estaban: quien entró antes de que la app atestara figura como no verificado y no contará, aunque la app empiece a atestar hoy. Antes de encender las insignias, revisa cuántos miembros tienen la verificación puesta; si no la tiene casi nadie, ninguna quiniela otorgará insignias de hazaña. El log del backend lo avisa (badges.gate.attestation) cuando descarta miembros por este motivo."
+            >
+              <Toggle
+                value={badges.badgesConfig.requireAttestedMembers}
+                onChange={(v) => setBadgesCfg({ requireAttestedMembers: v })}
+              />
+            </Field>
 
             <SubHeading>
               Pesos

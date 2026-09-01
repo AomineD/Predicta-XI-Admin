@@ -272,6 +272,8 @@ export interface BadgeThresholds {
 export interface BadgesConfig {
   maxVisible: number;
   combinadaGlobalMinScored: number;
+  /** Exigir App Check para que un miembro cuente en el gate anti-farming. */
+  requireAttestedMembers: boolean;
   weights: Record<string, number>;
   thresholds: BadgeThresholds;
 }
