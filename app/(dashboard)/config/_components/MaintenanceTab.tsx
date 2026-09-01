@@ -3,18 +3,20 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { SectionCard, Field, Toggle } from '@/components/ui/form-controls';
+import { SectionCard, Field, Toggle, SubHeading } from '@/components/ui/form-controls';
 import { Input, Textarea } from '@/components/ui/inputs';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { InfoPopover } from '@/components/ui/InfoPopover';
 import { useToast } from '@/components/ui/ToastProvider';
 import type {
+  BadgesConfig,
   HomeNewsCuratorConfig,
   MaintenanceCreditsConfig,
   MatchRatingsConfig,
   PredictionGradeScale,
 } from './types';
+import { BADGE_ROWS } from './types';
 
 type ReEnrichPreview = {
   dryRun: true;
@@ -236,6 +238,45 @@ export function MaintenanceTab() {
     },
     onError: (err: Error) => toast.error(err.message),
   });
+
+  // ── Insignias de usuario ──
+  const [badgesForm, setBadgesForm] = useState<{
+    badgesEnabled: boolean;
+    badgesConfig: BadgesConfig;
+  } | null>(null);
+  const badgesInitial = useMemo(
+    () =>
+      maintCfg
+        ? { badgesEnabled: maintCfg.badgesEnabled, badgesConfig: maintCfg.badgesConfig }
+        : null,
+    [maintCfg],
+  );
+  const badges = badgesForm ?? badgesInitial;
+
+  const saveBadges = useMutation({
+    mutationFn: (body: { badgesEnabled: boolean; badgesConfig: BadgesConfig }) =>
+      api.put('/admin/credits-config', body),
+    onSuccess: () => {
+      setBadgesForm(null);
+      toast.success('Badges settings saved.');
+      invalidateMaint();
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  /** Patch parcial sobre la config de insignias, conservando el resto. */
+  const setBadgesCfg = (patch: Partial<BadgesConfig>): void => {
+    if (!badges) return;
+    setBadgesForm({ ...badges, badgesConfig: { ...badges.badgesConfig, ...patch } });
+  };
+  const setBadgeWeight = (key: string, value: number): void => {
+    if (!badges) return;
+    setBadgesCfg({ weights: { ...badges.badgesConfig.weights, [key]: value } });
+  };
+  const setBadgeThreshold = (key: keyof BadgesConfig['thresholds'], value: number): void => {
+    if (!badges) return;
+    setBadgesCfg({ thresholds: { ...badges.badgesConfig.thresholds, [key]: value } });
+  };
 
   // ── Match ratings (idea #30) ──
   const [matchRatingsForm, setMatchRatingsForm] = useState<{
@@ -744,6 +785,216 @@ export function MaintenanceTab() {
               </Button>
               {subIdentity.subscriberIdentityEnabled && (
                 <span className="text-xs font-sans text-success">Subscriber identity is on for users on a build that includes it.</span>
+              )}
+            </div>
+          </>
+        )}
+      </SectionCard>
+
+      {/* Insignias de usuario */}
+      <SectionCard
+        title="Insignias"
+        subtitle="Ship-dark · 18 insignias"
+        info="Logros que el sistema otorga solo: nadie elige las suyas. Se muestran como chips en el perfil (el sheet de un miembro y la pantalla completa) y la de más peso aparece junto al nombre en las tablas. Las de posición se recalculan cada hora y se retiran cuando dejas de cumplirlas; las de hazaña son para siempre. El código viaja en el build de la app pero queda oculto hasta encenderlo aquí — enciéndelo solo cuando la versión que lo incluye ya esté viva en las tiendas."
+      >
+        {!badges ? (
+          <p className="text-text-muted text-sm font-sans py-3">Loading…</p>
+        ) : (
+          <>
+            <Field
+              label="Insignias habilitadas"
+              info="Apagado = no se otorga ninguna insignia, el perfil no las devuelve y la app se ve como antes. Apagarlo después de haberlas repartido las esconde, no las borra: al volver a encenderlo siguen ahí."
+            >
+              <Toggle
+                value={badges.badgesEnabled}
+                onChange={(v) => setBadgesForm({ ...badges, badgesEnabled: v })}
+              />
+            </Field>
+            <Field
+              label="Máximo visible"
+              subtitle="def. 10"
+              info="Cuántas insignias como mucho se muestran en un perfil. Se eligen por peso, después de descartar las redundantes (quien tiene 'Podio global' no ve además 'Top 100')."
+            >
+              <Input
+                type="number"
+                value={badges.badgesConfig.maxVisible}
+                onChange={(e) => setBadgesCfg({ maxVisible: Number(e.target.value) })}
+              />
+            </Field>
+            <Field
+              label="Muestra mínima del ranking global de combinadas"
+              subtitle="def. 10 combinadas liquidadas"
+              info="Combinadas ya liquidadas que hacen falta para entrar en el ranking mundial de combinadas. Sin este suelo, quien acertó una sola combinada de cuota alta sale en el podio por delante de quien lleva cien. Si lo subes demasiado el ranking global se queda vacío."
+            >
+              <Input
+                type="number"
+                value={badges.badgesConfig.combinadaGlobalMinScored}
+                onChange={(e) => setBadgesCfg({ combinadaGlobalMinScored: Number(e.target.value) })}
+              />
+            </Field>
+
+            <SubHeading>
+              Pesos
+              <InfoPopover label="Pesos de las insignias">El peso decide qué insignias ganan sitio en el perfil y en qué orden se pintan. Más peso = más arriba. No cambia quién las gana, solo cuáles se ven cuando alguien tiene más de las que caben.</InfoPopover>
+            </SubHeading>
+            {BADGE_ROWS.map((row) => (
+              <Field key={row.key} label={row.label} subtitle={row.group}>
+                <Input
+                  type="number"
+                  value={badges.badgesConfig.weights[row.key] ?? 0}
+                  onChange={(e) => setBadgeWeight(row.key, Number(e.target.value))}
+                />
+              </Field>
+            ))}
+
+            <SubHeading>
+              Umbrales
+              <InfoPopover label="Umbrales de las insignias">Qué hace falta para ganar cada insignia. Las tres de estilo y desliz exigen además una muestra mínima: nunca se le cuelga a nadie por cuatro jugadas.</InfoPopover>
+            </SubHeading>
+            <Field
+              label="Participantes mínimos"
+              subtitle="def. 3"
+              info="Cuánta gente tiene que haber competido de verdad (enviaron picks y quedaron clasificados) para que una quiniela otorgue insignias. Es la defensa anti-farming: sin ella, crear una quiniela en solitario y 'ganarla' regala la insignia de Campeón por unos pocos créditos."
+            >
+              <Input
+                type="number"
+                value={badges.badgesConfig.thresholds.minParticipants}
+                onChange={(e) => setBadgeThreshold('minParticipants', Number(e.target.value))}
+              />
+            </Field>
+            <Field
+              label="Partidos mínimos por semana"
+              subtitle="def. 5"
+              info="Partidos que tiene que tener una jornada para que cuente como pleno. Sin este suelo, acertar el marcador de una quiniela de un solo partido otorgaba 'Perfecto' y 'Maestro' a la vez."
+            >
+              <Input
+                type="number"
+                value={badges.badgesConfig.thresholds.minFixturesPerWeek}
+                onChange={(e) => setBadgeThreshold('minFixturesPerWeek', Number(e.target.value))}
+              />
+            </Field>
+            <Field label="Cazacuotas: cuota mínima" subtitle="def. 8.00">
+              <Input
+                type="number"
+                step="0.5"
+                value={badges.badgesConfig.thresholds.cazacuotasMinOdds}
+                onChange={(e) => setBadgeThreshold('cazacuotasMinOdds', Number(e.target.value))}
+              />
+            </Field>
+            <Field label="Vidente de llaves: rondas seguidas" subtitle="def. 4">
+              <Input
+                type="number"
+                value={badges.badgesConfig.thresholds.videnteLlavesMinStreak}
+                onChange={(e) => setBadgeThreshold('videnteLlavesMinStreak', Number(e.target.value))}
+              />
+            </Field>
+            <Field label="Marcador clavado: exactos acumulados" subtitle="def. 25">
+              <Input
+                type="number"
+                value={badges.badgesConfig.thresholds.marcadorClavadoMinExact}
+                onChange={(e) => setBadgeThreshold('marcadorClavadoMinExact', Number(e.target.value))}
+              />
+            </Field>
+            <Field label="Veterano: quinielas jugadas" subtitle="def. 50">
+              <Input
+                type="number"
+                value={badges.badgesConfig.thresholds.veteranoMinGroups}
+                onChange={(e) => setBadgeThreshold('veteranoMinGroups', Number(e.target.value))}
+              />
+            </Field>
+            <Field
+              label="Ventana de estilo (días)"
+              subtitle="def. 90"
+              info="Cuánto hacia atrás se mira para juzgar los rasgos de estilo. Una ventana corta reacciona rápido pero es injusta con una mala racha; una larga tarda en soltar a quien ya mejoró."
+            >
+              <Input
+                type="number"
+                value={badges.badgesConfig.thresholds.riskWindowDays}
+                onChange={(e) => setBadgeThreshold('riskWindowDays', Number(e.target.value))}
+              />
+            </Field>
+            <Field label="Riesgos innecesarios: picks mínimos" subtitle="def. 10">
+              <Input
+                type="number"
+                value={badges.badgesConfig.thresholds.riskMinPicks}
+                onChange={(e) => setBadgeThreshold('riskMinPicks', Number(e.target.value))}
+              />
+            </Field>
+            <Field
+              label="Riesgos innecesarios: acierto máximo"
+              subtitle="0 a 1 · def. 0.25"
+              info="Se otorga cuando la tasa de acierto en riesgos queda POR DEBAJO de este valor. 0.25 = acierta menos de uno de cada cuatro."
+            >
+              <Input
+                type="number"
+                step="0.05"
+                value={badges.badgesConfig.thresholds.riskMaxHitRate}
+                onChange={(e) => setBadgeThreshold('riskMaxHitRate', Number(e.target.value))}
+              />
+            </Field>
+            <Field label="Uno de más: patas mínimas" subtitle="def. 4">
+              <Input
+                type="number"
+                value={badges.badgesConfig.thresholds.unoDeMasMinLegs}
+                onChange={(e) => setBadgeThreshold('unoDeMasMinLegs', Number(e.target.value))}
+              />
+            </Field>
+            <Field label="Uno de más: combinadas mínimas" subtitle="def. 5">
+              <Input
+                type="number"
+                value={badges.badgesConfig.thresholds.unoDeMasMinCombinadas}
+                onChange={(e) => setBadgeThreshold('unoDeMasMinCombinadas', Number(e.target.value))}
+              />
+            </Field>
+            <Field
+              label="Uno de más: proporción"
+              subtitle="0 a 1 · def. 0.5"
+              info="Qué parte de sus combinadas perdidas tienen que haberse caído por una sola pata. 0.5 = la mitad o más."
+            >
+              <Input
+                type="number"
+                step="0.05"
+                value={badges.badgesConfig.thresholds.unoDeMasMinShare}
+                onChange={(e) => setBadgeThreshold('unoDeMasMinShare', Number(e.target.value))}
+              />
+            </Field>
+            <Field label="Sin puntería: picks mínimos" subtitle="def. 30">
+              <Input
+                type="number"
+                value={badges.badgesConfig.thresholds.sinPunteriaMinPicks}
+                onChange={(e) => setBadgeThreshold('sinPunteriaMinPicks', Number(e.target.value))}
+              />
+            </Field>
+            <Field
+              label="Sin puntería: fracción del promedio"
+              subtitle="0 a 1 · def. 0.6"
+              info="Se otorga cuando la precisión del usuario cae por debajo de esta fracción del promedio de toda la comunidad. 0.6 = acierta menos del 60 % de lo que acierta el jugador medio. Bájalo para que sea más difícil de ganar."
+            >
+              <Input
+                type="number"
+                step="0.05"
+                value={badges.badgesConfig.thresholds.sinPunteriaMaxRatio}
+                onChange={(e) => setBadgeThreshold('sinPunteriaMaxRatio', Number(e.target.value))}
+              />
+            </Field>
+
+            <div className="flex items-center gap-3 pt-3">
+              <Button
+                variant="primary"
+                loading={saveBadges.isPending}
+                onClick={() =>
+                  saveBadges.mutate({
+                    badgesEnabled: badges.badgesEnabled,
+                    badgesConfig: badges.badgesConfig,
+                  })
+                }
+              >
+                Save badges
+              </Button>
+              {badges.badgesEnabled && (
+                <span className="text-xs font-sans text-success">
+                  Badges are on for users on a build that includes them.
+                </span>
               )}
             </div>
           </>
