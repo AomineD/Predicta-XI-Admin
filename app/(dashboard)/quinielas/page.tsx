@@ -10,6 +10,7 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Button } from '@/components/ui/Button';
 import { QuinielaSubnav } from '@/components/quinielas/QuinielaSubnav';
+import { SeasonYearField } from '@/components/quinielas/SeasonYearField';
 import { formatDateTime } from '@/lib/utils';
 
 interface QuinielaSummary {
@@ -178,7 +179,13 @@ function CreateQuinielaModal({ onClose, onCreated }: CreateQuinielaModalProps) {
             <label className="block text-xs font-medium text-text-muted uppercase tracking-wider mb-1">Competition</label>
             <select
               value={competitionId}
-              onChange={(e) => setCompetitionId(e.target.value ? Number(e.target.value) : '')}
+              onChange={(e) => {
+                setCompetitionId(e.target.value ? Number(e.target.value) : '');
+                // La temporada depende de la competición (un torneo de
+                // selecciones no usa la misma convención que uno de clubes), así
+                // que se recalcula en vez de arrastrar la anterior.
+                setSeasonYear('');
+              }}
               className="w-full bg-surface-2 border border-border rounded-xl px-3 py-2 text-sm text-text-primary"
             >
               <option value="">Select…</option>
@@ -191,16 +198,6 @@ function CreateQuinielaModal({ onClose, onCreated }: CreateQuinielaModalProps) {
             {supported.length === 0 && (
               <p className="text-xs text-warning mt-1">No competitions have supportsQuiniela enabled.</p>
             )}
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-text-muted uppercase tracking-wider mb-1">Season year</label>
-            <input
-              value={seasonYear}
-              onChange={(e) => setSeasonYear(e.target.value)}
-              placeholder="2026"
-              className="w-full bg-surface-2 border border-border rounded-xl px-3 py-2 text-sm text-text-primary"
-            />
           </div>
 
           <div>
@@ -222,6 +219,14 @@ function CreateQuinielaModal({ onClose, onCreated }: CreateQuinielaModalProps) {
               className="w-full bg-surface-2 border border-border rounded-xl px-3 py-2 text-sm text-text-primary"
             />
           </div>
+
+          {/* Va justo debajo de la fecha porque se deriva de ella. */}
+          <SeasonYearField
+            competitionId={competitionId}
+            startsAt={tournamentStartsAt}
+            value={seasonYear}
+            onChange={setSeasonYear}
+          />
 
           <div>
             <label className="block text-xs font-medium text-text-muted uppercase tracking-wider mb-1">Tournament ends (optional)</label>

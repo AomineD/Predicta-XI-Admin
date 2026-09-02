@@ -16,6 +16,8 @@ import { Tabs } from '@/components/ui/Tabs';
 import { ActionMenu, type ActionMenuSection } from '@/components/ui/ActionMenu';
 import { formatDateTime, isCountryFlagUrl } from '@/lib/utils';
 import { TeamNewsManager } from '@/components/team-news/TeamNewsManager';
+import { SeasonYearField } from '@/components/quinielas/SeasonYearField';
+import { useToast } from '@/components/ui/ToastProvider';
 import {
   categoryLabel, categoryIcon, formatPickValue, confidenceTone, MANUAL_ONLY_CATEGORIES,
 } from '@/lib/quiniela-picks';
@@ -531,7 +533,10 @@ function OverviewTab({
       <SectionCard>
         <Row label="Status" value={<StatusBadge status={quiniela.status} />} />
         <Row label="Competition ID" value={String(quiniela.competitionId)} />
-        <Row label="Season year" value={quiniela.seasonYear} />
+        <Row
+          label="Temporada"
+          value={<SeasonYearRow quiniela={quiniela} totalPicks={totalPicks} />}
+        />
         <Row label="Tournament starts" value={formatDateTime(quiniela.tournamentStartsAt)} />
         <Row label="Tournament ends" value={formatDateTime(quiniela.tournamentEndsAt)} />
         <Row label="Created at" value={formatDateTime(quiniela.createdAt)} />
@@ -925,6 +930,93 @@ function SettlementScheduleModal({
             </Button>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * La temporada, corregible mientras la quiniela siga en borrador y sin picks.
+ *
+ * Antes se fijaba al crear y no había forma de tocarla: la quiniela de la
+ * Champions 2026/27 se creó como "2027" (el año de fin, que es como se lee el
+ * nombre del torneo) mientras el sistema guarda esa temporada como "2026", y
+ * quedó bloqueada sin salida — el campo no era editable y no hay borrado de
+ * quinielas. El backend aplica las mismas guardas que se enseñan aquí.
+ */
+function SeasonYearRow({
+  quiniela,
+  totalPicks,
+}: {
+  quiniela: QuinielaDetail['quiniela'];
+  totalPicks: number;
+}) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(quiniela.seasonYear);
+
+  const locked = quiniela.status !== 'draft' || totalPicks > 0;
+  const lockedReason =
+    quiniela.status !== 'draft'
+      ? `Solo se puede cambiar en borrador (esta está en "${quiniela.status}").`
+      : 'Esta quiniela ya tiene picks generados: bórralos antes de cambiarle la temporada.';
+
+  const save = useMutation({
+    mutationFn: () => api.patch(`/admin/quinielas/${quiniela.id}`, { seasonYear: draft }),
+    onSuccess: () => {
+      toast.success(`Temporada cambiada a ${draft}.`);
+      setEditing(false);
+      // La query del detalle es ['quiniela-detail', id]: con la clave mal, salía
+      // el toast de éxito y la fila seguía enseñando la temporada vieja hasta el
+      // siguiente refetch — justo la incoherencia que este cambio viene a quitar.
+      void qc.invalidateQueries({ queryKey: ['quiniela-detail', quiniela.id] });
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  if (!editing) {
+    return (
+      <span className="flex items-center gap-2">
+        <span>{quiniela.seasonYear}</span>
+        {!locked && (
+          <button
+            type="button"
+            onClick={() => {
+              setDraft(quiniela.seasonYear);
+              setEditing(true);
+            }}
+            className="text-xs text-secondary hover:underline font-sans"
+          >
+            Cambiar
+          </button>
+        )}
+      </span>
+    );
+  }
+
+  return (
+    <div className="space-y-2 py-1">
+      <SeasonYearField
+        competitionId={quiniela.competitionId}
+        startsAt={quiniela.tournamentStartsAt}
+        value={draft}
+        onChange={setDraft}
+        disabled={locked}
+        disabledReason={locked ? lockedReason : undefined}
+      />
+      <div className="flex gap-2">
+        <Button
+          variant="primary"
+          loading={save.isPending}
+          disabled={draft === quiniela.seasonYear}
+          onClick={() => save.mutate()}
+        >
+          Guardar
+        </Button>
+        <Button variant="ghost" onClick={() => setEditing(false)}>
+          Cancelar
+        </Button>
       </div>
     </div>
   );
