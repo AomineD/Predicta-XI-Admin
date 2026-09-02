@@ -79,6 +79,7 @@ const NAV: NavEntry[] = [
     icon: Settings,
     items: [
       { href: '/config', label: 'Config', icon: Settings },
+      { href: '/badges', label: 'Badges', icon: Award },
       { href: '/changelog', label: 'Changelog', icon: Megaphone },
       { href: '/jobs', label: 'Jobs', icon: ClockIcon },
       { href: '/health', label: 'Health', icon: HeartPulse },

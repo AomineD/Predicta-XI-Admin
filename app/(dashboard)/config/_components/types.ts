@@ -278,30 +278,6 @@ export interface BadgesConfig {
   thresholds: BadgeThresholds;
 }
 
-/**
- * Las 18 insignias, agrupadas como se leen en el perfil. El orden de esta lista
- * es el que se pinta en el panel: primero las que más pesan.
- */
-export const BADGE_ROWS: ReadonlyArray<{ key: string; label: string; group: string }> = [
-  { key: 'quiniela_top3', label: 'Podio global (quiniela)', group: 'Élite' },
-  { key: 'combinada_top3', label: 'Podio de combinadas', group: 'Élite' },
-  { key: 'double_top10', label: 'Doble amenaza', group: 'Élite' },
-  { key: 'quiniela_top10', label: 'Élite de quiniela', group: 'Élite' },
-  { key: 'combinada_top10', label: 'Élite de combinadas', group: 'Élite' },
-  { key: 'quiniela_top100', label: 'Top 100 de quiniela', group: 'Ranking' },
-  { key: 'combinada_top100', label: 'Top 100 de combinadas', group: 'Ranking' },
-  { key: 'perfeccion', label: 'Perfección', group: 'Hazaña' },
-  { key: 'perfecto', label: 'Perfecto', group: 'Hazaña' },
-  { key: 'maestro', label: 'Maestro', group: 'Hazaña' },
-  { key: 'vidente_llaves', label: 'Vidente de llaves', group: 'Hazaña' },
-  { key: 'cazacuotas', label: 'Cazacuotas', group: 'Hazaña' },
-  { key: 'marcador_clavado', label: 'Marcador clavado', group: 'Hazaña' },
-  { key: 'campeon', label: 'Campeón', group: 'Hazaña' },
-  { key: 'veterano', label: 'Veterano', group: 'Hazaña' },
-  { key: 'uno_de_mas', label: 'Uno de más', group: 'Estilo' },
-  { key: 'riesgo_innecesario', label: 'Riesgos innecesarios', group: 'Estilo' },
-  { key: 'sin_punteria', label: 'Sin puntería', group: 'Desliz' },
-];
 
 /**
  * Cortes (en % de aciertos) de la escala de grados de una predicción liquidada.

@@ -1313,7 +1313,7 @@ function JobIssuesBanner({
           <p className="text-xs mt-1 opacity-80">
             Probables causas: payload sin <span className="font-mono">recentForm</span> /{' '}
             <span className="font-mono">preTournamentRanking</span> / <span className="font-mono">previousEditions</span>{' '}
-            para estas categorías. Sembrá ranking o esperá data de matches antes de regenerar.
+            para estas categorías. Siembra el ranking o espera datos de partidos antes de regenerar.
           </p>
         </div>
       )}

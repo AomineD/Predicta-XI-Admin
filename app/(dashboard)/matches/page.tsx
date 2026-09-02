@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import { JsonPrettyView } from '@/components/ui/JsonPrettyView';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -122,7 +123,7 @@ function getMatchDateKey(kickoff: string | null): string {
   return new Date(kickoff).toISOString().split('T')[0];
 }
 
-// ÔöÇÔöÇ Chevron Icon ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+// ── Chevron Icon ──────────────────────────────────────────
 
 function ChevronIcon({ expanded }: { expanded: boolean }) {
   return (
@@ -138,7 +139,7 @@ function ChevronIcon({ expanded }: { expanded: boolean }) {
   );
 }
 
-// ÔöÇÔöÇ Team Logo ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+// ── Team Logo ──────────────────────────────────────────────
 
 function TeamLogo({ url, name }: { url?: string; name?: string }) {
   const [error, setError] = useState(false);
@@ -156,54 +157,134 @@ function TeamLogo({ url, name }: { url?: string; name?: string }) {
   );
 }
 
-// ÔöÇÔöÇ Enrichment Modal ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+// ── Enrichment Modal ───────────────────────────────────────
 
 function EnrichmentModal({ matchId, onClose }: { matchId: number; onClose: () => void }) {
+  const [view, setView] = useState<'pretty' | 'json'>('pretty');
   const { data, isLoading, error } = useQuery({
     queryKey: ['enrichment', matchId],
     queryFn: () => api.get(`/admin/matches/${matchId}/enrichment`),
   });
 
+  const [copied, setCopied] = useState(false);
   const handleCopy = () => {
-    if (data) navigator.clipboard.writeText(JSON.stringify(data, null, 2));
+    if (!data) return;
+    navigator.clipboard.writeText(JSON.stringify(data, null, 2));
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1500);
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
       <div
-        className="rounded-2xl p-6 w-full max-w-3xl max-h-[85vh] flex flex-col"
+        className="rounded-2xl p-6 w-full max-w-4xl max-h-[88vh] flex flex-col"
         style={{ background: '#121A2B', border: '1px solid rgba(255,255,255,0.12)' }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-semibold text-text-primary font-sans">Enrichment Data ÔÇö Match #{matchId}</h3>
-          <div className="flex gap-2">
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <div className="min-w-0">
+            <h3 className="text-sm font-semibold text-text-primary font-sans">
+              Enrichment — Match #{matchId}
+            </h3>
+            <p className="text-xs text-text-muted font-sans mt-0.5">
+              Los datos que el modelo recibe para predecir este partido.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 flex-none">
+            {/* Dos lecturas del mismo dato: "Legible" para revisar qué llegó y
+                qué falta, "JSON" para copiarlo tal cual o comparar con el
+                contrato del prompt. */}
+            <div className="flex rounded-lg bg-surface-3 p-0.5">
+              {(['pretty', 'json'] as const).map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setView(v)}
+                  className={`px-2.5 h-7 rounded-md text-xs font-sans font-medium transition-colors ${
+                    view === v ? 'bg-primary/15 text-primary' : 'text-text-secondary hover:text-text-primary'
+                  }`}
+                >
+                  {v === 'pretty' ? 'Legible' : 'JSON'}
+                </button>
+              ))}
+            </div>
             {!!data && (
               <button
                 onClick={handleCopy}
                 className="px-3 py-1.5 rounded-lg text-xs font-sans font-medium bg-surface-3 text-text-secondary hover:text-text-primary transition-colors"
               >
-                Copy
+                {copied ? 'Copiado' : 'Copiar'}
               </button>
             )}
             <button
               onClick={onClose}
               className="px-3 py-1.5 rounded-lg text-xs font-sans font-medium bg-surface-3 text-text-secondary hover:text-text-primary transition-colors"
             >
-              Close
+              Cerrar
             </button>
           </div>
         </div>
+
+        {!!data && <EnrichmentSummary data={data as Record<string, unknown>} />}
+
         <div className="flex-1 overflow-auto rounded-xl bg-surface-3 p-4">
-          {isLoading && <p className="text-text-muted text-xs font-sans">Loading enrichment data...</p>}
-          {error && <p className="text-danger text-xs font-sans">Failed to load enrichment data</p>}
-          {!!data && (
-            <pre className="text-xs text-text-muted font-mono whitespace-pre-wrap">
-              {JSON.stringify(data, null, 2)}
-            </pre>
-          )}
+          {isLoading && <p className="text-text-muted text-xs font-sans">Cargando enrichment…</p>}
+          {error && <p className="text-danger text-xs font-sans">No se pudo cargar el enrichment</p>}
+          {!!data &&
+            (view === 'pretty' ? (
+              <JsonPrettyView data={data} />
+            ) : (
+              <pre className="text-xs text-text-muted font-mono whitespace-pre-wrap">
+                {JSON.stringify(data, null, 2)}
+              </pre>
+            ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Qué bloques trajo el enrichment y cuánto pesa cada uno.
+ *
+ * Es la pregunta que se hace de verdad al abrir este modal —¿llegaron las
+ * cuotas?, ¿hay alineaciones?— y responderla exigía desplegar el JSON entero.
+ * Cuenta elementos, no calidad: un bloque presente pero flojo aparece igual.
+ */
+function EnrichmentSummary({ data }: { data: Record<string, unknown> }) {
+  const entries = Object.entries(data)
+    .map(([key, value]) => {
+      const count = Array.isArray(value)
+        ? value.length
+        : value && typeof value === 'object'
+          ? Object.keys(value as object).length
+          : null;
+      const present = Array.isArray(value)
+        ? value.length > 0
+        : value && typeof value === 'object'
+          ? Object.keys(value as object).length > 0
+          : value !== null && value !== undefined && value !== '';
+      return { key, count, present };
+    })
+    .sort((a, b) => Number(b.present) - Number(a.present) || a.key.localeCompare(b.key));
+
+  if (entries.length === 0) return null;
+
+  return (
+    <div className="flex flex-wrap gap-1.5 mb-3">
+      {entries.map((e) => (
+        <span
+          key={e.key}
+          className={`px-2 h-6 inline-flex items-center gap-1 rounded-md text-[11px] font-sans border ${
+            e.present
+              ? 'bg-primary/10 text-primary border-primary/20'
+              : 'bg-surface-2 text-text-muted border-border'
+          }`}
+        >
+          {e.key}
+          {e.count !== null && <span className="opacity-70 tabular-nums">{e.count}</span>}
+        </span>
+      ))}
     </div>
   );
 }
@@ -383,7 +464,7 @@ function MatchActionsDropdown({
   );
 }
 
-// ÔöÇÔöÇ Main Page ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+// ── Main Page ──────────────────────────────────────────────
 
 export default function MatchesPage() {
   const qc = useQueryClient();
