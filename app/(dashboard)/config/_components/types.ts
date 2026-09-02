@@ -211,6 +211,14 @@ export interface CompetitionLite {
 
 /** Respuesta de `/admin/credits-config` en lo que respecta a los flags que edita
  * la pestaña Maintenance (mantenimiento, gates de actualización, social, etc.). */
+export type LiveCompanionConfig = {
+  scope: 'all' | 'favorites' | 'featured';
+  subscriberOnly: boolean;
+  narrationEnabled: boolean;
+  narrationMinDeltaPoints: number;
+  narrationMaxPerMatch: number;
+};
+
 export interface MaintenanceCreditsConfig {
   maintenanceMode: boolean;
   maintenanceMessage: string | null;
@@ -229,6 +237,8 @@ export interface MaintenanceCreditsConfig {
   socialInstagramEnabled: boolean;
   socialInstagramUrl: string;
   liveTrackerEnabled: boolean;
+  liveCompanionEnabled: boolean;
+  liveCompanionConfig: LiveCompanionConfig;
   liveScoresEnabled: boolean;
   homeAnnouncementsEnabled: boolean;
   subscriberIdentityEnabled: boolean;

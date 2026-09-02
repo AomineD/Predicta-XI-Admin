@@ -4,13 +4,14 @@ import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { SectionCard, Field, Toggle, SubHeading } from '@/components/ui/form-controls';
-import { Input, Textarea } from '@/components/ui/inputs';
+import { Input, Textarea, Select } from '@/components/ui/inputs';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { InfoPopover } from '@/components/ui/InfoPopover';
 import { useToast } from '@/components/ui/ToastProvider';
 import type {
   HomeNewsCuratorConfig,
+  LiveCompanionConfig,
   MaintenanceCreditsConfig,
   MatchRatingsConfig,
   PredictionGradeScale,
@@ -163,7 +164,11 @@ export function MaintenanceTab() {
 
   // ── Live match tracker ──
   const [liveTrackerForm, setLiveTrackerForm] = useState<{ liveTrackerEnabled: boolean } | null>(null);
+  const [liveCompanionForm, setLiveCompanionForm] = useState<{ liveCompanionEnabled: boolean } | null>(null);
+  const [liveCompanionCfgForm, setLiveCompanionCfgForm] = useState<LiveCompanionConfig | null>(null);
   const liveTrackerInitial = useMemo(() => (maintCfg ? { liveTrackerEnabled: maintCfg.liveTrackerEnabled } : null), [maintCfg]);
+  const liveCompanionInitial = useMemo(() => (maintCfg ? { liveCompanionEnabled: maintCfg.liveCompanionEnabled } : null), [maintCfg]);
+  const liveCompanionCfgInitial = useMemo(() => maintCfg?.liveCompanionConfig ?? null, [maintCfg]);
   const liveTracker = liveTrackerForm ?? liveTrackerInitial;
 
   const saveLiveTracker = useMutation({
@@ -171,6 +176,21 @@ export function MaintenanceTab() {
     onSuccess: () => {
       setLiveTrackerForm(null);
       toast.success('Live tracker setting saved.');
+      invalidateMaint();
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const liveCompanion = liveCompanionForm ?? liveCompanionInitial;
+  const liveCompanionCfg = liveCompanionCfgForm ?? liveCompanionCfgInitial;
+
+  const saveLiveCompanion = useMutation({
+    mutationFn: (body: { liveCompanionEnabled: boolean; liveCompanionConfig: LiveCompanionConfig }) =>
+      api.put('/admin/credits-config', body),
+    onSuccess: () => {
+      setLiveCompanionForm(null);
+      setLiveCompanionCfgForm(null);
+      toast.success('Live companion settings saved.');
       invalidateMaint();
     },
     onError: (err: Error) => toast.error(err.message),
@@ -667,6 +687,97 @@ export function MaintenanceTab() {
                 Save live tracker
               </Button>
               {liveTracker.liveTrackerEnabled && <span className="text-xs font-sans text-success">Live tracker is on for users on a build that includes it.</span>}
+            </div>
+          </>
+        )}
+      </SectionCard>
+
+      {/* Live companion (idea #4.2) */}
+      <SectionCard
+        title="Live companion"
+        subtitle="Requiere Live scores ON"
+        info="Analysis companion for a match in progress (idea #4.2). Recomputes the probability of the picks the user ALREADY unlocked against the running score, using the same Poisson matrix the pre-match prediction was anchored with. It only re-evaluates existing picks — it never proposes new ones and never touches markets the score matrix can't model (corners, cards, player markets), which are shown as 'not recomputed'. Gated in AND with Live scores: without a live score there is no state to recompute, so turning this on alone does nothing."
+      >
+        {!liveCompanion || !liveCompanionCfg ? (
+          <p className="text-text-muted text-sm font-sans py-3">Loading…</p>
+        ) : (
+          <>
+            <Field
+              label="Live companion enabled"
+              info="Shows the live re-evaluation block on the match detail while a match is in progress. Off = the endpoint returns null and the app never renders the block. Access to each pick still follows the tier the user paid for: markets they have not unlocked are listed as locked, never recomputed."
+            >
+              <Toggle value={liveCompanion.liveCompanionEnabled} onChange={(v) => setLiveCompanionForm({ liveCompanionEnabled: v })} />
+            </Field>
+
+            <Field
+              label="Scope"
+              subtitle="Qué partidos lo reciben"
+              info="Which live matches get a companion. 'Favorites' (default) limits it to teams and leagues the user follows, which keeps both the LLM cost and the noise down. 'Featured leagues' uses the same league list as the prediction engine. 'All' covers every live match that has a prediction — the most expensive option once narration is on."
+            >
+              <Select
+                value={liveCompanionCfg.scope}
+                onChange={(e) => setLiveCompanionCfgForm({ ...liveCompanionCfg, scope: e.target.value as LiveCompanionConfig['scope'] })}
+              >
+                <option value="favorites">Favorites (teams + leagues the user follows)</option>
+                <option value="featured">Featured leagues only</option>
+                <option value="all">All live matches with a prediction</option>
+              </Select>
+            </Field>
+
+            <Field
+              label="Subscribers only"
+              info="Reserve the companion for active subscribers. Note this does NOT protect paid content — the block only ever recomputes picks the user already unlocked — it decides whether the feature itself is a subscription perk."
+            >
+              <Toggle value={liveCompanionCfg.subscriberOnly} onChange={(v) => setLiveCompanionCfgForm({ ...liveCompanionCfg, subscriberOnly: v })} />
+            </Field>
+
+            <SubHeading>Narration</SubHeading>
+
+            <Field
+              label="Narration enabled"
+              info="Writes a short line explaining what just changed, using the active LLM. Off = the block shows numbers only, which is also the automatic fallback when the model fails: the companion never goes blank because a provider is down. Each narration costs an LLM call, so the two limits below are what bound the spend."
+            >
+              <Toggle value={liveCompanionCfg.narrationEnabled} onChange={(v) => setLiveCompanionCfgForm({ ...liveCompanionCfg, narrationEnabled: v })} />
+            </Field>
+
+            <Field
+              label="Minimum swing to narrate"
+              subtitle="1–50 puntos · def. 12"
+              info="How many percentage points the most-moved pick must swing before a change is worth a sentence. Below this the number already says it all and a line would be paid noise."
+            >
+              <Input
+                type="number"
+                min={1}
+                max={50}
+                value={liveCompanionCfg.narrationMinDeltaPoints}
+                onChange={(e) => setLiveCompanionCfgForm({ ...liveCompanionCfg, narrationMinDeltaPoints: Number(e.target.value) })}
+              />
+            </Field>
+
+            <Field
+              label="Max narrations per match"
+              subtitle="0–20 · def. 6 · 0 = ninguna"
+              info="Hard cap on LLM calls for a single match. This is the brake that stops one chaotic game from eating the budget on its own."
+            >
+              <Input
+                type="number"
+                min={0}
+                max={20}
+                value={liveCompanionCfg.narrationMaxPerMatch}
+                onChange={(e) => setLiveCompanionCfgForm({ ...liveCompanionCfg, narrationMaxPerMatch: Number(e.target.value) })}
+              />
+            </Field>
+
+            <div className="flex items-center gap-3 pt-3">
+              <Button variant="primary" loading={saveLiveCompanion.isPending} onClick={() => saveLiveCompanion.mutate({ liveCompanionEnabled: liveCompanion.liveCompanionEnabled, liveCompanionConfig: liveCompanionCfg })}>
+                Save live companion
+              </Button>
+              {liveCompanion.liveCompanionEnabled && !liveScores?.liveScoresEnabled && (
+                <span className="text-xs font-sans text-warning">Live scores is OFF, so the companion stays hidden.</span>
+              )}
+              {liveCompanion.liveCompanionEnabled && liveScores?.liveScoresEnabled && (
+                <span className="text-xs font-sans text-success">Live companion is on for users on a build that includes it.</span>
+              )}
             </div>
           </>
         )}
