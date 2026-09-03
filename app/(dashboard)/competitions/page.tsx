@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
 import { InfoPopover } from '@/components/ui/InfoPopover';
 import { PageHeader } from '@/components/ui/PageHeader';
-import { Toggle } from '@/components/ui/form-controls';
+import { Field, Toggle } from '@/components/ui/form-controls';
 import { Input, Select, Textarea } from '@/components/ui/inputs';
 import { Modal } from '@/components/ui/Modal';
 import { useToast } from '@/components/ui/ToastProvider';
@@ -287,6 +287,29 @@ function CompetitionDetailsEditor({
   const [lpWideCuts, setLpWideCuts] = useState((comp.leaguePhaseConfig?.wideCuts ?? []).join(', '));
   const [lpGroupKey, setLpGroupKey] = useState(comp.leaguePhaseConfig?.groupKey ?? '');
 
+  // Siembra de goleadores de una edicion PASADA. Va aparte de onSave porque no
+  // edita la competicion: dispara un scrape puntual contra Flashscore.
+  const toast = useToast();
+  const [seedSeasonYear, setSeedSeasonYear] = useState('');
+  const [seedSeasonId, setSeedSeasonId] = useState('');
+  const seedTopPerformers = useMutation({
+    mutationFn: (): Promise<{ scorersUpserted?: number; assistersUpserted?: number }> =>
+      api.post(`/admin/competitions/${comp.id}/sync-top-performers`, {
+        seasonYear: seedSeasonYear.trim(),
+        flashscoreSeasonId: seedSeasonId.trim(),
+      }),
+    onSuccess: (res: { scorersUpserted?: number; assistersUpserted?: number }) => {
+      const scorers = res?.scorersUpserted ?? 0;
+      const assisters = res?.assistersUpserted ?? 0;
+      if (scorers === 0 && assisters === 0) {
+        toast.error('No se sembró nada — revisa la temporada y el season id');
+        return;
+      }
+      toast.success(`Sembrados ${scorers} goleadores y ${assisters} asistentes`);
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
   // A tournament-format competition (group-aware standings, like the World
   // Cup) is identified by a non-empty flashscore_season_id. In that case the
   // backend needs current_season_year too — without it Team Sync skips the
@@ -543,6 +566,51 @@ function CompetitionDetailsEditor({
             placeholder="Brief description, recent editions, scoring quirks…"
           />
         </label>
+
+        <div className="border-t border-border pt-2">
+          <Field
+            label="Goleadores de ediciones pasadas"
+            subtitle="Solo con season id"
+            info={
+              <>
+                <p>
+                  Rellena los goleadores, asistentes, MVP y portero de una temporada ANTERIOR, que
+                  es de donde el prompt saca el histórico de ediciones previas del torneo.
+                </p>
+                <p className="mt-2">
+                  El sync normal solo alcanza la temporada vigente. Para una edición pasada hace
+                  falta su season id de Flashscore, porque la competición guarda uno solo —el de la
+                  temporada viva— y ese no se toca.
+                </p>
+                <p className="mt-2">
+                  Para encontrarlo, abre esa edición en Flashscore y cópialo de la URL del torneo:
+                  es la cadena alfanumérica de la temporada, no el slug de la competición.
+                </p>
+              </>
+            }
+          >
+            <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
+              <Input
+                value={seedSeasonYear}
+                onChange={(e) => setSeedSeasonYear(e.target.value)}
+                placeholder="Temporada (ej. 2025)"
+              />
+              <Input
+                value={seedSeasonId}
+                onChange={(e) => setSeedSeasonId(e.target.value)}
+                placeholder="Flashscore season id"
+              />
+              <Button
+                variant="secondary"
+                loading={seedTopPerformers.isPending}
+                disabled={!seedSeasonYear.trim() || !seedSeasonId.trim()}
+                onClick={() => seedTopPerformers.mutate()}
+              >
+                Sembrar
+              </Button>
+            </div>
+          </Field>
+        </div>
       </div>
     </Modal>
   );
