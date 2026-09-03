@@ -4,7 +4,7 @@ import { use, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   RotateCcw, History, Flag, Newspaper, RefreshCw, Gavel, CalendarClock, Trash2,
-  Wand2, ImageIcon, type LucideIcon,
+  Wand2, ImageIcon, ListOrdered, type LucideIcon,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -17,6 +17,7 @@ import { ActionMenu, type ActionMenuSection } from '@/components/ui/ActionMenu';
 import { formatDateTime, isCountryFlagUrl } from '@/lib/utils';
 import { TeamNewsManager } from '@/components/team-news/TeamNewsManager';
 import { SeasonYearField } from '@/components/quinielas/SeasonYearField';
+import { PreTournamentRankingModal } from '@/components/quinielas/PreTournamentRankingModal';
 import { useToast } from '@/components/ui/ToastProvider';
 import {
   categoryLabel, categoryIcon, formatPickValue, confidenceTone, MANUAL_ONLY_CATEGORIES,
@@ -101,6 +102,7 @@ export default function QuinielaDetailPage({ params }: { params: Promise<{ id: s
   const [picksPhase, setPicksPhase] = useState<'phase1' | 'phase2'>('phase1');
   const [resetTarget, setResetTarget] = useState<'phase1' | 'phase2' | 'all' | null>(null);
   const [newsPickerOpen, setNewsPickerOpen] = useState(false);
+  const [rankingModalOpen, setRankingModalOpen] = useState(false);
   const [newsTeam, setNewsTeam] = useState<{ id: number; name: string } | null>(null);
   const [editSchedule, setEditSchedule] = useState(false);
   const queryClient = useQueryClient();
@@ -292,6 +294,7 @@ export default function QuinielaDetailPage({ params }: { params: Promise<{ id: s
       label: 'Data & sync',
       items: [
         { label: 'Sync team history', icon: History, onClick: triggerSyncHistory },
+        { label: 'Ranking pre-torneo…', icon: ListOrdered, onClick: () => setRankingModalOpen(true) },
         { label: 'Sync FIFA ranking', icon: Flag, onClick: () => syncFifaRankingMut.mutate() },
         { label: 'Sync qualifier top scorers', icon: RefreshCw, onClick: () => syncQualifierTopPerfMut.mutate() },
         { label: 'Team news…', icon: Newspaper, onClick: () => setNewsPickerOpen(true) },
@@ -355,6 +358,12 @@ export default function QuinielaDetailPage({ params }: { params: Promise<{ id: s
           }}
         />
       )}
+      <PreTournamentRankingModal
+        competitionId={quiniela.competitionId}
+        seasonYear={quiniela.seasonYear}
+        open={rankingModalOpen}
+        onClose={() => setRankingModalOpen(false)}
+      />
       {newsPickerOpen && (
         <TeamNewsPickerModal
           competitionId={quiniela.competitionId}
