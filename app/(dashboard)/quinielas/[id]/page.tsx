@@ -34,6 +34,10 @@ interface QuinielaPick {
   settlement: 'pending' | 'won' | 'lost' | 'partial' | 'void';
   settledAt: string | null;
   actualValue: Record<string, unknown> | null;
+  /** Quién produjo el veredicto (migr 0177). null = liquidado antes de la columna. */
+  settledSource?: 'auto' | 'admin' | 'backfill' | null;
+  /** Superficie de la acción manual; null en automático. */
+  settledBy?: string | null;
   model: string;
   createdAt: string | null;
   teamLogoUrl?: string | null;
@@ -1073,6 +1077,44 @@ function PicksTab({ picks, quinielaId }: { picks: QuinielaPick[]; quinielaId: st
   );
 }
 
+/**
+ * De dónde salió el veredicto de un pick ya liquidado.
+ *
+ * `null` no se pinta como "automático": significa que se liquidó ANTES de que
+ * existiera la columna (migr 0177) y nadie lo registró. Presentar esa laguna
+ * como un dato sería justo el error que hizo falta un forense para deshacer.
+ */
+function SettledSourceTag({ pick }: { pick: QuinielaPick }) {
+  const source = pick.settledSource ?? null;
+  const label =
+    source === 'auto'
+      ? 'auto'
+      : source === 'admin'
+        ? 'manual'
+        : source === 'backfill'
+          ? 'inferido'
+          : 'sin registrar';
+  const title =
+    source === 'auto'
+      ? 'Lo calculó un evaluador del settlement.'
+      : source === 'admin'
+        ? `Lo puso una persona desde ${pick.settledBy ?? 'el panel'}.`
+        : source === 'backfill'
+          ? 'Origen deducido a posteriori, no registrado en su momento.'
+          : 'Liquidado antes de que se registrara el origen — no se sabe quién lo puso.';
+
+  return (
+    <span
+      title={title}
+      className={`text-[10px] font-mono uppercase tracking-wide ${
+        source === 'admin' ? 'text-amber-400' : 'text-text-muted'
+      }`}
+    >
+      {label}
+    </span>
+  );
+}
+
 function PickRow({ pick, quinielaId }: { pick: QuinielaPick; quinielaId: string }) {
   const queryClient = useQueryClient();
   const [showSettleManual, setShowSettleManual] = useState(false);
@@ -1136,11 +1178,23 @@ function PickRow({ pick, quinielaId }: { pick: QuinielaPick; quinielaId: string 
           <span className="text-xs font-mono font-semibold" style={{ color: toneColor }}>
             {pick.confidence}%
           </span>
-          {isManualOnly && pick.settlement === 'pending' && (
+          {/* De dónde salió el veredicto (migr 0177). Sin esto no había forma
+              de saber si un pick lo liquidó el evaluador o una persona. */}
+          {pick.settlement !== 'pending' && <SettledSourceTag pick={pick} />}
+          {/* Antes el boton solo aparecia para las categorias manual-only aun
+              pendientes, asi que un veredicto equivocado ya escrito NO se podia
+              corregir desde el panel — el best_goalkeeper del Mundial quedo como
+              acierto siendo fallo. Ahora cualquier pick liquidado se puede
+              re-liquidar. */}
+          {isManualOnly && pick.settlement === 'pending' ? (
             <Button size="sm" variant="secondary" onClick={() => setShowSettleManual(true)}>
               Settle
             </Button>
-          )}
+          ) : pick.settlement !== 'pending' ? (
+            <Button size="sm" variant="ghost" onClick={() => setShowSettleManual(true)}>
+              Re-liquidar
+            </Button>
+          ) : null}
         </div>
       </div>
       {showSettleManual && (
@@ -1148,6 +1202,7 @@ function PickRow({ pick, quinielaId }: { pick: QuinielaPick; quinielaId: string 
           pickId={pick.id}
           quinielaId={quinielaId}
           category={pick.category}
+          current={{ settlement: pick.settlement, actualValue: pick.actualValue }}
           onClose={() => setShowSettleManual(false)}
           onSuccess={() => {
             setShowSettleManual(false);
@@ -1179,23 +1234,47 @@ function SettleManualModal({
   pickId,
   quinielaId,
   category,
+  current,
   onClose,
   onSuccess,
 }: {
   pickId: string;
   quinielaId: string;
   category: string;
+  /**
+   * Veredicto ya escrito, cuando se abre para RE-liquidar. Precargarlo evita
+   * que corregir un campo obligue a reescribir el resto — y que un descuido
+   * sustituya un `actual_value` correcto por uno vacío.
+   */
+  current?: { settlement: QuinielaPick['settlement']; actualValue: Record<string, unknown> | null };
   onClose: () => void;
   onSuccess: () => void;
 }) {
-  const [settlement, setSettlement] = useState<'won' | 'lost' | 'partial' | 'void'>('won');
-  const [actualValueRaw, setActualValueRaw] = useState('');
+  const [settlement, setSettlement] = useState<'won' | 'lost' | 'partial' | 'void'>(
+    current && current.settlement !== 'pending' ? current.settlement : 'won',
+  );
+  const [actualValueRaw, setActualValueRaw] = useState(
+    current?.actualValue ? JSON.stringify(current.actualValue, null, 2) : '',
+  );
   const [error, setError] = useState<string | null>(null);
 
   const isPlayer = PLAYER_CATEGORIES.has(category);
   const [teamId, setTeamId] = useState<number | null>(null);
   const [search, setSearch] = useState('');
-  const [winner, setWinner] = useState<{ playerName: string; playerSlug: string | null } | null>(null);
+  // Al RE-liquidar, se siembra el ganador ya registrado. Sin esto, corregir solo
+  // el veredicto obligaba a volver a elegir al jugador, y elegir 'void' sustituía
+  // en silencio un `actual_value` correcto por null.
+  const [winner, setWinner] = useState<{ playerName: string; playerSlug: string | null } | null>(
+    typeof current?.actualValue?.playerName === 'string'
+      ? {
+          playerName: current.actualValue.playerName as string,
+          playerSlug:
+            typeof current.actualValue.playerSlug === 'string'
+              ? (current.actualValue.playerSlug as string)
+              : null,
+        }
+      : null,
+  );
 
   // Same pool the app + submit-validation use, so the chosen winner matches user
   // picks by slug instead of a hand-typed name.
