@@ -24,6 +24,9 @@ interface Competition {
   active: boolean;
   flashscoreSlug: string | null;
   flashscoreSeasonId: string | null;
+  // Edicion de Flashscore donde vive el CUADRO de eliminatoria, cuando no es la
+  // misma que la de la fase de grupos. Null = se usa flashscoreSeasonId.
+  flashscoreBracketSeasonId: string | null;
   currentSeasonYear: string | null;
   supportsQuiniela: boolean;
   quinielaFormat: 'group_then_knockout' | 'league_then_knockout' | 'single_phase' | null;
@@ -68,6 +71,7 @@ type CompetitionUpdate = Partial<
     | 'logoCustom'
     | 'flashscoreSlug'
     | 'flashscoreSeasonId'
+    | 'flashscoreBracketSeasonId'
     | 'currentSeasonYear'
     | 'supportsQuiniela'
     | 'quinielaFormat'
@@ -268,6 +272,7 @@ function CompetitionDetailsEditor({
   const [country, setCountry] = useState(comp.country ?? '');
   const [flashscoreSlug, setFlashscoreSlug] = useState(comp.flashscoreSlug ?? '');
   const [flashscoreSeasonId, setFlashscoreSeasonId] = useState(comp.flashscoreSeasonId ?? '');
+  const [flashscoreBracketSeasonId, setFlashscoreBracketSeasonId] = useState(comp.flashscoreBracketSeasonId ?? '');
   const [currentSeasonYear, setCurrentSeasonYear] = useState(comp.currentSeasonYear ?? '');
   const [supportsQuiniela, setSupportsQuiniela] = useState(comp.supportsQuiniela);
   const [quinielaFormat, setQuinielaFormat] = useState<Competition['quinielaFormat']>(comp.quinielaFormat);
@@ -317,6 +322,11 @@ function CompetitionDetailsEditor({
   const isTournamentShape = flashscoreSeasonId.trim().length > 0;
   const missingSeasonYear = isTournamentShape && currentSeasonYear.trim().length === 0;
   const contextTooLong = historicalContext.length > 12000;
+  // Espejo de la validacion del backend: el token viaja crudo dentro de la URL
+  // del scraper, asi que solo se aceptan alfanumericos.
+  const bracketSeasonIdInvalid =
+    flashscoreBracketSeasonId.trim().length > 0 &&
+    !/^[A-Za-z0-9]{1,32}$/.test(flashscoreBracketSeasonId.trim());
 
   // Espejo de `normalizeLeaguePhaseConfig` del backend: si no cuadra, se manda
   // null y la fase de tabla no se ofrece. Validar aquí evita guardar basura que
@@ -344,13 +354,14 @@ function CompetitionDetailsEditor({
           </Button>
           <Button
             variant="primary"
-            disabled={missingSeasonYear || contextTooLong || leaguePhaseInvalid}
+            disabled={missingSeasonYear || contextTooLong || leaguePhaseInvalid || bracketSeasonIdInvalid}
             onClick={() =>
               onSave({
                 name: name.trim() || undefined,
                 country: country.trim() ? country.trim() : null,
                 flashscoreSlug: flashscoreSlug.trim() ? flashscoreSlug.trim() : null,
                 flashscoreSeasonId: flashscoreSeasonId.trim() ? flashscoreSeasonId.trim() : null,
+                flashscoreBracketSeasonId: flashscoreBracketSeasonId.trim() ? flashscoreBracketSeasonId.trim() : null,
                 currentSeasonYear: currentSeasonYear.trim() ? currentSeasonYear.trim() : null,
                 supportsQuiniela,
                 quinielaFormat,
@@ -402,6 +413,29 @@ function CompetitionDetailsEditor({
         </div>
         {missingSeasonYear && (
           <p className="text-xs text-danger font-sans -mt-2">Required when Flashscore season id is set — Team Sync will skip otherwise.</p>
+        )}
+
+        <label className="block">
+          <span className="text-xs text-text-muted font-sans inline-flex items-center gap-1">
+            Flashscore bracket season id
+            <InfoPopover label="Cuando hace falta el bracket season id">
+              El cuadro de eliminatoria puede vivir en una edición de Flashscore distinta a la de la
+              fase de grupos. El Mundial 2026 es el caso: los grupos están bajo una edición y las
+              llaves bajo otra (&quot;Play Offs&quot;). Déjalo vacío si el cuadro comparte edición con
+              la temporada: entonces se usa el Flashscore season id, y si ese también está vacío se
+              intenta descubrir la edición vigente. Sin ninguno de los tres, el cuadro no se
+              sincroniza y las llaves a ida y vuelta no se pueden liquidar.
+            </InfoPopover>
+          </span>
+          <Input
+            className={cn('mt-1 font-mono', bracketSeasonIdInvalid && 'border-danger')}
+            value={flashscoreBracketSeasonId}
+            onChange={(e) => setFlashscoreBracketSeasonId(e.target.value)}
+            placeholder="6kKoWOjD (solo si el cuadro va aparte)"
+          />
+        </label>
+        {bracketSeasonIdInvalid && (
+          <p className="text-xs text-danger font-sans -mt-2">Solo letras y números, hasta 32 caracteres.</p>
         )}
 
         <div className="grid grid-cols-2 gap-3">
