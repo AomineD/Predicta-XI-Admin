@@ -35,6 +35,38 @@ const DEFAULT_TAB: SocialTabId = 'config';
 
 /* ── types (mirror of the backend) ─────────────────────────────────────────── */
 
+/**
+ * Un tramo de dificultad del pick "gol de jugador" (idea #36). `minProbPct` es el
+ * SUELO del tramo en enteros de porcentaje; los tramos van de más fácil a más
+ * difícil y el último debe empezar en 0 para cubrir a todos los jugadores.
+ */
+interface PlayerGoalTier {
+  minProbPct: number;
+  hitPoints: number;
+  missPenalty: number;
+}
+
+/** Parámetros de la estimación de dificultad cuando no hay precio de mercado. */
+interface PlayerGoalProbParams {
+  bookTargetSum: number;
+  minBookSize: number;
+  maxProbPct: number;
+  minProbPct: number;
+  maxEstimatedProbPct: number;
+  priorMinutes: number;
+  startingMinutes: number;
+  benchMinutes: number;
+  positionPriors: Record<string, number>;
+}
+
+/** Etiquetas fijas de los cuatro tramos por defecto. */
+const PLAYER_GOAL_TIER_LABELS = [
+  'Tramo 1 — habitual',
+  'Tramo 2 — difícil',
+  'Tramo 3 — muy difícil',
+  'Tramo 4 — improbable',
+];
+
 interface SocialConfig {
   id: number;
   enabled: boolean;
@@ -109,6 +141,10 @@ interface SocialConfig {
   riskRedCardMissPenalty: number;
   riskPlayerGoalHitPoints: number;
   riskPlayerGoalMissPenalty: number;
+  // Gol de jugador con puntos VARIABLES por dificultad (idea #36).
+  riskPlayerGoalVariableEnabled: boolean;
+  riskPlayerGoalTiers: PlayerGoalTier[];
+  riskPlayerGoalProbParams: PlayerGoalProbParams;
   // Quiniela de campeonato (idea #29): unifica torneo + eliminatoria + tabla.
   championshipQuinielasEnabled: boolean;
   createCostChampionship: number;
@@ -812,6 +848,173 @@ function ConfigTab() {
         <Field label="Gol de jugador — fallo" subtitle="Resta si el jugador elegido NO marcó (negativo)">
           <NumInput value={f.riskPlayerGoalMissPenalty} onChange={(v) => set('riskPlayerGoalMissPenalty', v)} min={-100} max={0} />
         </Field>
+      </SectionCard>
+
+      <SectionCard
+        title="Gol de jugador — puntos variables (idea #36)"
+        subtitle="Nace apagado"
+        info="Con el flag apagado, el pick de gol de jugador paga los dos valores fijos de la card de arriba: elegir a un goleador habitual y elegir a un mediocentro vale lo mismo, así que nadie elige al difícil. Con el flag encendido, el pago sale del tramo de dificultad del jugador elegido y se FIJA dentro del pick al enviarlo, así que ni cambiar esta tabla después ni que el jugador marque antes altera lo que ya se prometió. Regla obligatoria: más difícil paga igual o más, y castiga igual o menos. El backend rechaza una tabla que no la cumpla."
+      >
+        <Field
+          label="Puntos variables activos"
+          subtitle="riskPlayerGoalVariableEnabled"
+          info="Requiere que los risk picks estén activos. Apagado = comportamiento anterior con puntos fijos."
+        >
+          <Toggle
+            value={f.riskPlayerGoalVariableEnabled}
+            onChange={(v) => set('riskPlayerGoalVariableEnabled', v)}
+          />
+        </Field>
+
+        {f.riskPlayerGoalTiers.map((tier, i) => (
+          <Field
+            key={i}
+            label={PLAYER_GOAL_TIER_LABELS[i] ?? `Tramo ${i + 1}`}
+            subtitle={
+              i === f.riskPlayerGoalTiers.length - 1
+                ? 'Desde 0% — cubre a todos los demás'
+                : `Desde ${tier.minProbPct}% de probabilidad`
+            }
+            info="Desde %: suelo de probabilidad del tramo. Acierto: puntos si el jugador marca. Fallo: puntos que resta si no marca (negativo)."
+          >
+            <div className="flex items-center gap-2">
+              <NumInput
+                value={tier.minProbPct}
+                onChange={(v) =>
+                  set(
+                    'riskPlayerGoalTiers',
+                    f.riskPlayerGoalTiers.map((t, k) => (k === i ? { ...t, minProbPct: v } : t)),
+                  )
+                }
+                min={0}
+                max={99}
+                // El último tramo siempre cubre el suelo: sin él habría
+                // probabilidades sin tramo asignado.
+                disabled={i === f.riskPlayerGoalTiers.length - 1}
+              />
+              <NumInput
+                value={tier.hitPoints}
+                onChange={(v) =>
+                  set(
+                    'riskPlayerGoalTiers',
+                    f.riskPlayerGoalTiers.map((t, k) => (k === i ? { ...t, hitPoints: v } : t)),
+                  )
+                }
+                min={0}
+                max={100}
+              />
+              <NumInput
+                value={tier.missPenalty}
+                onChange={(v) =>
+                  set(
+                    'riskPlayerGoalTiers',
+                    f.riskPlayerGoalTiers.map((t, k) => (k === i ? { ...t, missPenalty: v } : t)),
+                  )
+                }
+                min={-100}
+                max={0}
+              />
+            </div>
+          </Field>
+        ))}
+      </SectionCard>
+
+      <SectionCard
+        title="Estimación de dificultad"
+        info="Cómo se decide en qué tramo cae cada jugador. Lo normal es que el tramo salga del precio de mercado del partido, ya sin el margen de la casa. Cuando ese precio no existe para un jugador, se estima con sus goles por 90 minutos ajustados hacia la media de su posición — nunca se le asigna un tramo por defecto, porque bastaría elegir a un delantero no cotizado para cobrar el máximo. Los porteros quedan fuera del selector."
+      >
+        <Field label="Suma objetivo del mercado" subtitle="0.5–10 · def. 2.4" info="Goleadores distintos que se esperan en un partido. Es lo que se usa para quitarle el margen al mercado.">
+          <NumInput
+            value={f.riskPlayerGoalProbParams.bookTargetSum}
+            onChange={(v) => set('riskPlayerGoalProbParams', { ...f.riskPlayerGoalProbParams, bookTargetSum: v })}
+            min={0.5}
+            max={10}
+            step={0.1}
+          />
+        </Field>
+        <Field label="Mínimo de precios del partido" subtitle="0–60 · def. 12" info="Por debajo de esto el mercado del partido se descarta ENTERO y todos los jugadores se estiman. Con muy pocos precios no se puede quitar el margen y las probabilidades saldrían infladas, empujando a todos al tramo más barato.">
+          <NumInput
+            value={f.riskPlayerGoalProbParams.minBookSize}
+            onChange={(v) => set('riskPlayerGoalProbParams', { ...f.riskPlayerGoalProbParams, minBookSize: v })}
+            min={0}
+            max={60}
+          />
+        </Field>
+        <Field label="Probabilidad máxima (%)" subtitle="1–99 · def. 90">
+          <NumInput
+            value={f.riskPlayerGoalProbParams.maxProbPct}
+            onChange={(v) => set('riskPlayerGoalProbParams', { ...f.riskPlayerGoalProbParams, maxProbPct: v })}
+            min={1}
+            max={99}
+          />
+        </Field>
+        <Field label="Probabilidad mínima (%)" subtitle="0–50 · def. 1">
+          <NumInput
+            value={f.riskPlayerGoalProbParams.minProbPct}
+            onChange={(v) => set('riskPlayerGoalProbParams', { ...f.riskPlayerGoalProbParams, minProbPct: v })}
+            min={0}
+            max={50}
+          />
+        </Field>
+        <Field label="Tope de la probabilidad estimada (%)" subtitle="1–99 · def. 55" info="Una estimación nunca es tan fiable como un precio de mercado, así que se le pone un techo más bajo.">
+          <NumInput
+            value={f.riskPlayerGoalProbParams.maxEstimatedProbPct}
+            onChange={(v) => set('riskPlayerGoalProbParams', { ...f.riskPlayerGoalProbParams, maxEstimatedProbPct: v })}
+            min={1}
+            max={99}
+          />
+        </Field>
+        <Field label="Fuerza del ajuste (minutos)" subtitle="0–5000 · def. 450" info="450 son 5 partidos completos. Cuanto más alto, más pesa la media de la posición frente a los goles reales del jugador. Es lo que evita que un defensa con 1 gol en 90 minutos parezca un goleador.">
+          <NumInput
+            value={f.riskPlayerGoalProbParams.priorMinutes}
+            onChange={(v) => set('riskPlayerGoalProbParams', { ...f.riskPlayerGoalProbParams, priorMinutes: v })}
+            min={0}
+            max={5000}
+            step={30}
+          />
+        </Field>
+        <Field label="Minutos esperados de un titular" subtitle="0–90 · def. 75">
+          <NumInput
+            value={f.riskPlayerGoalProbParams.startingMinutes}
+            onChange={(v) => set('riskPlayerGoalProbParams', { ...f.riskPlayerGoalProbParams, startingMinutes: v })}
+            min={0}
+            max={90}
+          />
+        </Field>
+        <Field label="Minutos esperados de un suplente" subtitle="0–90 · def. 20">
+          <NumInput
+            value={f.riskPlayerGoalProbParams.benchMinutes}
+            onChange={(v) => set('riskPlayerGoalProbParams', { ...f.riskPlayerGoalProbParams, benchMinutes: v })}
+            min={0}
+            max={90}
+          />
+        </Field>
+        {(['Defender', 'Midfielder', 'Forward'] as const).map((position) => (
+          <Field
+            key={position}
+            label={`Goles/90 medios — ${position === 'Defender' ? 'defensa' : position === 'Midfielder' ? 'medio' : 'delantero'}`}
+            subtitle="0–3"
+            info="Media de la posición hacia la que se ajusta un jugador con pocos minutos. Los porteros no aparecen porque no son elegibles."
+          >
+            <input
+              type="number"
+              min={0}
+              max={3}
+              step={0.01}
+              value={f.riskPlayerGoalProbParams.positionPriors[position] ?? 0}
+              onChange={(e) =>
+                set('riskPlayerGoalProbParams', {
+                  ...f.riskPlayerGoalProbParams,
+                  positionPriors: {
+                    ...f.riskPlayerGoalProbParams.positionPriors,
+                    [position]: Number(e.target.value),
+                  },
+                })
+              }
+              className="h-9 w-24 px-3 rounded-xl text-sm bg-surface-2 border border-border text-text-primary font-sans"
+            />
+          </Field>
+        ))}
       </SectionCard>
 
       <SectionCard

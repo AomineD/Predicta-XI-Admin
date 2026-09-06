@@ -79,6 +79,7 @@ export function NumInput({
   min = 0,
   max,
   step,
+  disabled,
 }: {
   value: number;
   onChange: (v: number) => void;
@@ -87,6 +88,9 @@ export function NumInput({
   /** Paso del input. Necesario para los campos DECIMALES: sin él, el navegador
    *  asume paso 1 y marca como inválido cualquier valor con coma. */
   step?: number;
+  /** Para valores estructurales que se muestran pero no se editan (p. ej. el
+   *  último tramo de dificultad, que siempre arranca en 0%). */
+  disabled?: boolean;
 }) {
   return (
     <input
@@ -95,8 +99,9 @@ export function NumInput({
       max={max}
       step={step}
       value={value}
+      disabled={disabled}
       onChange={(e) => onChange(Number(e.target.value))}
-      className="h-9 w-24 px-3 rounded-xl text-sm bg-surface-2 border border-border text-text-primary font-sans transition-colors focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/30"
+      className="h-9 w-24 px-3 rounded-xl text-sm bg-surface-2 border border-border text-text-primary font-sans transition-colors focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/30 disabled:opacity-50 disabled:cursor-not-allowed"
     />
   );
 }

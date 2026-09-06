@@ -4,6 +4,7 @@ import { SectionCard, Field, SubHeading, Toggle } from '@/components/ui/form-con
 import { Input, Select } from '@/components/ui/inputs';
 import { SportiumCard } from './SportiumCard';
 import { DataSourceCard } from './DataSourceCard';
+import { PlayerRatingsCard } from './PlayerRatingsCard';
 import type { CompetitionLite, PredictionConfig, SetField } from './types';
 
 export function AutomationsTab({
@@ -145,6 +146,8 @@ export function AutomationsTab({
       <SportiumCard competitions={competitions} />
 
       <DataSourceCard />
+
+      <PlayerRatingsCard />
     </div>
   );
 }

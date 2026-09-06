@@ -333,3 +333,36 @@ export interface HomeNewsCuratorConfig {
 }
 
 export type SetField = <K extends keyof PredictionConfig>(key: K, value: PredictionConfig[K]) => void;
+
+/** Config de las notas de jugador (idea #33), tabla `player_ratings_config`. */
+export interface PlayerRatingsConfig {
+  /** Maestro: captura + las tres pantallas de la app. */
+  enabled: boolean;
+  /** Aparte del maestro: deja que el momento del equipo entre al contexto del modelo. */
+  influencePredictions: boolean;
+  captureDelayMinutes: number;
+  retryMinutes: number;
+  maxAttempts: number;
+  noRatingsMaxAttempts: number;
+  maxMatchAgeHours: number;
+  competitionNoRatingsStreak: number;
+  minAppearances: number;
+  goodThreshold: number;
+  greatThreshold: number;
+  momentumWindowMatches: number;
+  momentumHalfLifeMatches: number;
+  momentumMinMatches: number;
+  momentumTrendThreshold: number;
+}
+
+/** Una fila de la tabla "Cobertura por liga" de las notas de jugador. */
+export interface PlayerRatingsCoverageRow {
+  competitionId: number | null;
+  competitionName: string | null;
+  completed: number;
+  noRatings: number;
+  failed: number;
+  lastCapturedAt: string | null;
+  /** La liga agotó la racha sin notas y ya no se encola. */
+  unsupported: boolean;
+}
