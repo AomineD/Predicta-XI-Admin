@@ -113,6 +113,10 @@ function ConfigPageInner() {
         longshotOddsFloor: 2.5,
         minExpectedReturn: 0.85,
         reserveLongshotSlots: 1,
+        minCoherence: 0.5,
+        narrativeMinConfidence: 0.55,
+        midDoorEnabled: true,
+        midDoorMinCoherence: 0.8,
       },
       playerMarketsEnabled: cfg.playerMarketsEnabled ?? false,
       playerMarketsConfig: cfg.playerMarketsConfig ?? {

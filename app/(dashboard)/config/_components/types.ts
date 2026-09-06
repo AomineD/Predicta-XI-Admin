@@ -62,6 +62,14 @@ export interface PredictionConfig {
     minExpectedReturn?: number;
     /** Plazas reservadas a no-obvios para que el favorito no se lleve todas. */
     reserveLongshotSlots?: number;
+    /** Coherencia mínima (0..1) con lo que el informe ya afirma. 0 apaga la puerta. */
+    minCoherence?: number;
+    /** Confianza (0..1) desde la que un pick del LLM define la narrativa del informe. */
+    narrativeMinConfidence?: number;
+    /** Puerta intermedia: cuota media + confianza baja + muy coherente. */
+    midDoorEnabled?: boolean;
+    /** Coherencia mínima (0..1) para entrar por la puerta intermedia. */
+    midDoorMinCoherence?: number;
   };
   // Player markets (idea #1, Fase C): engine anchors to Sportium player odds (anytime
   // scorer + assist) and emits the most likely player per market, to MAX/CLUB.

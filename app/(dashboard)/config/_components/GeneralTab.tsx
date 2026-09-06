@@ -18,6 +18,10 @@ const DEFAULT_SPECIAL_SELECTOR = {
   longshotOddsFloor: 2.5,
   minExpectedReturn: 0.85,
   reserveLongshotSlots: 1,
+  minCoherence: 0.5,
+  narrativeMinConfidence: 0.55,
+  midDoorEnabled: true,
+  midDoorMinCoherence: 0.8,
 };
 const DEFAULT_PLAYER_MARKETS_CONFIG = {
   maxPicks: 2,
@@ -276,6 +280,41 @@ function SpecialMarketsSelectorCard({ form, setField }: { form: PredictionConfig
       >
         <Input type="number" min={0} max={8} className="w-24" value={sel.reserveLongshotSlots ?? 1}
           onChange={(e) => setSel({ reserveLongshotSlots: Math.min(8, Math.max(0, Number(e.target.value) || 0)) })} />
+      </Field>
+
+      <Field
+        label="Coherencia mínima con el informe"
+        subtitle="0–1 · def. 0.5"
+        info="Fracción de la probabilidad del exótico que debe caber dentro de lo que el LLM ya afirmó con confianza (resultado, doble oportunidad, totales, ambos marcan, hándicaps). Se mide sobre la misma matriz Poisson de la que salen los exóticos. Existe por Valencia–Barcelona (2026-09-06): el informe decía 0-3, visitante -1.5 y más de 1.5 goles al 87%, y el selector añadía 'Barcelona marca menos de 1.5' (26%) y 'empate o visitante con menos de 2.5' (29%) porque pagaban bien. Con 0.5, más de la mitad de su probabilidad tiene que vivir en el guion. En 0 la puerta se apaga; aun así el motor NUNCA emite un exótico incompatible de plano con un pick del LLM de 60 o más (cinturón fijo)."
+      >
+        <Input type="number" min={0} max={1} step={0.05} className="w-24" value={sel.minCoherence ?? 0.5}
+          onChange={(e) => setSel({ minCoherence: Math.min(1, Math.max(0, Number(e.target.value) || 0)) })} />
+      </Field>
+
+      <Field
+        label="Confianza que define el informe"
+        subtitle="0–0.95 · def. 0.55"
+        info="Confianza desde la que un pick del LLM cuenta como parte del guion contra el que se miden los exóticos. Por debajo, el informe no lo afirma con fuerza suficiente como para descartar exóticos por él. El marcador exacto nunca cuenta (es la casilla más densa, no una restricción), ni tampoco los picks marcados como parejos o secundarios."
+      >
+        <Input type="number" min={0} max={0.95} step={0.05} className="w-24" value={sel.narrativeMinConfidence ?? 0.55}
+          onChange={(e) => setSel({ narrativeMinConfidence: Math.min(0.95, Math.max(0, Number(e.target.value) || 0)) })} />
+      </Field>
+
+      <Field
+        label="Puerta intermedia"
+        subtitle="def. ON"
+        info="Admite el candidato con cuota entre la 'Cuota mínima' y la 'Cuota de pick no obvio', confianza bajo el piso, que sea MUY coherente con el informe (ver control de abajo) y con retorno esperado que aguante. Cierra el hueco por donde se caía el pick que refuerza el guion: en Valencia–Barcelona, 'visitante gana sin recibir goles' (41% @2.35), exactamente el 0-3 del informe, no tenía puerta — ni llegaba al 55 ni a la cuota 2.5. Los picks que entran por aquí se marcan como secundarios (no cuentan para el grado), igual que los no obvios."
+      >
+        <Toggle value={sel.midDoorEnabled ?? true} onChange={(v) => setSel({ midDoorEnabled: v })} />
+      </Field>
+
+      <Field
+        label="Coherencia de la puerta intermedia"
+        subtitle="0.5–1 · def. 0.8"
+        info="Cuánto tiene que reforzar el guion un candidato para entrar por la puerta intermedia. Es más exigente que la coherencia general a propósito: esta puerta se salta el piso de confianza y su única justificación es que el pick cuente la misma historia que el informe. El servidor no lo deja bajar de 0.5."
+      >
+        <Input type="number" min={0.5} max={1} step={0.05} className="w-24" value={sel.midDoorMinCoherence ?? 0.8}
+          onChange={(e) => setSel({ midDoorMinCoherence: Math.min(1, Math.max(0.5, Number(e.target.value) || 0.5)) })} />
       </Field>
     </SectionCard>
   );
