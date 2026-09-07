@@ -44,7 +44,7 @@ export function GeneralTab({ form, setField }: { form: PredictionConfig; setFiel
           </Select>
         </Field>
 
-        <Field label="Reasoning effort" info="Depth of reasoning for supported models (DeepSeek R1, GPT Think).">
+        <Field label="Reasoning effort" subtitle="none = thinking off on DeepSeek" info="Depth of reasoning for supported models. Reasoning tokens are billed at the OUTPUT rate and currently make up ~85% of what a prediction emits, so this is the main cost lever. On DeepSeek, none turns thinking off outright and cuts the bill roughly in half, at the cost of shallower analysis. The GPT models have no off switch: there none just omits the setting and the model falls back to its own default effort, which is not necessarily cheaper than low. Leave empty to use the provider default.">
           <Select
             className="w-64"
             value={form.reasoningEffort ?? ''}

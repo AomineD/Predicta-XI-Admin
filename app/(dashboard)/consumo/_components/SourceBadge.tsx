@@ -1,15 +1,13 @@
-import type { CallType } from './types';
+import { callTypeColor, callTypeLabel } from './call-types';
 
-const STYLES: Record<CallType, { bg: string; text: string; label: string }> = {
-  prediction: { bg: 'bg-blue-400/15', text: 'text-blue-300', label: 'Prediction' },
-  combinada: { bg: 'bg-purple-400/15', text: 'text-purple-300', label: 'Combinada' },
-};
-
-export function SourceBadge({ callType }: { callType: CallType }) {
-  const style = STYLES[callType] ?? STYLES.prediction;
+export function SourceBadge({ callType }: { callType: string }) {
+  const color = callTypeColor(callType);
   return (
-    <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${style.bg} ${style.text}`}>
-      {style.label}
+    <span
+      className="px-1.5 py-0.5 rounded text-[10px] font-semibold whitespace-nowrap"
+      style={{ background: `${color}26`, color }}
+    >
+      {callTypeLabel(callType)}
     </span>
   );
 }

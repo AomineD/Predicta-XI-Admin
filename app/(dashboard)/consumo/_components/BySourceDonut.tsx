@@ -3,7 +3,7 @@
 import { useMemo } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { formatCost } from './format';
-import type { CallType } from './types';
+import { callTypeColor, callTypeLabel, isCallType, type CallType } from './call-types';
 
 export interface BySourceRow {
   callType: string;
@@ -11,17 +11,9 @@ export interface BySourceRow {
   costUsd: string;
   inputTokens: number;
   outputTokens: number;
+  reasoningTokens: number;
+  avgCostPerCall: string;
 }
-
-const COLORS: Record<string, string> = {
-  prediction: '#4DA8FF',
-  combinada: '#A855F7',
-};
-
-const LABELS: Record<string, string> = {
-  prediction: 'Prediction',
-  combinada: 'Combinada',
-};
 
 export function BySourceDonut({
   rows,
@@ -34,11 +26,14 @@ export function BySourceDonut({
 }) {
   const chartData = useMemo(
     () =>
-      rows.map((r) => ({
-        name: r.callType,
-        value: parseFloat(r.costUsd) || 0,
-        calls: r.calls,
-      })),
+      rows
+        .map((r) => ({
+          name: r.callType,
+          value: parseFloat(r.costUsd) || 0,
+          calls: r.calls,
+          avgCostPerCall: parseFloat(r.avgCostPerCall) || 0,
+        }))
+        .sort((a, b) => b.value - a.value),
     [rows],
   );
 
@@ -67,7 +62,7 @@ export function BySourceDonut({
                 paddingAngle={2}
                 onClick={(d) => {
                   const name = (d as { name?: string })?.name;
-                  if (name === 'prediction' || name === 'combinada') {
+                  if (isCallType(name)) {
                     onSelectSource(activeSource === name ? '' : name);
                   }
                 }}
@@ -76,7 +71,7 @@ export function BySourceDonut({
                 {chartData.map((d) => (
                   <Cell
                     key={d.name}
-                    fill={COLORS[d.name] ?? '#475569'}
+                    fill={callTypeColor(d.name)}
                     stroke={activeSource === d.name ? '#F5F7FB' : 'transparent'}
                     strokeWidth={activeSource === d.name ? 2 : 0}
                   />
@@ -86,7 +81,7 @@ export function BySourceDonut({
                 contentStyle={{ background: '#1F2A40', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, fontSize: 12 }}
                 labelStyle={{ color: '#F5F7FB', marginBottom: 4 }}
                 itemStyle={{ color: '#F5F7FB' }}
-                formatter={(v, name) => [formatCost(Number(v)), LABELS[name as string] ?? String(name)]}
+                formatter={(v, name) => [formatCost(Number(v)), callTypeLabel(String(name))]}
               />
             </PieChart>
           </ResponsiveContainer>
@@ -102,11 +97,14 @@ export function BySourceDonut({
                   }`}
                 >
                   <span className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full" style={{ background: COLORS[d.name] ?? '#475569' }} />
-                    <span className="text-text-secondary font-sans">{LABELS[d.name] ?? d.name}</span>
+                    <span className="w-2.5 h-2.5 rounded-full" style={{ background: callTypeColor(d.name) }} />
+                    <span className="text-text-secondary font-sans">{callTypeLabel(d.name)}</span>
                   </span>
-                  <span className="text-text-primary font-mono">
+                  <span className="text-text-primary font-mono text-right">
                     {formatCost(d.value)} <span className="text-text-muted">({pct.toFixed(0)}%)</span>
+                    <span className="block text-[10px] text-text-muted">
+                      {d.calls.toLocaleString('en-US')} calls · {formatCost(d.avgCostPerCall)}/call
+                    </span>
                   </span>
                 </button>
               );

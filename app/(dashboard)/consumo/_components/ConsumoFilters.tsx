@@ -1,6 +1,6 @@
 'use client';
 
-import type { CallType } from './types';
+import { CALL_TYPES, CALL_TYPE_LABELS, type CallType } from './call-types';
 
 const PROVIDERS = [
   { value: '', label: 'All Providers' },
@@ -19,8 +19,7 @@ const STATUS_OPTIONS = [
 
 const SOURCE_OPTIONS: Array<{ value: '' | CallType; label: string }> = [
   { value: '', label: 'All Sources' },
-  { value: 'prediction', label: 'Prediction' },
-  { value: 'combinada', label: 'Combinada' },
+  ...CALL_TYPES.map((value) => ({ value, label: CALL_TYPE_LABELS[value] })),
 ];
 
 export interface ConsumoFiltersValue {

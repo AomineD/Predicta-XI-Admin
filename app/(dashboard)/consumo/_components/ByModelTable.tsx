@@ -8,14 +8,28 @@ export interface ByModelRow {
   calls: number;
   inputTokens: number;
   outputTokens: number;
+  reasoningTokens: number;
+  cacheHitTokens: number;
   costUsd: string;
   avgCostPerCall: string;
-  pricing: { inputPer1M: number; outputPer1M: number } | null;
+  pricing: {
+    inputPer1M: number;
+    outputPer1M: number;
+    inputCacheHitPer1M?: number;
+    inputCacheMissPer1M?: number;
+    hasOffPeakDiscount?: boolean;
+  } | null;
 }
 
 function formatPrice(rate: number | undefined): string {
   if (rate === undefined || rate === null) return '—';
-  return `$${rate.toFixed(2)}`;
+  // Cache-hit rates run in the thousandths; two decimals would print $0.01.
+  return `$${rate < 0.1 ? rate.toFixed(3) : rate.toFixed(2)}`;
+}
+
+function formatShare(part: number, whole: number): string {
+  if (whole <= 0) return '—';
+  return `${((part / whole) * 100).toFixed(0)}%`;
 }
 
 export function ByModelTable({ rows, totalCost }: { rows: ByModelRow[]; totalCost: number }) {
@@ -26,7 +40,7 @@ export function ByModelTable({ rows, totalCost }: { rows: ByModelRow[]; totalCos
           By Model
         </h2>
         <span className="text-[10px] text-text-muted font-sans">
-          $/1M token rates from current pricing table
+          peak $/1M rates · DeepSeek bills half off-peak
         </span>
       </div>
       {rows.length === 0 ? (
@@ -40,10 +54,13 @@ export function ByModelTable({ rows, totalCost }: { rows: ByModelRow[]; totalCos
                 <th className="text-left font-medium pb-2 pr-3">Provider</th>
                 <th className="text-right font-medium pb-2 pr-3">Calls</th>
                 <th className="text-right font-medium pb-2 pr-3">Input</th>
+                <th className="text-right font-medium pb-2 pr-3">Cache hit</th>
                 <th className="text-right font-medium pb-2 pr-3">Output</th>
+                <th className="text-right font-medium pb-2 pr-3">Reasoning</th>
                 <th className="text-right font-medium pb-2 pr-3">Cost</th>
                 <th className="text-right font-medium pb-2 pr-3">$/Call</th>
-                <th className="text-right font-medium pb-2 pr-3">$/1M in</th>
+                <th className="text-right font-medium pb-2 pr-3">$/1M hit</th>
+                <th className="text-right font-medium pb-2 pr-3">$/1M miss</th>
                 <th className="text-right font-medium pb-2">$/1M out</th>
               </tr>
             </thead>
@@ -58,12 +75,15 @@ export function ByModelTable({ rows, totalCost }: { rows: ByModelRow[]; totalCos
                     <td className="py-2 pr-3 text-text-secondary">{r.provider}</td>
                     <td className="py-2 pr-3 text-right text-text-primary font-mono">{r.calls.toLocaleString('en-US')}</td>
                     <td className="py-2 pr-3 text-right text-text-secondary font-mono">{formatTokens(r.inputTokens)}</td>
+                    <td className="py-2 pr-3 text-right text-text-muted font-mono">{formatShare(r.cacheHitTokens, r.inputTokens)}</td>
                     <td className="py-2 pr-3 text-right text-text-secondary font-mono">{formatTokens(r.outputTokens)}</td>
+                    <td className="py-2 pr-3 text-right text-text-muted font-mono">{formatShare(r.reasoningTokens, r.outputTokens)}</td>
                     <td className={`py-2 pr-3 text-right font-semibold font-mono ${heavy ? 'text-amber-300' : 'text-text-primary'}`}>
                       {formatCost(r.costUsd)}
                     </td>
                     <td className="py-2 pr-3 text-right text-text-secondary font-mono">{formatCost(r.avgCostPerCall)}</td>
-                    <td className="py-2 pr-3 text-right text-text-muted font-mono">{formatPrice(r.pricing?.inputPer1M)}</td>
+                    <td className="py-2 pr-3 text-right text-text-muted font-mono">{formatPrice(r.pricing?.inputCacheHitPer1M)}</td>
+                    <td className="py-2 pr-3 text-right text-text-muted font-mono">{formatPrice(r.pricing?.inputCacheMissPer1M ?? r.pricing?.inputPer1M)}</td>
                     <td className="py-2 text-right text-text-muted font-mono">{formatPrice(r.pricing?.outputPer1M)}</td>
                   </tr>
                 );

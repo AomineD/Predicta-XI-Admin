@@ -72,7 +72,12 @@ export const DATA_FIELDS = [
   'deep_stats',
 ];
 
-export const REASONING_OPTIONS = ['', 'low', 'medium', 'high'];
+// Reasoning tokens are billed as output — the dearest bucket — and on DeepSeek
+// they are ~85% of what a prediction emits, so this is the biggest cost lever on
+// this page. 'none' turns thinking off outright on DeepSeek; the GPT models have
+// no off switch, so there it only omits the setting and the provider default
+// applies. See the field's ⓘ in GeneralTab.
+export const REASONING_OPTIONS = ['', 'none', 'low', 'medium', 'high'];
 export const PROVIDERS = ['deepseek', 'openai', 'google', 'zhipu', 'moonshot'];
 
 // All toggles below map to a `boolean` field on PredictionConfig, so indexing
