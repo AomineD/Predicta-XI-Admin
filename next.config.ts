@@ -8,8 +8,9 @@ import type { NextConfig } from "next";
  * administración, así que cualquier script que llegue a ejecutarse aquí puede
  * operar el sistema entero. El detonante fue el editor de insignias, donde el
  * admin pega un SVG descargado de internet — ese caso ya se ataja pintándolo
- * como `data:` URI dentro de un `<img>` y validándolo en el servidor, pero una
- * CSP es la red que cubre lo que todavía no hemos pensado.
+ * como máscara CSS (`mask-image`) con un `data:` URI, que es un contexto sin
+ * scripting igual que un `<img>`, y validándolo en el servidor; pero una CSP es
+ * la red que cubre lo que todavía no hemos pensado.
  *
  * `unsafe-inline` y `unsafe-eval` en `script-src` no son un descuido: Next
  * inyecta los scripts de hidratación en línea y el modo desarrollo usa `eval`.

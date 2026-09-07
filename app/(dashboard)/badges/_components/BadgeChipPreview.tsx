@@ -45,6 +45,12 @@ export function BadgeChipPreview({
 }) {
   const c = CATEGORY_COLORS[category] ?? CATEGORY_COLORS.feat;
   const px = size === 'sm' ? 11 : 13;
+  // Ojo con el data URI vacío: `url("")` NO es una imagen ausente, resuelve al
+  // documento actual y el navegador intentaría usar la página del panel como
+  // máscara (chip en bloque sólido o invisible). Por eso la condición del render
+  // es `maskUrl`, no `iconSvg`: si `svgDataUri` falla se cae al punto del slug.
+  const maskUri = iconSvg ? svgDataUri(iconSvg) : '';
+  const maskUrl = maskUri ? `url("${maskUri}")` : null;
 
   return (
     <span
@@ -55,7 +61,7 @@ export function BadgeChipPreview({
         className="inline-flex items-center justify-center flex-none"
         style={{ width: px + 3, height: px + 3, color: c.accent }}
       >
-        {iconSvg ? (
+        {maskUrl ? (
           // NUNCA con `dangerouslySetInnerHTML`.
           //
           // Aquí el SVG viene del textarea del editor, letra a letra, ANTES de
@@ -64,15 +70,28 @@ export function BadgeChipPreview({
           // de iconos— dentro de la sesión que hace de proxy a todos los
           // endpoints de administración.
           //
-          // Un `data:` URI dentro de un `<img>` es un contexto sin scripting:
-          // el navegador dibuja el SVG y no ejecuta nada de lo que lleve dentro.
-          // El teñido se pierde (el filtro CSS no llega dentro de un `<img>`),
-          // y es un precio justo por no ejecutar HTML de terceros en el panel.
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={svgDataUri(iconSvg)}
-            alt=""
-            className="w-full h-full object-contain"
+          // Se usa como MÁSCARA CSS, no como `<img>`. Los dos son contextos sin
+          // scripting (el navegador dibuja el SVG y no ejecuta nada de lo que
+          // lleve dentro), pero la máscara además tiñe: pinta el color de la
+          // categoría a través de la silueta del icono. Con `<img>` el color se
+          // perdía y todo icono con `fill` propio —o sin `fill`, que por
+          // defecto es negro— se veía NEGRO sobre el fondo oscuro del panel,
+          // aunque en la app saliera del color correcto: Flutter lo tiñe con
+          // `ColorFilter(BlendMode.srcIn)`, que es justo lo que replica esto.
+          <span
+            aria-hidden
+            className="block w-full h-full"
+            style={{
+              backgroundColor: c.accent,
+              maskImage: maskUrl,
+              WebkitMaskImage: maskUrl,
+              maskRepeat: 'no-repeat',
+              WebkitMaskRepeat: 'no-repeat',
+              maskPosition: 'center',
+              WebkitMaskPosition: 'center',
+              maskSize: 'contain',
+              WebkitMaskSize: 'contain',
+            }}
           />
         ) : iconSlug ? (
           <span className="block w-2 h-2 rounded-full" style={{ background: c.accent }} />
