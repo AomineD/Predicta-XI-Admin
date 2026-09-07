@@ -67,6 +67,15 @@ export interface BadgeDefinition {
   descriptionEn: string;
   evaluator: 'builtin' | 'criteria';
   criteria: BadgeCriteria | null;
+  /**
+   * "Cómo se gana" en los dos idiomas, tal como lo lee el usuario en la app.
+   *
+   * Lo DERIVA el backend con los umbrales vigentes, así que no es editable ni
+   * viaja en el formulario: subir la cuota mínima de Cazacuotas en la tarjeta
+   * Umbrales reescribe este texto en la app y aquí a la vez. `null` = no hay
+   * regla que contar (una insignia por criterios todavía sin condiciones).
+   */
+  howToEarn: { es: string; en: string } | null;
   enabled: boolean;
   isBuiltin: boolean;
   sortOrder: number;
@@ -107,7 +116,7 @@ export interface BadgesConfig {
 }
 
 /** Formulario del editor. Es la definición sin los campos que fija el servidor. */
-export type BadgeDraft = Omit<BadgeDefinition, 'evaluator' | 'isBuiltin'>;
+export type BadgeDraft = Omit<BadgeDefinition, 'evaluator' | 'isBuiltin' | 'howToEarn'>;
 
 export function emptyDraft(nextSortOrder: number): BadgeDraft {
   return {

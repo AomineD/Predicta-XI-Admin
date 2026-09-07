@@ -30,11 +30,66 @@ import {
  * La clave nunca se edita después de crear: es lo que guarda `user_badges`, y
  * renombrarla dejaría huérfano a todo el que ya tiene la insignia.
  */
+/**
+ * La regla real de la insignia, palabra por palabra igual que en la app.
+ *
+ * Existe porque el panel estaba mintiendo por omisión: decía "esta la concede el
+ * servidor" y nada más, así que para saber qué exigía Cazacuotas había que abrir
+ * el código. El texto lo deriva el backend de los umbrales vigentes y lo sirve
+ * tanto aquí como en `/badges/catalog`, de modo que lo que lee el admin es
+ * literalmente lo que lee el usuario.
+ */
+function HowToEarnCard({
+  howToEarn,
+  isBuiltin,
+  isNew,
+}: {
+  howToEarn: { es: string; en: string } | null;
+  isBuiltin: boolean;
+  isNew: boolean;
+}) {
+  if (!howToEarn) {
+    return (
+      <div className="rounded-xl border border-dashed border-border p-4">
+        <p className="text-xs text-text-muted font-sans leading-relaxed">
+          {isNew
+            ? 'En cuanto guardes la regla, aquí aparecerá la explicación que verá el usuario al pulsar "¿Cómo se gana?" en la app.'
+            : 'Esta insignia todavía no tiene una regla que explicar, así que en la app no se muestra el botón "¿Cómo se gana?".'}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-primary/25 bg-primary/5 p-4">
+      <div className="flex items-baseline justify-between gap-3">
+        <p className="text-xs font-sans font-semibold uppercase tracking-wide text-primary">
+          Cómo se gana
+        </p>
+        <p className="text-[11px] text-text-muted font-sans">lo que ve el usuario en la app</p>
+      </div>
+      <p className="text-sm text-text-primary font-sans mt-2 leading-relaxed whitespace-pre-line">
+        {howToEarn.es}
+      </p>
+      <p className="text-xs text-text-muted font-sans mt-3 leading-relaxed whitespace-pre-line">
+        {howToEarn.en}
+      </p>
+      {!isBuiltin && (
+        <p className="text-[11px] text-text-muted font-sans mt-3">
+          Se recalcula al guardar: si cambias las condiciones de abajo, este texto todavía enseña la
+          regla anterior.
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function BadgeEditor({
   open,
   draft,
   isNew,
   isBuiltin,
+  howToEarn,
   metrics,
   saving,
   error,
@@ -46,6 +101,8 @@ export function BadgeEditor({
   draft: BadgeDraft;
   isNew: boolean;
   isBuiltin: boolean;
+  /** Regla real, derivada por el servidor. `null` = todavía no hay ninguna. */
+  howToEarn: { es: string; en: string } | null;
   metrics: BadgeMetric[];
   saving: boolean;
   error: string | null;
@@ -241,17 +298,19 @@ export function BadgeEditor({
         </>
       ) : (
         <>
+          <HowToEarnCard howToEarn={howToEarn} isBuiltin={isBuiltin} isNew={isNew} />
+
           {isBuiltin ? (
-            <div className="rounded-xl border border-border bg-surface-2 p-4">
+            <div className="rounded-xl border border-border bg-surface-2 p-4 mt-4">
               <p className="text-sm text-text-primary font-sans">
-                Esta insignia la concede el servidor con lógica propia.
+                La concede el servidor con lógica propia: no se edita desde aquí.
               </p>
               <p className="text-xs text-text-muted font-sans mt-2 leading-relaxed">
                 Depende de cosas que no son un número por usuario —las semanas perfectas de un grupo
-                recién liquidado, el ganador de una quiniela con su gate anti-farming— y por eso no
-                se puede describir con umbrales. Sus exigencias (cuota mínima de Cazacuotas, rondas
-                seguidas de Vidente de llaves, y demás) se ajustan en la tarjeta{' '}
-                <strong>Umbrales</strong> de esta misma página.
+                recién liquidado, el ganador de una quiniela con su gate anti-farming—. Lo que sí
+                puedes mover son sus exigencias (cuota mínima de Cazacuotas, rondas seguidas de
+                Vidente de llaves, y demás): se ajustan en la tarjeta <strong>Umbrales</strong> de
+                esta misma página, y el texto de arriba se reescribe solo con el número nuevo.
               </p>
             </div>
           ) : (

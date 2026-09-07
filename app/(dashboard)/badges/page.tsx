@@ -66,12 +66,16 @@ export default function BadgesPage() {
   const [draft, setDraft] = useState<BadgeDraft | null>(null);
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editingBuiltin, setEditingBuiltin] = useState(false);
+  // La explicación la calcula el servidor, así que se guarda aparte del
+  // formulario: no es un campo editable, es lo que el usuario acabará leyendo.
+  const [editingHowTo, setEditingHowTo] = useState<{ es: string; en: string } | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [toDelete, setToDelete] = useState<BadgeDefinition | null>(null);
 
   const closeEditor = (): void => {
     setDraft(null);
     setEditingKey(null);
+    setEditingHowTo(null);
     setSaveError(null);
   };
 
@@ -175,6 +179,7 @@ export default function BadgesPage() {
                 setDraft(emptyDraft(next));
                 setEditingKey(null);
                 setEditingBuiltin(false);
+                setEditingHowTo(null);
                 setSaveError(null);
               }}
             >
@@ -474,10 +479,16 @@ export default function BadgesPage() {
                           type="button"
                           title="Editar"
                           onClick={() => {
-                            const { evaluator: _e, isBuiltin: _b, ...rest } = b;
+                            const {
+                              evaluator: _e,
+                              isBuiltin: _b,
+                              howToEarn: _h,
+                              ...rest
+                            } = b;
                             setDraft(rest);
                             setEditingKey(b.key);
                             setEditingBuiltin(b.isBuiltin);
+                            setEditingHowTo(b.howToEarn);
                             setSaveError(null);
                           }}
                           className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-2 transition-colors"
@@ -513,6 +524,7 @@ export default function BadgesPage() {
           draft={draft}
           isNew={editingKey === null}
           isBuiltin={editingBuiltin}
+          howToEarn={editingHowTo}
           metrics={metrics}
           saving={save.isPending}
           error={saveError}
