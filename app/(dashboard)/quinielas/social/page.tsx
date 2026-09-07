@@ -119,6 +119,9 @@ interface SocialConfig {
   knockoutRiskMissPenalty: number;
   knockoutProximityPoints: number;
   knockoutProximityMaxGoalError: number;
+  knockoutFirstLegExactScorePoints: number;
+  knockoutFirstLegCorrectOutcomePoints: number;
+  knockoutFirstLegProximityPoints: number;
   categoryWeights: Record<string, number>;
   categoryDefaultWeight: number;
   rankingParams: {
@@ -724,7 +727,7 @@ function ConfigTab() {
 
       <SectionCard
         title="Knockout scoring (idea #21)"
-        subtitle="0–100 · recalcula las quinielas EN curso" info="Puntos por cruce de la quiniela de eliminatorias. Ejes ADITIVOS: quién avanza + marcador 90' + riesgos (prórroga/penales). Las quinielas ya terminadas quedan congeladas. La penalización de riesgo es negativa."
+        subtitle="0–100 · recalcula las quinielas EN curso" info="Puntos por cruce de la quiniela de eliminatorias. Ejes ADITIVOS: quién avanza + marcador 90' + riesgos (prórroga/penales), y en las llaves a ida y vuelta también el marcador de la ida. Las quinielas ya terminadas quedan congeladas. La penalización de riesgo es negativa."
       >
         <Field label="Quién avanza" subtitle="Eje principal, aditivo: acertar el clasificado del cruce">
           <NumInput value={f.knockoutAdvancerPoints} onChange={(v) => set('knockoutAdvancerPoints', v)} min={0} max={100} />
@@ -738,8 +741,21 @@ function ConfigTab() {
         <Field label="Bonus de cercanía" subtitle="0 = off" info="Extra cuando la tendencia acierta y el marcador queda a ≤ el error de goles de abajo.">
           <NumInput value={f.knockoutProximityPoints} onChange={(v) => set('knockoutProximityPoints', v)} min={0} max={100} />
         </Field>
-        <Field label="Cercanía: error máx de goles" subtitle="|Δlocal|+|Δvisitante| que aún gana el bonus">
+        <Field label="Cercanía: error máx de goles" subtitle="|Δlocal|+|Δvisitante| que aún gana el bonus" info="Umbral compartido por los dos partidos de una llave a ida y vuelta: es un umbral de «cerca», no un peso.">
           <NumInput value={f.knockoutProximityMaxGoalError} onChange={(v) => set('knockoutProximityMaxGoalError', v)} min={0} max={20} />
+        </Field>
+        <Field
+          label="Ida: marcador exacto (90')"
+          subtitle="Solo llaves a ida y vuelta"
+          info="En una llave a doble partido se puntúan los DOS marcadores: el de la vuelta con los ejes de arriba y el de la ida con estos tres. Los defaults (3/1/1) dejan la ida por debajo de la vuelta a propósito — se predice con una semana más de antelación y es la menos informativa —, y sobre todo por debajo de «quién avanza», que es el eje principal de una eliminatoria. Si los subes por encima, el marcador pasa a pesar más que el clasificado."
+        >
+          <NumInput value={f.knockoutFirstLegExactScorePoints} onChange={(v) => set('knockoutFirstLegExactScorePoints', v)} min={0} max={100} />
+        </Field>
+        <Field label="Ida: tendencia (1X2 del 90')" subtitle="Acertar el resultado de la ida sin el marcador exacto">
+          <NumInput value={f.knockoutFirstLegCorrectOutcomePoints} onChange={(v) => set('knockoutFirstLegCorrectOutcomePoints', v)} min={0} max={100} />
+        </Field>
+        <Field label="Ida: bonus de cercanía" subtitle="0 = off" info="Mismo umbral de error de goles que el de la vuelta.">
+          <NumInput value={f.knockoutFirstLegProximityPoints} onChange={(v) => set('knockoutFirstLegProximityPoints', v)} min={0} max={100} />
         </Field>
         <Field label="Prórroga (con quién avanza)" subtitle="Riesgo prórroga acertado + acertar el clasificado">
           <NumInput value={f.knockoutExtraTimeFullPoints} onChange={(v) => set('knockoutExtraTimeFullPoints', v)} min={0} max={100} />
