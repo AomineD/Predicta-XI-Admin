@@ -29,6 +29,8 @@ interface UserDetail {
     deletedAt: string | null;
     totalPredictions: number;
     successRate: number | null;
+    wonPredictions: number;
+    settledPicks: number;
     referredBy: string | null;
     updatedAt: string | null;
   };
@@ -208,7 +210,19 @@ export function UserDetailDrawer({ id, onClose }: { id: string; onClose: () => v
               <Field label="Plan" value={data.profile.plan} />
               <Field label="Créditos" value={String(data.profile.credits)} />
               <Field label="Predicciones" value={String(data.profile.totalPredictions)} />
-              <Field label="Acierto" value={data.profile.successRate != null ? `${data.profile.successRate}%` : '—'} />
+              <Field
+                label="Acierto"
+                value={
+                  data.profile.successRate != null
+                    ? `${data.profile.successRate}% (${data.profile.settledPicks} picks)`
+                    : '—'
+                }
+              />
+              {/* Plenos = predicciones con TODOS los picks acertados. Es una
+                  hazaña rara (~1 %), no el acierto: sin este campo al lado, un
+                  "Acierto" alto y un contador de ganadas a cero se leen como una
+                  contradicción. */}
+              <Field label="Plenos" value={String(data.profile.wonPredictions)} />
               <Field label="Registro" value={data.profile.createdAt ? formatDateTime(data.profile.createdAt) : '—'} />
               <Field label="Último login" value={data.profile.lastLoginAt ? formatDateTime(data.profile.lastLoginAt) : '—'} />
               <Field label="Referido por" value={data.profile.referredBy ?? '—'} />

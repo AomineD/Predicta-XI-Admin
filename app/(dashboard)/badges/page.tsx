@@ -222,8 +222,8 @@ export default function BadgesPage() {
               />
             </Field>
             <Field
-              label="Muestra mínima del ranking global de combinadas"
-              subtitle="def. 10 liquidadas"
+              label="Mínimo de combinadas liquidadas (ranking global)"
+              subtitle="def. 10 · ganadas + perdidas"
               info="Combinadas ya liquidadas que hacen falta para entrar en el ranking mundial de combinadas. Sin este suelo, quien acertó una sola combinada de cuota alta sale en el podio por delante de quien lleva cien. Si lo subes demasiado el ranking global se queda vacío."
             >
               <NumInput
