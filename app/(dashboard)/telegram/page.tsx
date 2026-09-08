@@ -16,6 +16,7 @@ const TG_TABS = [
   { id: 'content', label: 'Contenido' },
   { id: 'queue', label: 'Cola' },
   { id: 'history', label: 'Historial' },
+  { id: 'metrics', label: 'Rendimiento' },
 ] as const;
 type TgTabId = typeof TG_TABS[number]['id'];
 
@@ -26,6 +27,27 @@ type ChannelMode = 'bilingual' | 'split';
 
 const CONTENT_TYPES = ['match_recap', 'weekly_recap', 'standings_recap', 'match_teaser', 'free_pick'] as const;
 type ContentType = typeof CONTENT_TYPES[number];
+
+/**
+ * Configuración de UN tipo. Desde la migración `0193` vive en su propia fila
+ * (`telegram_content_types`) en vez de en columnas de la tabla global: con los
+ * diez tipos nuevos del plan, el modelo por columnas serían más de cincuenta.
+ *
+ * `hours` y `weekdays` son listas porque un tipo puede ocupar varias franjas y
+ * porque el domingo del balance semanal estaba CABLEADO en el backend; ahora es
+ * dato.
+ */
+interface ContentTypeConfig {
+  contentType: ContentType;
+  enabled: boolean;
+  mode: PublishMode;
+  hours: number[];
+  /** 0 = domingo. */
+  weekdays: number[];
+  maxPerDay: number;
+  promptOverride: string | null;
+  settings: Record<string, unknown>;
+}
 
 interface TelegramConfig {
   enabled: boolean;
@@ -39,30 +61,16 @@ interface TelegramConfig {
   ctaUtmEnabled: boolean;
   cardImagesEnabled: boolean;
   historyRetentionDays: number;
-  matchRecapEnabled: boolean;
-  matchRecapMode: PublishMode;
-  matchRecapHour: number;
-  matchRecapPromptOverride: string | null;
-  matchRecapMinFacts: number;
-  weeklyRecapEnabled: boolean;
-  weeklyRecapMode: PublishMode;
-  weeklyRecapHour: number;
-  weeklyRecapPromptOverride: string | null;
-  weeklyRecapMinFacts: number;
-  standingsRecapEnabled: boolean;
-  standingsRecapMode: PublishMode;
-  standingsRecapHour: number;
-  standingsRecapPromptOverride: string | null;
-  standingsRecapLeagueIds: number[] | null;
-  matchTeaserEnabled: boolean;
-  matchTeaserMode: PublishMode;
-  matchTeaserHour: number;
-  matchTeaserPromptOverride: string | null;
-  freePickEnabled: boolean;
-  freePickMode: PublishMode;
-  freePickHour: number;
-  freePickPromptOverride: string | null;
-  freePickMinConfidence: number;
+  contentTypes: ContentTypeConfig[];
+}
+
+/** Rendimiento por tipo: reacciones y votos por publicación. */
+interface TypeMetrics {
+  contentType: string;
+  posts: number;
+  reactions: number;
+  pollVotes: number;
+  engagementPerPost: number;
 }
 
 interface TelegramPost {
@@ -171,41 +179,101 @@ function StatusPill({ status }: { status: TelegramPost['status'] }) {
 
 /* ── content-type card ──────────────────────────────────────────────────────── */
 
+const WEEKDAY_LABELS = ['D', 'L', 'M', 'X', 'J', 'V', 'S'];
+
+/** "11, 19" → [11, 19]. Descarta lo que no sea una hora válida. */
+function parseHours(text: string): number[] {
+  const hours = text
+    .split(',')
+    .map((s) => Math.trunc(Number(s.trim())))
+    .filter((n) => Number.isFinite(n) && n >= 0 && n <= 23);
+  return Array.from(new Set(hours)).sort((a, b) => a - b);
+}
+
 function TypeCard({
   title,
   subtitle,
   info,
-  enabled,
-  mode,
-  hour,
-  prompt,
+  config,
   onChange,
   extra,
 }: {
   title: string;
   subtitle?: string;
   info?: React.ReactNode;
-  enabled: boolean;
-  mode: PublishMode;
-  hour: number;
-  prompt: string | null;
-  onChange: (patch: Record<string, unknown>) => void;
+  config: ContentTypeConfig;
+  onChange: (patch: Partial<ContentTypeConfig>) => void;
   extra?: React.ReactNode;
 }) {
+  const toggleWeekday = (day: number) => {
+    const next = config.weekdays.includes(day)
+      ? config.weekdays.filter((d) => d !== day)
+      : [...config.weekdays, day].sort((a, b) => a - b);
+    // Sin días activos el tipo no publicaría nunca, que es lo mismo que apagarlo
+    // pero sin decirlo: se ignora el intento de dejarlo vacío.
+    if (next.length > 0) onChange({ weekdays: next });
+  };
+
   return (
     <SectionCard title={title} subtitle={subtitle} info={info}>
       <Field label="Activo" subtitle="Si está apagado, este tipo nunca se publica.">
-        <Toggle value={enabled} onChange={(v) => onChange({ enabled: v })} />
+        <Toggle value={config.enabled} onChange={(v) => onChange({ enabled: v })} />
       </Field>
       <Field label="Modo" info="Automático publica solo; Con aprobación deja un borrador en la cola.">
-        <Select value={mode} options={MODE_OPTIONS} onChange={(v) => onChange({ mode: v })} />
+        <Select value={config.mode} options={MODE_OPTIONS} onChange={(v) => onChange({ mode: v })} />
       </Field>
-      <Field label="Hora (Bogotá)" subtitle="Hora 0–23 a la que se publica (zona del canal).">
-        <NumInput value={hour} onChange={(v) => onChange({ hour: v })} min={0} max={23} />
+      <Field
+        label="Horas (Bogotá)"
+        subtitle="Una o varias, separadas por coma."
+        info="Cada hora de la lista es una publicación distinta ese día, siempre que el tipo no haya alcanzado su tope diario. Vacío = no se agenda nunca."
+      >
+        <TextInput
+          value={config.hours.join(', ')}
+          onChange={(v) => onChange({ hours: parseHours(v) })}
+          placeholder="11, 19"
+        />
+      </Field>
+      <Field
+        label="Días"
+        subtitle="Días de la semana en los que se publica."
+        info="Al menos uno. Quitar todos equivaldría a apagar el tipo sin que el interruptor lo refleje, así que no se permite."
+      >
+        <div className="flex gap-1">
+          {WEEKDAY_LABELS.map((label, day) => {
+            const on = config.weekdays.includes(day);
+            return (
+              <button
+                key={day}
+                type="button"
+                onClick={() => toggleWeekday(day)}
+                aria-pressed={on}
+                aria-label={`Día ${label}`}
+                className={`w-8 h-8 rounded-md text-xs font-sans font-semibold transition-colors ${
+                  on
+                    ? 'bg-accent text-bg-primary'
+                    : 'bg-surface-2 text-text-muted hover:text-text-secondary'
+                }`}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      </Field>
+      <Field
+        label="Tope diario del tipo"
+        subtitle="Máximo de publicaciones al día de este tipo."
+        info="Se aplica además del tope global del canal, nunca en su lugar: un tipo con tope 5 sigue sin poder pasarse del límite global."
+      >
+        <NumInput value={config.maxPerDay} onChange={(v) => onChange({ maxPerDay: v })} min={1} max={100} />
       </Field>
       {extra}
       <Field label="Prompt extra (opcional)" subtitle="Vacío = por defecto" info="Instrucción adicional para el redactor IA.">
-        <TextArea value={prompt ?? ''} onChange={(v) => onChange({ promptOverride: v })} placeholder="Tono, ángulo, énfasis…" />
+        <TextArea
+          value={config.promptOverride ?? ''}
+          onChange={(v) => onChange({ promptOverride: v || null })}
+          placeholder="Tono, ángulo, énfasis…"
+        />
       </Field>
     </SectionCard>
   );
@@ -264,6 +332,37 @@ export default function TelegramPage() {
   const canSave = (dirty || tokenInput.trim().length > 0) && !!cfg;
 
   const patch = (p: Partial<TelegramConfig>) => cfg && setForm({ ...cfg, ...p });
+
+  /** La configuración de un tipo, o un default si el backend aún no la sembró. */
+  const typeCfg = (type: ContentType): ContentTypeConfig =>
+    cfg?.contentTypes.find((t) => t.contentType === type) ?? {
+      contentType: type,
+      enabled: false,
+      mode: 'approval',
+      hours: [],
+      weekdays: [0, 1, 2, 3, 4, 5, 6],
+      maxPerDay: 1,
+      promptOverride: null,
+      settings: {},
+    };
+
+  /** Cambia UN tipo dejando los demás intactos. */
+  const patchType = (type: ContentType, p: Partial<ContentTypeConfig>) => {
+    if (!cfg) return;
+    const current = typeCfg(type);
+    const next = { ...current, ...p };
+    const others = cfg.contentTypes.filter((t) => t.contentType !== type);
+    setForm({ ...cfg, contentTypes: [...others, next] });
+  };
+
+  /** Cambia un umbral dentro de `settings` sin perder los demás. */
+  const patchSetting = (type: ContentType, key: string, value: unknown) =>
+    patchType(type, { settings: { ...typeCfg(type).settings, [key]: value } });
+
+  const numSetting = (type: ContentType, key: string, fallback: number): number => {
+    const raw = typeCfg(type).settings[key];
+    return typeof raw === 'number' && Number.isFinite(raw) ? raw : fallback;
+  };
 
   const saveCfg = useMutation({
     mutationFn: (body: Record<string, unknown>) => api.put('/admin/telegram/config', body),
@@ -324,6 +423,41 @@ export default function TelegramPage() {
     enabled: tab === 'history',
   });
 
+  /* ── webhook (medición) ── */
+  const webhookQ = useQuery<{
+    url: string;
+    pendingUpdateCount: number;
+    lastErrorMessage: string | null;
+    secretConfigured: boolean;
+  }>({
+    queryKey: ['telegram-webhook'],
+    queryFn: () => api.get('/admin/telegram/webhook'),
+    enabled: tab === 'connection',
+    // Sin token de bot el endpoint responde 400: no tiene sentido reintentar.
+    retry: false,
+  });
+  const [webhookUrl, setWebhookUrl] = useState('');
+  const [webhookMsg, setWebhookMsg] = useState<string | null>(null);
+  const webhookMut = useMutation({
+    mutationFn: (action: 'register' | 'delete') =>
+      action === 'register'
+        ? api.post('/admin/telegram/webhook', { url: webhookUrl.trim() })
+        : api.delete('/admin/telegram/webhook'),
+    onSuccess: (_res, action) => {
+      setWebhookMsg(action === 'register' ? 'Webhook registrado.' : 'Webhook eliminado.');
+      qc.invalidateQueries({ queryKey: ['telegram-webhook'] });
+    },
+    onError: (err: Error) => setWebhookMsg(err.message),
+  });
+
+  /* ── rendimiento por tipo ── */
+  const [metricsDays, setMetricsDays] = useState(30);
+  const metricsQ = useQuery<{ days: number; rows: TypeMetrics[] }>({
+    queryKey: ['telegram-metrics', metricsDays],
+    queryFn: () => api.get(`/admin/telegram/metrics?days=${metricsDays}`),
+    enabled: tab === 'metrics',
+  });
+
   const postAction = useMutation({
     mutationFn: ({ id, action, promptOverride }: { id: string; action: 'approve' | 'reject' | 'regenerate' | 'publish'; promptOverride?: string }) =>
       api.post(`/admin/telegram/posts/${id}/${action}`, action === 'regenerate' ? { promptOverride } : undefined),
@@ -345,7 +479,8 @@ export default function TelegramPage() {
   }, [tab, canSave, saveCfg.isPending, cfg, tokenInput]);
 
   /* ── league ids text helper (standings) ── */
-  const leagueIdsText = (cfg?.standingsRecapLeagueIds ?? []).join(', ');
+  const leagueIdsRaw = typeCfg('standings_recap').settings.leagueIds;
+  const leagueIdsText = Array.isArray(leagueIdsRaw) ? leagueIdsRaw.join(', ') : '';
   const parseLeagueIds = (raw: string): number[] | null => {
     const ids = raw
       .split(/[\s,]+/)
@@ -433,6 +568,61 @@ export default function TelegramPage() {
                 <span className="text-sm text-text-muted font-sans">{cfg.publishTimezone}</span>
               </Field>
             </SectionCard>
+
+            <SectionCard
+              title="Webhook (medición)"
+              info="Telegram avisa aquí cuando alguien reacciona a una publicación o vota en una encuesta. Sin webhook el canal publica igual, pero la pestaña Rendimiento se queda vacía. Requiere que el bot sea ADMINISTRADOR del canal y que TELEGRAM_WEBHOOK_SECRET esté puesto en el servidor."
+            >
+              <Field label="Estado" subtitle="URL registrada en Telegram ahora mismo.">
+                <span className="text-sm font-sans text-text-secondary break-all">
+                  {webhookQ.isLoading
+                    ? 'Cargando…'
+                    : webhookQ.data?.url
+                      ? webhookQ.data.url
+                      : 'Sin registrar'}
+                </span>
+              </Field>
+              {webhookQ.data && !webhookQ.data.secretConfigured && (
+                <p className="text-xs text-danger font-sans">
+                  Falta <code>TELEGRAM_WEBHOOK_SECRET</code> en el servidor: el receptor rechazaría
+                  todos los updates, así que no se puede registrar todavía.
+                </p>
+              )}
+              {webhookQ.data?.lastErrorMessage && (
+                <p className="text-xs text-warning font-sans">
+                  Último error de Telegram: {webhookQ.data.lastErrorMessage}
+                </p>
+              )}
+              <Field label="URL pública" subtitle="Debe ser https y terminar en /telegram/webhook.">
+                <TextInput
+                  value={webhookUrl}
+                  onChange={setWebhookUrl}
+                  placeholder="https://predictaxi-api.supo-services.online/telegram/webhook"
+                />
+              </Field>
+              <Field label="Acciones" subtitle="">
+                <div className="flex gap-2">
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    loading={webhookMut.isPending}
+                    disabled={!webhookQ.data?.secretConfigured}
+                    onClick={() => webhookMut.mutate('register')}
+                  >
+                    Registrar
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    loading={webhookMut.isPending}
+                    onClick={() => webhookMut.mutate('delete')}
+                  >
+                    Quitar
+                  </Button>
+                </div>
+              </Field>
+              {webhookMsg && <p className="text-xs font-sans text-text-secondary pt-2">{webhookMsg}</p>}
+            </SectionCard>
           </div>
 
           {/* ── CONTENT ── */}
@@ -457,39 +647,33 @@ export default function TelegramPage() {
             <TypeCard
               title="Recap diario"
               info="Cuántos pronósticos acertó la IA en el día, con desglose por liga."
-              enabled={cfg.matchRecapEnabled}
-              mode={cfg.matchRecapMode}
-              hour={cfg.matchRecapHour}
-              prompt={cfg.matchRecapPromptOverride}
-              onChange={(p) => patch({
-                ...(p.enabled !== undefined && { matchRecapEnabled: p.enabled as boolean }),
-                ...(p.mode !== undefined && { matchRecapMode: p.mode as PublishMode }),
-                ...(p.hour !== undefined && { matchRecapHour: p.hour as number }),
-                ...(p.promptOverride !== undefined && { matchRecapPromptOverride: (p.promptOverride as string) || null }),
-              })}
+              config={typeCfg('match_recap')}
+              onChange={(p) => patchType('match_recap', p)}
               extra={
                 <Field label="Mín. pronósticos" subtitle="No publica si hay menos de N liquidados ese día.">
-                  <NumInput value={cfg.matchRecapMinFacts} onChange={(v) => patch({ matchRecapMinFacts: v })} min={1} max={100} />
+                  <NumInput
+                    value={numSetting('match_recap', 'minFacts', 1)}
+                    onChange={(v) => patchSetting('match_recap', 'minFacts', v)}
+                    min={1}
+                    max={100}
+                  />
                 </Field>
               }
             />
 
             <TypeCard
               title="Balance semanal"
-              info="Aciertos de los últimos 7 días. Se publica los domingos a su hora."
-              enabled={cfg.weeklyRecapEnabled}
-              mode={cfg.weeklyRecapMode}
-              hour={cfg.weeklyRecapHour}
-              prompt={cfg.weeklyRecapPromptOverride}
-              onChange={(p) => patch({
-                ...(p.enabled !== undefined && { weeklyRecapEnabled: p.enabled as boolean }),
-                ...(p.mode !== undefined && { weeklyRecapMode: p.mode as PublishMode }),
-                ...(p.hour !== undefined && { weeklyRecapHour: p.hour as number }),
-                ...(p.promptOverride !== undefined && { weeklyRecapPromptOverride: (p.promptOverride as string) || null }),
-              })}
+              info="Aciertos de los últimos 7 días. Su día ya no está fijado en el código: se elige aquí, en «Días» (por defecto, domingo)."
+              config={typeCfg('weekly_recap')}
+              onChange={(p) => patchType('weekly_recap', p)}
               extra={
                 <Field label="Mín. pronósticos" subtitle="No publica si hay menos de N liquidados en la semana.">
-                  <NumInput value={cfg.weeklyRecapMinFacts} onChange={(v) => patch({ weeklyRecapMinFacts: v })} min={1} max={500} />
+                  <NumInput
+                    value={numSetting('weekly_recap', 'minFacts', 3)}
+                    onChange={(v) => patchSetting('weekly_recap', 'minFacts', v)}
+                    min={1}
+                    max={500}
+                  />
                 </Field>
               }
             />
@@ -497,19 +681,15 @@ export default function TelegramPage() {
             <TypeCard
               title="Tablas"
               subtitle="Top-5 de las ligas configuradas al cierre del día."
-              enabled={cfg.standingsRecapEnabled}
-              mode={cfg.standingsRecapMode}
-              hour={cfg.standingsRecapHour}
-              prompt={cfg.standingsRecapPromptOverride}
-              onChange={(p) => patch({
-                ...(p.enabled !== undefined && { standingsRecapEnabled: p.enabled as boolean }),
-                ...(p.mode !== undefined && { standingsRecapMode: p.mode as PublishMode }),
-                ...(p.hour !== undefined && { standingsRecapHour: p.hour as number }),
-                ...(p.promptOverride !== undefined && { standingsRecapPromptOverride: (p.promptOverride as string) || null }),
-              })}
+              config={typeCfg('standings_recap')}
+              onChange={(p) => patchType('standings_recap', p)}
               extra={
                 <Field label="Ligas (apiFootballId)" subtitle="IDs separados por coma. Vacío = ligas destacadas.">
-                  <TextInput value={leagueIdsText} onChange={(v) => patch({ standingsRecapLeagueIds: parseLeagueIds(v) })} placeholder="39, 140, 135" />
+                  <TextInput
+                    value={leagueIdsText}
+                    onChange={(v) => patchSetting('standings_recap', 'leagueIds', parseLeagueIds(v))}
+                    placeholder="39, 140, 135"
+                  />
                 </Field>
               }
             />
@@ -517,34 +697,23 @@ export default function TelegramPage() {
             <TypeCard
               title="Partidazo"
               subtitle="El partido marquee del día con el pronóstico principal."
-              enabled={cfg.matchTeaserEnabled}
-              mode={cfg.matchTeaserMode}
-              hour={cfg.matchTeaserHour}
-              prompt={cfg.matchTeaserPromptOverride}
-              onChange={(p) => patch({
-                ...(p.enabled !== undefined && { matchTeaserEnabled: p.enabled as boolean }),
-                ...(p.mode !== undefined && { matchTeaserMode: p.mode as PublishMode }),
-                ...(p.hour !== undefined && { matchTeaserHour: p.hour as number }),
-                ...(p.promptOverride !== undefined && { matchTeaserPromptOverride: (p.promptOverride as string) || null }),
-              })}
+              config={typeCfg('match_teaser')}
+              onChange={(p) => patchType('match_teaser', p)}
             />
 
             <TypeCard
               title="Pick gratis"
               subtitle="El pronóstico de mayor confianza del día, como gancho."
-              enabled={cfg.freePickEnabled}
-              mode={cfg.freePickMode}
-              hour={cfg.freePickHour}
-              prompt={cfg.freePickPromptOverride}
-              onChange={(p) => patch({
-                ...(p.enabled !== undefined && { freePickEnabled: p.enabled as boolean }),
-                ...(p.mode !== undefined && { freePickMode: p.mode as PublishMode }),
-                ...(p.hour !== undefined && { freePickHour: p.hour as number }),
-                ...(p.promptOverride !== undefined && { freePickPromptOverride: (p.promptOverride as string) || null }),
-              })}
+              config={typeCfg('free_pick')}
+              onChange={(p) => patchType('free_pick', p)}
               extra={
                 <Field label="Confianza mínima" subtitle="Solo publica si el mejor pick supera este %.">
-                  <NumInput value={cfg.freePickMinConfidence} onChange={(v) => patch({ freePickMinConfidence: v })} min={1} max={95} />
+                  <NumInput
+                    value={numSetting('free_pick', 'minConfidence', 60)}
+                    onChange={(v) => patchSetting('free_pick', 'minConfidence', v)}
+                    min={1}
+                    max={95}
+                  />
                 </Field>
               }
             />
@@ -608,6 +777,84 @@ export default function TelegramPage() {
                   }
                 />
               ))
+            )}
+          </div>
+
+          {/* ── RENDIMIENTO ── */}
+          <div hidden={tab !== 'metrics'} role="tabpanel" id="tabpanel-metrics" aria-labelledby="tab-metrics">
+            <p className="text-xs text-text-muted font-sans mb-4 flex items-center gap-1.5">
+              Qué tipo de publicación funciona mejor.
+              <InfoPopover label="Qué se mide y qué no">
+                Se miden <strong>reacciones</strong> y <strong>votos de encuesta</strong>, que llegan
+                por el webhook, y los clics se atribuyen aparte con los parámetros <code>utm_*</code> de
+                cada enlace. Las <strong>vistas por publicación no se pueden medir</strong>: la Bot API
+                de Telegram no las expone (viven en MTProto). Las verás bajo cada mensaje en Telegram,
+                pero no aquí.
+              </InfoPopover>
+            </p>
+
+            <div className="flex gap-2 mb-4">
+              {[7, 30, 90].map((d) => (
+                <Button
+                  key={d}
+                  variant={metricsDays === d ? 'primary' : 'ghost'}
+                  size="sm"
+                  onClick={() => setMetricsDays(d)}
+                >
+                  {d} días
+                </Button>
+              ))}
+            </div>
+
+            {metricsQ.isLoading ? (
+              <p className="text-text-muted text-sm font-sans py-3">Cargando…</p>
+            ) : (metricsQ.data?.rows.length ?? 0) === 0 ? (
+              <p className="text-text-muted text-sm font-sans py-3">
+                Todavía no hay publicaciones en esta ventana.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm font-sans">
+                  <thead>
+                    <tr className="text-text-muted text-xs border-b border-border">
+                      <th className="text-left py-2 pr-3">Tipo</th>
+                      <th className="text-right py-2 px-3">Publicaciones</th>
+                      <th className="text-right py-2 px-3">Reacciones</th>
+                      <th className="text-right py-2 px-3">Votos</th>
+                      <th className="text-right py-2 pl-3">Por publicación</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {metricsQ.data!.rows.map((row, i, all) => {
+                      // El cuartil bajo es lo que sobra en la parrilla: se marca
+                      // para que la decisión de apagar no dependa de comparar
+                      // números a ojo.
+                      const isBottomQuartile = all.length >= 4 && i >= Math.ceil(all.length * 0.75);
+                      return (
+                        <tr
+                          key={row.contentType}
+                          className={`border-b border-border/50 ${isBottomQuartile ? 'text-text-muted' : ''}`}
+                        >
+                          <td className="py-2 pr-3">
+                            {TYPE_LABELS[row.contentType as ContentType] ?? row.contentType}
+                            {isBottomQuartile && (
+                              <span className="ml-2 text-[10px] uppercase tracking-wide text-warning">
+                                bajo
+                              </span>
+                            )}
+                          </td>
+                          <td className="text-right py-2 px-3 tabular-nums">{row.posts}</td>
+                          <td className="text-right py-2 px-3 tabular-nums">{row.reactions}</td>
+                          <td className="text-right py-2 px-3 tabular-nums">{row.pollVotes}</td>
+                          <td className="text-right py-2 pl-3 tabular-nums font-semibold">
+                            {row.engagementPerPost.toFixed(2)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
 
