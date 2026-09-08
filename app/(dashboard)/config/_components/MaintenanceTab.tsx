@@ -391,13 +391,18 @@ export function MaintenanceTab() {
         skippedNoNews: number;
         unpublishedExpired: number;
         llmFallbacks: number;
+        failed: number;
       }>('/admin/home-announcements/run-curator', {}),
     onSuccess: (data) => {
       setShowCuratorRunConfirm(false);
-      toast.success(
+      const summary =
         `Curator run: ${data.published} published, ${data.skippedNoNews} skipped (no news), ` +
-          `${data.unpublishedExpired} expired unpublished.`,
-      );
+        `${data.unpublishedExpired} expired unpublished.`;
+      if (data.failed > 0) {
+        toast.error(`${summary} ${data.failed} match(es) FAILED — check the backend logs.`);
+      } else {
+        toast.success(summary);
+      }
     },
     onError: (err: Error) => {
       setShowCuratorRunConfirm(false);

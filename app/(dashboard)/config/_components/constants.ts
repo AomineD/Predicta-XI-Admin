@@ -70,6 +70,9 @@ export const DATA_FIELDS = [
   'squad_insights',
   'key_player_form',
   'deep_stats',
+  // Noticias de equipo (bajas, sanciones, once, banquillo) leídas de la prensa
+  // antes de la predicción oficial. Activarlo enciende también el scrape.
+  'team_news',
 ];
 
 // Reasoning tokens are billed as output — the dearest bucket — and on DeepSeek
