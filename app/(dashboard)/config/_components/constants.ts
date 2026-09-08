@@ -90,6 +90,7 @@ export type EngineLayerKey =
   | 'independentModelEnabled'
   | 'neutralVenueAwarenessEnabled'
   | 'totalsUnifiedEnabled'
+  | 'structuralMarketsGuardEnabled'
   | 'specialMarketsEnabled'
   | 'playerMarketsEnabled';
 
@@ -129,6 +130,11 @@ export const ENGINE_LAYERS: Array<{ key: EngineLayerKey; title: string; info: st
     key: 'totalsUnifiedEnabled',
     title: 'Totales unificados (1 mercado de goles)',
     info: 'Reemplaza los mercados fijos over/under 2.5 + 1.5 por UN solo mercado total_goals cuya línea+lado elige el motor (selector Poisson sobre las cuotas multi-línea + calibración), no el LLM. Backtest 707 partidos: 70.3% de acierto a cuota media 1.35, le gana al fijo-2.5 (59.9%) y diversifica líneas. Antes de encenderlo en serio: agrega total_goals a los markets de los tiers (si no, queda bloqueado hasta el settlement) y publica un AAB con el render nuevo. Afecta scheduler y bridge a la vez; reversible (con OFF, comportamiento actual sin cambios).',
+  },
+  {
+    key: 'structuralMarketsGuardEnabled',
+    title: 'Guarda de tarjetas y córners (P-011)',
+    info: 'Capa determinista que corre después del LLM sobre cards_over_under y corners. Medido en producción (V1, 30 días): el "over" de tarjetas sin cuota acertaba el 22.5% con confianza media 71, mientras el "under" acertaba el 67-77%; los córners acertaban el 43.7% en ambos lados. Con el flag ON: (1) si hay cuota Sportium para la línea, la confianza no supera la probabilidad justa (devig 2-vías) + 5; (2) un "over X.5" de tarjetas con X.5 ≥ 4.5 sin cuota ni deep_stats que lo respalde se voltea a "under X.5" con confianza 55 y razonamiento reescrito (cita la tasa base de 3-4 tarjetas por partido); (3) sin cuota, los córners quedan en ≤ 52 (≤ 60 si deep_stats separa el promedio de la línea por ≥ 1.5) y el "over" de tarjetas en ≤ 55 (≤ 65 con respaldo). No crea picks ni toca otros mercados. Afecta scheduler y bridge a la vez; reversible.',
   },
   {
     key: 'specialMarketsEnabled',

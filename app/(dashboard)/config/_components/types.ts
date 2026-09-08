@@ -40,6 +40,9 @@ export interface PredictionConfig {
   // Unified totals (idea #2): replaces the fixed over/under 2.5 + 1.5 markets with
   // a single `total_goals` whose line the engine picks (Poisson selector + calibration).
   totalsUnifiedEnabled: boolean;
+  // Deterministic guard for cards/corners (P-011): anchors confidence to the line's
+  // Sportium odds, flips an unsupported cards "over" to "under" and caps blind corners.
+  structuralMarketsGuardEnabled: boolean;
   // Selector floors (round-tripped; tuned via API). Optional in the admin form.
   totalsSelector?: { confFloor: number; confCeiling: number; oddsFloor: number };
   // Special value markets (idea #1): engine derives exotic markets from the Poisson

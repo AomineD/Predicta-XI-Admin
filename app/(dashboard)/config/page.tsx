@@ -102,6 +102,7 @@ function ConfigPageInner() {
       calibrationEnabled: cfg.calibrationEnabled ?? false,
       neutralVenueAwarenessEnabled: cfg.neutralVenueAwarenessEnabled ?? false,
       totalsUnifiedEnabled: cfg.totalsUnifiedEnabled ?? false,
+      structuralMarketsGuardEnabled: cfg.structuralMarketsGuardEnabled ?? false,
       specialMarketsEnabled: cfg.specialMarketsEnabled ?? false,
       specialMarketsSelector: cfg.specialMarketsSelector ?? {
         maxPicks: 3,
