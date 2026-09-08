@@ -26,6 +26,10 @@ interface CreditsConfig {
   predictionCost: number;
   signupBonus: number;
   adRewardCredits: number;
+  adRewardEnabled: boolean;
+  adRewardRequireSsv: boolean;
+  adRewardAllowedAdUnitIds: string[];
+  adRewardSsvMaxAgeSeconds: number;
   weeklyActivityBonus: number;
   weeklyActivityMinDays: number;
   combinadaRegularCost: number;
@@ -107,6 +111,9 @@ const FIELDS_OWNED_ELSEWHERE = [
 function stripForeignFields(cfg: CreditsConfig): Record<string, unknown> {
   const out: Record<string, unknown> = { ...cfg };
   for (const k of FIELDS_OWNED_ELSEWHERE) delete out[k];
+  // A stale row from before migration 0189 must not make an unrelated save
+  // attempt to re-enable the unverifiable native-share reward.
+  out.actionRewardShareEnabled = false;
   return out;
 }
 
@@ -450,8 +457,30 @@ function CreditsPageInner() {
         <Field label="Signup bonus" subtitle="Credits given to new users on registration">
           <NumInput value={f.signupBonus} onChange={(v) => set('signupBonus', v)} />
         </Field>
-        <Field label="Ad reward" subtitle="Credits earned per rewarded ad view">
+        <Field label="Ad reward" subtitle="Credits earned per verified rewarded ad">
           <NumInput value={f.adRewardCredits} onChange={(v) => set('adRewardCredits', v)} />
+        </Field>
+        <Field label="Rewarded ads enabled" info="Fail-closed master switch. It can only be enabled after at least one owned AdMob rewarded unit is allowlisted. Credits are granted solely by Google's signed SSV callback.">
+          <Toggle
+            value={f.adRewardEnabled}
+            onChange={(v) => set('adRewardEnabled', v)}
+            disabled={!f.adRewardEnabled && f.adRewardAllowedAdUnitIds.length === 0}
+          />
+        </Field>
+        <Field label="Allowed rewarded units" subtitle="One AdMob unit ID per line" info="Only signed callbacks for these Predicta XI ad units can grant credits. Example format: ca-app-pub-1234567890123456/1234567890.">
+          <textarea
+            rows={3}
+            value={f.adRewardAllowedAdUnitIds.join('\n')}
+            onChange={(e) => set(
+              'adRewardAllowedAdUnitIds',
+              e.target.value.split(/[\n,]/).map((value) => value.trim()).filter(Boolean),
+            )}
+            className="w-full max-w-lg px-3 py-2 rounded-xl text-sm bg-surface-2 border border-border text-text-primary font-mono resize-y"
+            placeholder="ca-app-pub-1234567890123456/1234567890"
+          />
+        </Field>
+        <Field label="SSV receipt age" subtitle="Seconds (60–3600)" info="Reject signed callbacks older than this window. Reward sessions expire on the same fail-closed window.">
+          <NumInput value={f.adRewardSsvMaxAgeSeconds} onChange={(v) => set('adRewardSsvMaxAgeSeconds', v)} min={60} max={3600} />
         </Field>
       </SectionCard>
 
@@ -492,15 +521,15 @@ function CreditsPageInner() {
       </SectionCard>
 
       {/* ── One-time action rewards ── */}
-      <SectionCard title="Action Rewards (one-time)" subtitle="Una sola vez por acción" info="Credits granted once per action, enforced server-side. Eligibility is verified on claim: notifications need a registered push token; profile needs at least one favourite team or league; share has no precondition. Each off by default.">
+      <SectionCard title="Action Rewards (one-time)" subtitle="Una sola vez por acción" info="Credits granted once per action. Share rewards remain locked off because closing the native share sheet does not prove that anything was shared.">
         <Field label="Enable notifications — enabled" subtitle="Reward for turning on push notifications.">
           <Toggle value={f.actionRewardNotificationsEnabled} onChange={(v) => set('actionRewardNotificationsEnabled', v)} />
         </Field>
         <Field label="Enable notifications — credits" subtitle="Credits granted once when push is enabled.">
           <NumInput value={f.actionRewardNotificationsCredits} onChange={(v) => set('actionRewardNotificationsCredits', v)} min={0} max={50} />
         </Field>
-        <Field label="Share the app — enabled" subtitle="Reward for sharing the app.">
-          <Toggle value={f.actionRewardShareEnabled} onChange={(v) => set('actionRewardShareEnabled', v)} />
+        <Field label="Share the app — enabled" subtitle="Locked off: no verifiable completion proof" info="The backend refuses to enable this reward until a trustworthy result signal exists.">
+          <Toggle value={false} onChange={() => undefined} disabled />
         </Field>
         <Field label="Share the app — credits" subtitle="Credits granted once for sharing.">
           <NumInput value={f.actionRewardShareCredits} onChange={(v) => set('actionRewardShareCredits', v)} min={0} max={50} />

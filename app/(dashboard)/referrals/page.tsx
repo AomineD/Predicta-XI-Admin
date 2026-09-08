@@ -18,8 +18,6 @@ const REF_TABS = [
 type RefTabId = typeof REF_TABS[number]['id'];
 const DEFAULT_TAB: RefTabId = 'overview';
 
-const APP_CHECK_MODES = ['disabled', 'monitor', 'enforce'] as const;
-
 /* ── referral config (subset of credits-config; edited here, partial PUT) ────── */
 
 interface RefConfig {
@@ -31,6 +29,7 @@ interface RefConfig {
   referralRequireAppCheck: string;
   referralQualifyOnFirstPrediction: boolean;
   referralMaxRewardedReferrals: number;
+  referralMaxRewardsPerDay: number;
   referralAttributionWindowHours: number;
   referralModalEnabled: boolean;
   referralModalFreqLow: number;
@@ -172,6 +171,7 @@ function ReferralsInner() {
             referralRequireAppCheck: cfgQ.data.referralRequireAppCheck,
             referralQualifyOnFirstPrediction: cfgQ.data.referralQualifyOnFirstPrediction,
             referralMaxRewardedReferrals: cfgQ.data.referralMaxRewardedReferrals,
+            referralMaxRewardsPerDay: cfgQ.data.referralMaxRewardsPerDay,
             referralAttributionWindowHours: cfgQ.data.referralAttributionWindowHours,
             referralModalEnabled: cfgQ.data.referralModalEnabled,
             referralModalFreqLow: cfgQ.data.referralModalFreqLow,
@@ -328,7 +328,10 @@ function ReferralsInner() {
           <>
             <SectionCard title="Referral Program" info="Reward users with credits for inviting new, real users. A referral 'qualifies' the referrer only when the invited user signs up on a unique device (App Check) and opens their first prediction. Credits are an engagement currency — the anti-abuse gates below are what matter.">
               <Field label="Enabled" info="Master switch. When off, no codes are attributed and no credits are paid.">
-                <Toggle value={cfg.referralEnabled} onChange={(v) => setCfg('referralEnabled', v)} />
+                <Toggle
+                  value={cfg.referralEnabled}
+                  onChange={(v) => setCfgForm({ ...cfg, referralEnabled: v, referralRequireAppCheck: 'enforce' })}
+                />
               </Field>
               <Field label="Credits per referral" subtitle="Paid to the referrer for each qualified referral.">
                 <NumInput value={cfg.referralCreditsPerReferral} onChange={(v) => setCfg('referralCreditsPerReferral', v)} min={0} max={1000} />
@@ -347,30 +350,20 @@ function ReferralsInner() {
               </Field>
             </SectionCard>
 
-            <SectionCard title="Anti-abuse" info="Guardrails that protect ad/IAP revenue from credit farming. Device dedupe and the activation gate always apply; App Check enforcement is staged below.">
-              <Field label="App Check enforcement" info="disabled = ignore; monitor = record only (recommended for rollout); enforce = unverified installs never reward the referrer.">
-                <div className="flex flex-wrap gap-2">
-                  {APP_CHECK_MODES.map((mode) => (
-                    <button
-                      key={mode}
-                      type="button"
-                      onClick={() => setCfg('referralRequireAppCheck', mode)}
-                      className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors font-sans capitalize ${
-                        cfg.referralRequireAppCheck === mode
-                          ? 'bg-primary/15 border-primary text-primary'
-                          : 'bg-surface-2 border-border text-text-muted hover:border-text-muted'
-                      }`}
-                    >
-                      {mode}
-                    </button>
-                  ))}
-                </div>
+            <SectionCard title="Anti-abuse" info="Guardrails that protect ad/IAP revenue from credit farming. Device dedupe, App Check enforcement and the activation gate always apply while referral rewards are enabled.">
+              <Field label="App Check enforcement" subtitle="Required while rewards are enabled" info="Referral credits fail closed. Enabling the program always forces Firebase App Check enforcement; monitor/disabled cannot be used for a live reward economy.">
+                <span className="inline-flex px-3 py-1.5 text-xs font-medium rounded-full border bg-primary/15 border-primary text-primary font-sans">
+                  enforce
+                </span>
               </Field>
               <Field label="Qualify on first prediction" info="On = the referrer is paid only when the referred user opens their first prediction (recommended). Off = qualifies at signup.">
                 <Toggle value={cfg.referralQualifyOnFirstPrediction} onChange={(v) => setCfg('referralQualifyOnFirstPrediction', v)} />
               </Field>
               <Field label="Lifetime cap" subtitle="0 = unlimited" info="Max qualified referrals that earn the referrer credits.">
                 <NumInput value={cfg.referralMaxRewardedReferrals} onChange={(v) => setCfg('referralMaxRewardedReferrals', v)} min={0} max={100000} />
+              </Field>
+              <Field label="Daily reward cap" subtitle="Per referrer · 0 = payouts off" info="Hard anti-farming cutoff per UTC day, enforced atomically from the immutable claim ledger. Referrals above the cap still qualify, but their payout is permanently skipped rather than queued for a later day.">
+                <NumInput value={cfg.referralMaxRewardsPerDay} onChange={(v) => setCfg('referralMaxRewardsPerDay', v)} min={0} max={1000} />
               </Field>
               <Field label="Attribution window (hours)" info="A code can only be attributed within this many hours after the referred user signs up.">
                 <NumInput value={cfg.referralAttributionWindowHours} onChange={(v) => setCfg('referralAttributionWindowHours', v)} min={1} max={8760} />

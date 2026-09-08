@@ -80,6 +80,7 @@ interface SocialConfig {
   minParticipationPctForPrize: number;
   minWeeklyPicksPctForParticipation: number;
   dailyPrizeCapPerUser: number;
+  dailyPrizeBudgetGlobal: number;
   maxGroupSizeByTier: Record<string, number>;
   maxActiveGroupsByTier: Record<string, number>;
   weeklyMinMatches: number;
@@ -253,6 +254,10 @@ interface GroupMember {
   // Prefer this over prizeAwarded — it's correct for every group type.
   prizePaid: number;
   banned: boolean;
+  competitiveStatus: 'eligible' | 'disqualified';
+  disqualifiedAt: string | null;
+  disqualifiedBy: string | null;
+  disqualificationReason: string | null;
   appCheckVerified: boolean;
   displayName: string | null;
   email: string | null;
@@ -389,7 +394,7 @@ function GroupStatusPill({ status }: { status: string }) {
 /* ── prize payout status (list cell + modal summary) ───────────────────────── */
 
 const WITHHELD_LABELS: Record<NonNullable<PrizeSummary['withheldReason']>, string> = {
-  anti_abuse: 'Retenido: no hubo suficientes miembros reales',
+  anti_abuse: 'Retenido: no hubo suficientes señales verificadas',
   low_participation: 'Retenido: no jugó suficiente gente',
   no_winner: 'Sin ganador (nadie sumó puntos)',
 };
@@ -560,7 +565,7 @@ function ConfigTab() {
       </SectionCard>
 
       <SectionCard title="Anti-abuse" subtitle="Defense against prize farming">
-        <Field label="Minimum real members" subtitle="1–1000" info="Real members required for a group to pay a prize.">
+        <Field label="Minimum verified signals" subtitle="1–1000" info="Distinct device signals from submitted, eligible accounts. This is a risk signal, not proof of a unique person.">
           <NumInput value={f.minRealMembersForPrize} onChange={(v) => set('minRealMembersForPrize', v)} min={1} max={MAX_GROUP_SIZE} />
         </Field>
         <Field
@@ -578,12 +583,15 @@ function ConfigTab() {
         <Field label="Daily prize cap per user" subtitle="cap: 2000" info="Max prize credits a user can earn per day.">
           <NumInput value={f.dailyPrizeCapPerUser} onChange={(v) => set('dailyPrizeCapPerUser', v)} max={MAX_DAILY_CAP} />
         </Field>
+        <Field label="Global daily prize budget" subtitle="0 = automatic payouts disabled" info="Independent 24-hour loss ceiling across every account. Payouts stay pending when the budget is zero or exhausted.">
+          <NumInput value={f.dailyPrizeBudgetGlobal} onChange={(v) => set('dailyPrizeBudgetGlobal', v)} min={0} max={100000} />
+        </Field>
         <Field label="Max groups per competition" subtitle="-1 = unlimited" info="Max competition groups a user can join per tournament.">
           <NumInput value={f.maxGroupsPerCompetition} onChange={(v) => set('maxGroupsPerCompetition', v)} min={-1} max={50} />
         </Field>
         <Field
           label="App Check enforcement"
-          info="Anti-spoofing for the prize gate. disabled = ignore App Check; monitor = verify & record adoption, gate counts all; enforce = prize gate counts only members who joined from a genuine app (Play Integrity / App Attest). Roll out: release the app → monitor → enforce."
+          info="Additional risk signal for the prize gate. disabled = ignore App Check; monitor = verify & record adoption, gate counts all; enforce = count only accepted app/runtime attestations (Play Integrity / App Attest). This is not proof of a unique person. Roll out: release the app → monitor → enforce."
         >
           <select
             value={f.appCheckEnforcementMode}
@@ -1342,6 +1350,11 @@ function GroupDetailModal({ id, onClose }: { id: string; onClose: () => void }) 
     mutationFn: (userId: string) => api.post<{ banned: boolean }>(`/admin/groups/${id}/members/${userId}/ban`),
     onSuccess: invalidate,
   });
+  const competitiveMut = useMutation({
+    mutationFn: ({ userId, status, reason }: { userId: string; status: 'eligible' | 'disqualified'; reason: string }) =>
+      api.post(`/admin/groups/${id}/members/${userId}/competitive-status`, { status, reason }),
+    onSuccess: invalidate,
+  });
 
   const rejectMut = useMutation({
     mutationFn: (userId: string) => api.post<{ rejected: boolean }>(`/admin/groups/${id}/requests/${userId}/reject`),
@@ -1463,6 +1476,14 @@ function GroupDetailModal({ id, onClose }: { id: string; onClose: () => void }) 
                         {m.banned && (
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-danger/15 text-danger font-sans">BANNED</span>
                         )}
+                        {m.competitiveStatus === 'disqualified' && (
+                          <span
+                            className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-warning/15 text-warning font-sans"
+                            title={m.disqualificationReason ?? 'Sin motivo visible'}
+                          >
+                            DISQUALIFIED
+                          </span>
+                        )}
                       </div>
                       <div className="text-[11px] text-text-muted font-sans mt-0.5">
                         via {m.joinedVia} · {m.submitted ? 'submitted' : 'no picks'}
@@ -1484,6 +1505,23 @@ function GroupDetailModal({ id, onClose }: { id: string; onClose: () => void }) 
                         <Ban size={15} />
                       </button>
                     )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = m.competitiveStatus === 'disqualified' ? 'eligible' : 'disqualified';
+                        const reason = window.prompt(
+                          next === 'disqualified'
+                            ? 'Motivo de descalificación (10–500 caracteres)'
+                            : 'Motivo para restaurar elegibilidad (10–500 caracteres)',
+                        );
+                        if (reason) competitiveMut.mutate({ userId: m.userId, status: next, reason });
+                      }}
+                      disabled={competitiveMut.isPending}
+                      title={m.competitiveStatus === 'disqualified' ? 'Restore competitive eligibility' : 'Disqualify from ranking and prizes'}
+                      className="px-2 py-1 rounded-lg text-[10px] font-semibold text-text-muted hover:text-warning hover:bg-warning/10 transition-colors disabled:opacity-40"
+                    >
+                      {m.competitiveStatus === 'disqualified' ? 'REQUALIFY' : 'DQ'}
+                    </button>
                   </div>
                 ))}
               </div>
@@ -1495,8 +1533,8 @@ function GroupDetailModal({ id, onClose }: { id: string; onClose: () => void }) 
               onAdded={invalidate}
             />
 
-            {(voidMut.error || banMut.error || rejectMut.error) && (
-              <p className="text-sm text-danger font-sans">{((voidMut.error ?? banMut.error ?? rejectMut.error) as Error).message}</p>
+            {(voidMut.error || banMut.error || competitiveMut.error || rejectMut.error) && (
+              <p className="text-sm text-danger font-sans">{((voidMut.error ?? banMut.error ?? competitiveMut.error ?? rejectMut.error) as Error).message}</p>
             )}
 
             <div className="flex items-center justify-between gap-3 pt-2 border-t" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
@@ -1556,7 +1594,7 @@ function PrizeSummaryCard({ summary }: { summary: PrizeSummary }) {
           <p className="text-sm text-text-muted font-sans">Aún sin liquidar (el premio se decide al cerrar el grupo).</p>
         )}
         <div className="grid grid-cols-2 gap-2">
-          <GateStat ok={realOk} label="Miembros reales" value={`${gate.realMembers} / ${gate.minRealMembers} mín`} />
+          <GateStat ok={realOk} label="Señales verificadas" value={`${gate.realMembers} / ${gate.minRealMembers} mín`} />
           <GateStat
             ok={partOk}
             label="Participación"
@@ -1565,7 +1603,7 @@ function PrizeSummaryCard({ summary }: { summary: PrizeSummary }) {
         </div>
         {gate.appCheckEnforced && (
           <p className="text-[11px] text-text-muted/60 font-sans">
-            App Check en <span className="font-mono">enforce</span>: para contar como miembro real, la app debe estar verificada.
+            App Check en <span className="font-mono">enforce</span>: la señal cuenta solo si la app fue verificada. Esto no demuestra una persona única.
           </p>
         )}
       </div>

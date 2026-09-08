@@ -28,6 +28,7 @@ import {
   HeartPulse,
   Database,
   Megaphone,
+  Undo2,
 } from 'lucide-react';
 
 type IconType = ComponentType<{ size?: number; className?: string }>;
@@ -68,6 +69,7 @@ const NAV: NavEntry[] = [
       { href: '/users', label: 'Users', icon: Users },
       { href: '/monetization', label: 'Monetization', icon: DollarSign },
       { href: '/credits', label: 'Credits', icon: Coins },
+      { href: '/refunds', label: 'Refunds', icon: Undo2 },
       { href: '/referrals', label: 'Referrals', icon: Share2 },
     ],
   },

@@ -32,6 +32,10 @@ export const adminEnv = {
   get ADMIN_TOKEN(): string {
     return requireString('ADMIN_TOKEN', process.env.ADMIN_TOKEN, 32);
   },
+  get ADMIN_ACTOR_SIGNING_SECRET(): string | null {
+    const value = process.env.ADMIN_ACTOR_SIGNING_SECRET;
+    return value ? requireString('ADMIN_ACTOR_SIGNING_SECRET', value, 32) : null;
+  },
   get SESSION_SECRET(): string {
     return requireString('SESSION_SECRET', process.env.SESSION_SECRET, 32);
   },
