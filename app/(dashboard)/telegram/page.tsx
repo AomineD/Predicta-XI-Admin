@@ -429,6 +429,7 @@ export default function TelegramPage() {
     pendingUpdateCount: number;
     lastErrorMessage: string | null;
     secretConfigured: boolean;
+    botTokenConfigured: boolean;
   }>({
     queryKey: ['telegram-webhook'],
     queryFn: () => api.get('/admin/telegram/webhook'),
@@ -582,10 +583,24 @@ export default function TelegramPage() {
                       : 'Sin registrar'}
                 </span>
               </Field>
+              {/* Por qué no se puede registrar todavía. Sin este bloque el botón
+                  sale deshabilitado y no hay forma de saber qué falta. */}
               {webhookQ.data && !webhookQ.data.secretConfigured && (
                 <p className="text-xs text-danger font-sans">
                   Falta <code>TELEGRAM_WEBHOOK_SECRET</code> en el servidor: el receptor rechazaría
-                  todos los updates, así que no se puede registrar todavía.
+                  todos los updates, así que no se puede registrar todavía. Ponlo en las variables de
+                  entorno de la app <strong>Backend</strong> en Dokploy y vuelve a desplegar.
+                </p>
+              )}
+              {webhookQ.data && !webhookQ.data.botTokenConfigured && (
+                <p className="text-xs text-warning font-sans">
+                  Falta el <strong>bot token</strong> (arriba, en «Conexión del bot»): registrar el
+                  webhook es una llamada a Telegram como el bot, así que sin token no se puede.
+                </p>
+              )}
+              {webhookQ.isError && (
+                <p className="text-xs text-danger font-sans">
+                  No se pudo leer el estado del webhook: {(webhookQ.error as Error)?.message}
                 </p>
               )}
               {webhookQ.data?.lastErrorMessage && (
@@ -606,7 +621,7 @@ export default function TelegramPage() {
                     variant="primary"
                     size="sm"
                     loading={webhookMut.isPending}
-                    disabled={!webhookQ.data?.secretConfigured}
+                    disabled={!webhookQ.data?.secretConfigured || !webhookQ.data?.botTokenConfigured}
                     onClick={() => webhookMut.mutate('register')}
                   >
                     Registrar
