@@ -18,6 +18,26 @@ const WEEKDAYS = [
   { value: 6, label: 'Sabado' },
 ];
 
+// Dia de corte de la semana: solo martes..sabado (domingo y lunes dejarian una
+// ventana vacia; el backend los rechaza). 0 = sin corte, una sola ventana.
+const SPLIT_DAYS = [
+  { value: 0, label: 'Sin corte (semana entera)' },
+  ...WEEKDAYS.filter((d) => d.value >= 2 && d.value <= 6),
+];
+
+// Dias validos para la PRIMERA corrida: con corte, solo de lunes al dia anterior
+// al corte (un dia del corte en adelante, o el domingo, ya es la segunda
+// ventana y la primera se quedaria sin estudiar ni combinada, sin aviso). El
+// backend rechaza el guardado con la misma regla; esto evita llegar a ese error.
+function firstRunDays(splitDay: number) {
+  if (!splitDay) return WEEKDAYS;
+  return WEEKDAYS.filter((d) => d.value >= 1 && d.value < splitDay);
+}
+
+function isValidFirstRunDay(day: number, splitDay: number) {
+  return !splitDay || (day >= 1 && day < splitDay);
+}
+
 export function CombinadasTab({
   form,
   setField,
@@ -168,36 +188,57 @@ export function CombinadasTab({
       <SectionCard
         title="Combinada semanal"
         subtitle="Producto aparte de la diaria, con winrate propio"
-        info="Una combinada de 3-6 patas escogidas entre los mejores partidos de toda la semana (lunes a domingo, horario de Caracas): una gratis y una premium. Se mide en un winrate separado del de las diarias, porque tiene mas patas y muchisima menos muestra (una por semana). Son DOS corridas: el estudio enriquece los partidos de la semana y la construccion arma la combinada con ese pool. Las patas quedan congeladas al generarse: aunque despues mejore la prediccion de un partido, la combinada publicada no se regenera."
+        info="Una combinada de 3-6 patas escogidas entre los mejores partidos de la ventana semanal (horario de Caracas): una gratis y una premium. La semana se parte en dos ventanas por el dia de corte (por defecto lunes-jueves y viernes-domingo), y el estudio y la construccion corren una vez al inicio de cada ventana; con la prediccion oficial unica, estudiar la semana entera el lunes dejaba el fin de semana con 4-6 dias de antelacion. Se mide en un winrate separado del de las diarias, porque tiene mas patas y muchisima menos muestra. Son DOS corridas: el estudio enriquece los partidos de la ventana y la construccion arma la combinada con ese pool. Las patas quedan congeladas al generarse: aunque despues mejore la prediccion de un partido, la combinada publicada no se regenera."
       >
-        <SubHeading>Estudio de la semana</SubHeading>
+        <Field
+          label="Dia de corte"
+          subtitle="def. Viernes"
+          info="Parte la semana de Caracas en dos ventanas: de lunes al dia anterior al corte, y del corte al domingo. El estudio y la construccion corren el dia configurado abajo (primera ventana) Y el dia de corte (segunda ventana), cada uno solo sobre los partidos de su ventana, con la misma hora. La app muestra la combinada de la ventana en curso y el push dice que dias cubre. 'Sin corte' vuelve a una sola ventana de lunes a domingo. El cupo semanal de puntos de las quinielas no cambia: las dos ventanas comparten la semana ISO. Cambialo ENTRE semanas (domingo), no a mitad de semana: las claves de idempotencia y del push se anclan al inicio de la ventana vigente, y mover el corte con la semana en marcha puede generar otra combinada y mandar otro aviso a todos los usuarios."
+        >
+          <Select
+            className="w-56"
+            value={String(form.weeklySplitDayOfWeek ?? 5)}
+            onChange={(e) => {
+              const split = Number(e.target.value);
+              setField('weeklySplitDayOfWeek', split);
+              // Si el dia de alguna corrida deja de caber en la primera ventana,
+              // vuelve al lunes: el backend rechazaria el guardado igual.
+              if (!isValidFirstRunDay(form.weeklyStudyDayOfWeek ?? 1, split)) setField('weeklyStudyDayOfWeek', 1);
+              if (!isValidFirstRunDay(form.weeklyCombinadasDayOfWeek ?? 1, split)) setField('weeklyCombinadasDayOfWeek', 1);
+            }}
+          >
+            {SPLIT_DAYS.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
+          </Select>
+        </Field>
+
+        <SubHeading>Estudio de la ventana</SubHeading>
         <Field
           label="Enabled"
-          subtitle="Enriquece todos los partidos de la semana"
-          info="Sin este pase, la combinada semanal solo podria elegir entre los partidos ya enriquecidos (los de hoy), que es justo lo que hace la diaria. Sube el horizonte de alineaciones probables en la pestana Automations si quieres que alcance al fin de semana."
+          subtitle="Enriquece todos los partidos de la ventana"
+          info="Sin este pase, la combinada semanal solo podria elegir entre los partidos ya enriquecidos (los de hoy), que es justo lo que hace la diaria. Sube el horizonte de alineaciones probables en la pestana Automations si quieres que alcance al final de la ventana."
         >
           <Toggle value={form.weeklyStudyEnabled ?? false} onChange={(v) => setField('weeklyStudyEnabled', v)} />
         </Field>
-        <Field label="Dia" subtitle="Dia (en Caracas) en que corre el estudio">
+        <Field label="Dia" subtitle="Primera corrida (Caracas); la segunda es el dia de corte" info="Con corte solo se ofrecen los dias de la primera ventana (de lunes al dia anterior al corte): un dia posterior haria que las dos corridas cayeran en la segunda ventana y la primera se quedara sin estudiar.">
           <Select className="w-40" value={String(form.weeklyStudyDayOfWeek ?? 1)} onChange={(e) => setField('weeklyStudyDayOfWeek', Number(e.target.value))}>
-            {WEEKDAYS.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
+            {firstRunDays(form.weeklySplitDayOfWeek ?? 5).map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
           </Select>
         </Field>
         <Field
           label="Hora (Caracas)"
           subtitle="0-23 - def. 2"
-          info="El dia y la hora se interpretan en horario de Caracas, la misma zona en la que se define la semana (lunes a domingo). Debe ir por delante de la hora de construccion para que el builder encuentre predicciones ya generadas."
+          info="El dia y la hora se interpretan en horario de Caracas, la misma zona en la que se definen las ventanas. La misma hora vale para las dos corridas. Debe ir por delante de la hora de construccion para que el builder encuentre predicciones ya generadas."
         >
           <Input type="number" min={0} max={23} className="w-24" value={form.weeklyStudyHourCaracas ?? 2} onChange={(e) => setField('weeklyStudyHourCaracas', Number(e.target.value))} />
         </Field>
 
         <SubHeading>Construccion</SubHeading>
-        <Field label="Enabled" subtitle="Genera la combinada de la semana">
+        <Field label="Enabled" subtitle="Genera la combinada de cada ventana">
           <Toggle value={form.weeklyCombinadasEnabled ?? false} onChange={(v) => setField('weeklyCombinadasEnabled', v)} />
         </Field>
-        <Field label="Dia" subtitle="Dia (en Caracas) en que se construye">
+        <Field label="Dia" subtitle="Primera corrida (Caracas); la segunda es el dia de corte" info="Mismo criterio que el dia del estudio: con corte, solo los dias de la primera ventana.">
           <Select className="w-40" value={String(form.weeklyCombinadasDayOfWeek ?? 1)} onChange={(e) => setField('weeklyCombinadasDayOfWeek', Number(e.target.value))}>
-            {WEEKDAYS.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
+            {firstRunDays(form.weeklySplitDayOfWeek ?? 5).map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
           </Select>
         </Field>
         <Field label="Hora (Caracas)" subtitle="0-23 - def. 6" info="En horario de Caracas, igual que el estudio.">
@@ -220,7 +261,7 @@ export function CombinadasTab({
         <Field
           label="Minimo de predicciones V1"
           subtitle="def. 12"
-          info="Cuantas predicciones de la semana debe haber antes de construir. Sin este minimo, una corrida que se adelante al estudio armaria la combinada de la semana con los pocos partidos ya enriquecidos, que ademas serian todos del mismo dia. Si no se alcanza, se reintenta en el siguiente minuto."
+          info="Cuantas predicciones de la ventana debe haber antes de construir. Sin este minimo, una corrida que se adelante al estudio armaria la combinada con los pocos partidos ya enriquecidos, que ademas serian todos del mismo dia. Si no se alcanza, se reintenta en el siguiente minuto. Ojo con la ventana de lunes a jueves en semanas sin Champions: solo tiene los partidos del lunes, y si no llega al minimo simplemente no sale combinada esa ventana (cuentan solo las ligas V1)."
         >
           <Input type="number" min={2} max={200} className="w-24" value={form.weeklyCombinadasMinV1 ?? 12} onChange={(e) => setField('weeklyCombinadasMinV1', Number(e.target.value))} />
         </Field>
@@ -244,7 +285,8 @@ export function CombinadasTab({
           </Button>
           <span className="text-xs font-sans text-text-muted">
             Guarda los cambios antes de disparar: los botones leen la config ya
-            persistida. El estudio tarda (un scrape por partido); construye despues.
+            persistida y trabajan sobre la ventana en curso. El estudio tarda (un
+            scrape por partido); construye despues.
           </span>
         </div>
       </SectionCard>

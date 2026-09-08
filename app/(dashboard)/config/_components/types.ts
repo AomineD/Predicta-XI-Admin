@@ -139,6 +139,8 @@ export interface PredictionConfig {
   weeklyCombinadasCountRegular?: number;
   weeklyCombinadasCountPremium?: number;
   weeklyCombinadasMinV1?: number;
+  /** 0 = sin corte; 2..6 = martes..sabado. Parte la semana en dos ventanas. */
+  weeklySplitDayOfWeek?: number;
   combinadasRegularMinLegs?: number;
   combinadasRegularMaxLegs?: number;
   combinadasPremiumMinLegs?: number;
