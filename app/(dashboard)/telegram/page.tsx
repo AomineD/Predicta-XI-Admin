@@ -14,6 +14,7 @@ import { SectionCard, Field, Toggle, NumInput } from '@/components/ui/form-contr
 const TG_TABS = [
   { id: 'connection', label: 'Conexión' },
   { id: 'content', label: 'Contenido' },
+  { id: 'creatives', label: 'Creativos' },
   { id: 'queue', label: 'Cola' },
   { id: 'history', label: 'Historial' },
   { id: 'metrics', label: 'Rendimiento' },
@@ -25,17 +26,37 @@ type TgTabId = typeof TG_TABS[number]['id'];
 type PublishMode = 'auto' | 'approval';
 type ChannelMode = 'bilingual' | 'split';
 
-const CONTENT_TYPES = ['match_recap', 'weekly_recap', 'standings_recap', 'match_teaser', 'free_pick', 'goal'] as const;
+const CONTENT_TYPES = [
+  'match_recap',
+  'weekly_recap',
+  'standings_recap',
+  'match_teaser',
+  'free_pick',
+  'goal',
+  'today_matches',
+  'day_results',
+  'match_result',
+  'combinada_teaser',
+] as const;
 type ContentType = typeof CONTENT_TYPES[number];
 
 /**
  * Tipos que se pueden componer a mano desde «Componer ahora».
  *
- * `goal` no está: sus hechos los trae una incidencia real de un partido en
- * curso, no un builder al que se le pueda pedir uno de la nada. Pedirlo
- * devolvería un 422 del backend.
+ * Ni `goal` ni `match_result` están: sus hechos los trae un partido concreto —
+ * una incidencia en curso, un encuentro que acaba de terminar— y no un builder
+ * al que se le pueda pedir uno de la nada. Pedirlos devolvería un 422.
  */
-const COMPOSABLE_TYPES = ['match_recap', 'weekly_recap', 'standings_recap', 'match_teaser', 'free_pick'] as const;
+const COMPOSABLE_TYPES = [
+  'match_recap',
+  'weekly_recap',
+  'standings_recap',
+  'match_teaser',
+  'free_pick',
+  'today_matches',
+  'day_results',
+  'combinada_teaser',
+] as const;
 
 /**
  * Configuración de UN tipo. Desde la migración `0193` vive en su propia fila
@@ -111,8 +132,20 @@ const TYPE_LABELS: Record<string, string> = {
   match_teaser: 'Partidazo',
   free_pick: 'Pick gratis',
   goal: 'Goles en vivo',
+  today_matches: 'Agenda del día',
+  day_results: 'Cierre del día',
+  match_result: 'Final del partido',
+  combinada_teaser: 'Combinada del día',
   manual: 'Manual',
 };
+
+/** Un creativo del canal, tal como lo lista el bucket. */
+interface Creative {
+  key: string;
+  url: string;
+  size: number;
+  lastModified: string | null;
+}
 
 /* ── small inline controls (raw, matching the notifications page styling) ───── */
 
@@ -185,6 +218,66 @@ function StatusPill({ status }: { status: TelegramPost['status'] }) {
   };
   const s = map[status];
   return <span className={`px-2 py-0.5 text-[11px] font-medium rounded-full border font-sans ${s.cls}`}>{s.label}</span>;
+}
+
+/* ── selector de creativo ───────────────────────────────────────────────────── */
+
+/**
+ * Elige la imagen que acompaña a un tipo, de entre los creativos ya subidos.
+ *
+ * Es un desplegable y no un campo de texto a propósito: la URL la genera la
+ * subida, y escribirla a mano es la vía directa a un enlace roto que solo se
+ * descubre cuando la publicación sale sin imagen.
+ */
+function CreativeField({
+  value,
+  creatives,
+  onChange,
+}: {
+  value: string | null;
+  creatives: Creative[];
+  onChange: (v: string | null) => void;
+}) {
+  return (
+    <Field
+      label="Imagen"
+      subtitle="Creativo que acompaña a la publicación. Vacío = solo texto."
+      info="Se elige de los creativos subidos en la pestaña «Creativos». Telegram descarga la imagen desde su lado, así que tiene que estar publicada en nuestro dominio."
+    >
+      <div className="flex items-center gap-3">
+        <select
+          value={value ?? ''}
+          onChange={(e) => onChange(e.target.value || null)}
+          className="h-9 px-3 rounded-xl text-sm bg-surface-2 border border-border text-text-primary font-sans max-w-[16rem]"
+        >
+          <option value="">Sin imagen</option>
+          {/* Un creativo que se borró del bucket seguiría configurado aquí: se
+              añade como opción para que el desplegable no lo pierda en silencio
+              al guardar cualquier otro cambio. */}
+          {value && !creatives.some((c) => c.url === value) && (
+            <option value={value}>(el configurado, ya no está en la galería)</option>
+          )}
+          {creatives.map((c) => (
+            <option key={c.key} value={c.url}>
+              {c.key.replace('telegram/creatives/', '')}
+            </option>
+          ))}
+        </select>
+        {value && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={value}
+            alt=""
+            // La url la genera la subida, pero el campo admite cualquier host:
+            // sin esto, una url que apunte a un tercero le filtraría al servidor
+            // ajeno la IP del administrador y la dirección del panel.
+            referrerPolicy="no-referrer"
+            className="h-9 w-16 object-cover rounded-md border border-border"
+          />
+        )}
+      </div>
+    </Field>
+  );
 }
 
 /* ── content-type card ──────────────────────────────────────────────────────── */
@@ -494,6 +587,59 @@ export default function TelegramPage() {
     onError: (err: Error) => setWebhookMsg(err.message),
   });
 
+  /* ── creativos del canal ── */
+  const creativesQ = useQuery<{ storageConfigured: boolean; items: Creative[] }>({
+    queryKey: ['telegram-creatives'],
+    queryFn: () => api.get('/admin/telegram/creatives'),
+    // También en «Contenido»: el selector de imagen de cada tipo se alimenta de
+    // esta lista, así que tiene que estar cargada antes de abrir la galería.
+    enabled: tab === 'creatives' || tab === 'content',
+  });
+  const creatives = creativesQ.data?.items ?? [];
+  const [creativeMsg, setCreativeMsg] = useState<string | null>(null);
+  const [creativeFailed, setCreativeFailed] = useState(false);
+
+  const uploadCreative = useMutation({
+    mutationFn: (file: File) =>
+      new Promise<{ url: string }>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error('No se pudo leer el archivo.'));
+        reader.onload = () => {
+          const result = typeof reader.result === 'string' ? reader.result : '';
+          api
+            .post<{ url: string }>('/admin/telegram/creatives', {
+              name: file.name,
+              contentType: file.type,
+              imageBase64: result,
+            })
+            .then(resolve, reject);
+        };
+        reader.readAsDataURL(file);
+      }),
+    onSuccess: () => {
+      setCreativeFailed(false);
+      setCreativeMsg('Creativo subido.');
+      qc.invalidateQueries({ queryKey: ['telegram-creatives'] });
+    },
+    onError: (e: Error) => {
+      setCreativeFailed(true);
+      setCreativeMsg(e.message);
+    },
+  });
+
+  const deleteCreative = useMutation({
+    mutationFn: (key: string) => api.delete(`/admin/telegram/creatives?key=${encodeURIComponent(key)}`),
+    onSuccess: () => {
+      setCreativeFailed(false);
+      setCreativeMsg('Creativo borrado.');
+      qc.invalidateQueries({ queryKey: ['telegram-creatives'] });
+    },
+    onError: (e: Error) => {
+      setCreativeFailed(true);
+      setCreativeMsg(e.message);
+    },
+  });
+
   /* ── rendimiento por tipo ── */
   const [metricsDays, setMetricsDays] = useState(30);
   const metricsQ = useQuery<{ days: number; rows: TypeMetrics[] }>({
@@ -535,6 +681,14 @@ export default function TelegramPage() {
   const leagueIdsText = idListText('standings_recap', 'leagueIds');
   const goalLeagueIdsText = idListText('goal', 'leagueIds');
   const goalTeamIdsText = idListText('goal', 'teamIds');
+  const resultLeagueIdsText = idListText('match_result', 'leagueIds');
+  const resultTeamIdsText = idListText('match_result', 'teamIds');
+
+  /** URL de la imagen configurada para un tipo, si la hay. */
+  const imageOf = (type: ContentType): string | null => {
+    const raw = typeCfg(type).settings.imageUrl;
+    return typeof raw === 'string' && raw.length > 0 ? raw : null;
+  };
 
   return (
     <div className="p-8 max-w-3xl">
@@ -849,9 +1003,228 @@ export default function TelegramPage() {
                 </>
               }
             />
+
+            <TypeCard
+              title="Agenda del día"
+              subtitle="Los partidos analizados que aún no han empezado."
+              info="Sale por la mañana y lista solo lo que queda por jugar. Enseña la confianza del análisis principal de cada partido, nunca cuál es el pronóstico: eso está en la app."
+              config={typeCfg('today_matches')}
+              onChange={(p) => patchType('today_matches', p)}
+              extra={
+                <>
+                  <Field label="Máx. partidos" subtitle="Los que caben en la lista; el resto se cuentan como «y N más».">
+                    <NumInput
+                      value={numSetting('today_matches', 'maxMatches', 8)}
+                      onChange={(v) => patchSetting('today_matches', 'maxMatches', v)}
+                      min={1}
+                      max={30}
+                    />
+                  </Field>
+                  <Field
+                    label="Ligas (apiFootballId)"
+                    subtitle="IDs separados por coma. Vacío = todas las ligas activas."
+                    info="Al revés que en los goles: aquí vacío NO restringe, publica con todas las ligas activas."
+                  >
+                    <TextInput
+                      value={idListText('today_matches', 'leagueIds')}
+                      onChange={(v) => patchSetting('today_matches', 'leagueIds', parseIdList(v) ?? [])}
+                      placeholder="39, 140"
+                    />
+                  </Field>
+                  <CreativeField
+                    value={imageOf('today_matches')}
+                    creatives={creatives}
+                    onChange={(v) => patchSetting('today_matches', 'imageUrl', v)}
+                  />
+                </>
+              }
+            />
+
+            <TypeCard
+              title="Cierre del día"
+              subtitle="Marcadores finales y qué tal le fue a la IA."
+              info="El balance va en el MISMO mensaje que los marcadores, no aparte: es lo que hace que se lea como transparencia y no como publicidad. Un partido sin predicción sale con su marcador y sin marca de acierto."
+              config={typeCfg('day_results')}
+              onChange={(p) => patchType('day_results', p)}
+              extra={
+                <>
+                  <Field label="Máx. partidos" subtitle="Cuántos marcadores caben en el mensaje.">
+                    <NumInput
+                      value={numSetting('day_results', 'maxMatches', 10)}
+                      onChange={(v) => patchSetting('day_results', 'maxMatches', v)}
+                      min={1}
+                      max={30}
+                    />
+                  </Field>
+                  <Field
+                    label="Ligas (apiFootballId)"
+                    subtitle="IDs separados por coma. Vacío = todas las ligas activas."
+                  >
+                    <TextInput
+                      value={idListText('day_results', 'leagueIds')}
+                      onChange={(v) => patchSetting('day_results', 'leagueIds', parseIdList(v) ?? [])}
+                      placeholder="39, 140"
+                    />
+                  </Field>
+                  <CreativeField
+                    value={imageOf('day_results')}
+                    creatives={creatives}
+                    onChange={(v) => patchSetting('day_results', 'imageUrl', v)}
+                  />
+                </>
+              }
+            />
+
+            <TypeCard
+              title="Final del partido"
+              subtitle="Marcador, goleadores y mejor jugador al terminar."
+              info="Se dispara cuando el partido acaba, no por el reloj. El mejor del partido sale de las notas de jugador: si esa captura está apagada o la fuente no publica notas de esa liga, el mensaje sale igual pero SIN esa línea — no se inventa. Como los goles, este tipo no consume el tope global del canal."
+              config={typeCfg('match_result')}
+              onChange={(p) => patchType('match_result', p)}
+              eventDriven
+              extra={
+                <>
+                  <Field
+                    label="Ligas (apiFootballId)"
+                    subtitle="IDs separados por coma. VACÍO = no publica ningún resultado."
+                    info="Es una lista de permitidos, igual que en los goles: sin ninguna liga aquí el tipo no publica nada aunque esté encendido."
+                  >
+                    <TextInput
+                      value={resultLeagueIdsText}
+                      onChange={(v) => patchSetting('match_result', 'leagueIds', parseIdList(v) ?? [])}
+                      placeholder="39, 140"
+                    />
+                  </Field>
+                  <Field
+                    label="Equipos (id interno)"
+                    subtitle="IDs separados por coma. Vacío = todos los de esas ligas."
+                  >
+                    <TextInput
+                      value={resultTeamIdsText}
+                      onChange={(v) => patchSetting('match_result', 'teamIds', parseIdList(v) ?? [])}
+                      placeholder="11, 22"
+                    />
+                  </Field>
+                </>
+              }
+            />
+
+            <TypeCard
+              title="Combinada del día"
+              subtitle="Una pata destapada; el resto, en la app."
+              info="Se destapa SIEMPRE una sola pata, la de mayor confianza, y no es configurable: destapar dos regala el producto. Debajo va la combinada de ayer ya liquidada, como prueba. Si la de ayer sigue pendiente, ese bloque no sale."
+              config={typeCfg('combinada_teaser')}
+              onChange={(p) => patchType('combinada_teaser', p)}
+              extra={
+                <>
+                  <Field
+                    label="Alcance"
+                    subtitle="Qué combinada se destapa."
+                    info="La semanal se guarda con la fecha del lunes de su ventana, así que esto cambia la combinada que se lee, no solo la etiqueta."
+                  >
+                    <Select<'daily' | 'weekly'>
+                      value={typeCfg('combinada_teaser').settings.scope === 'weekly' ? 'weekly' : 'daily'}
+                      options={[
+                        { value: 'daily', label: 'La del día' },
+                        { value: 'weekly', label: 'La de la semana' },
+                      ]}
+                      onChange={(v) => patchSetting('combinada_teaser', 'scope', v)}
+                    />
+                  </Field>
+                  <CreativeField
+                    value={imageOf('combinada_teaser')}
+                    creatives={creatives}
+                    onChange={(v) => patchSetting('combinada_teaser', 'imageUrl', v)}
+                  />
+                </>
+              }
+            />
+          </div>
+
+          {/* ── CREATIVOS ── */}
+          <div hidden={tab !== 'creatives'} role="tabpanel" id="tabpanel-creatives" aria-labelledby="tab-creatives">
+            <SectionCard
+              title="Imágenes del canal"
+              subtitle="Se suben aquí y se eligen en cada tipo de publicación."
+              info="Se guardan en el almacenamiento propio y se sirven por el mismo proxy que los escudos. Solo PNG, JPEG o WebP, hasta 2 MB. El formato que mejor se ve en Telegram es 1200×630."
+            >
+              {creativesQ.data && !creativesQ.data.storageConfigured ? (
+                <p className="text-xs text-danger font-sans">
+                  Falta la configuración de almacenamiento (variables <code>B2_*</code>) en el
+                  servidor: sin ella no se pueden subir imágenes.
+                </p>
+              ) : (
+                <Field label="Subir" subtitle="PNG, JPEG o WebP · máx. 2 MB.">
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    disabled={uploadCreative.isPending}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      // El input se limpia siempre: sin esto, volver a elegir el
+                      // mismo archivo tras un fallo no dispara ningún evento.
+                      e.target.value = '';
+                      if (file) {
+                        setCreativeMsg(null);
+                        uploadCreative.mutate(file);
+                      }
+                    }}
+                    className="text-sm text-text-secondary font-sans"
+                  />
+                </Field>
+              )}
+              {creativeMsg && (
+                <p className={`text-xs font-sans pt-2 ${creativeFailed ? 'text-danger' : 'text-text-secondary'}`}>
+                  {creativeMsg}
+                </p>
+              )}
+            </SectionCard>
+
+            {creativesQ.isLoading ? (
+              <p className="text-text-muted text-sm font-sans py-3">Cargando…</p>
+            ) : creatives.length === 0 ? (
+              <p className="text-text-muted text-sm font-sans py-3">Todavía no has subido ninguna imagen.</p>
+            ) : (
+              <div className="grid grid-cols-2 gap-4">
+                {creatives.map((c) => (
+                  <div
+                    key={c.key}
+                    className="rounded-2xl p-4"
+                    style={{ background: '#121A2B', border: '1px solid rgba(255,255,255,0.08)' }}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={c.url}
+                      alt=""
+                      referrerPolicy="no-referrer"
+                      className="w-full h-32 object-cover rounded-xl mb-3"
+                    />
+                    <p className="text-xs text-text-secondary font-sans break-all mb-1">
+                      {c.key.replace('telegram/creatives/', '')}
+                    </p>
+                    <p className="text-[11px] text-text-muted font-sans mb-3">
+                      {Math.round(c.size / 1024)} KB
+                      {c.lastModified ? ` · ${new Date(c.lastModified).toLocaleDateString()}` : ''}
+                    </p>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      loading={deleteCreative.isPending}
+                      onClick={() => {
+                        setCreativeMsg(null);
+                        deleteCreative.mutate(c.key);
+                      }}
+                    >
+                      Borrar
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* ── QUEUE ── */}
+
           <div hidden={tab !== 'queue'} role="tabpanel" id="tabpanel-queue" aria-labelledby="tab-queue">
             <p className="text-xs text-text-muted font-sans mb-4 flex items-center gap-1.5">
               Borradores pendientes de aprobación.
