@@ -25,8 +25,17 @@ type TgTabId = typeof TG_TABS[number]['id'];
 type PublishMode = 'auto' | 'approval';
 type ChannelMode = 'bilingual' | 'split';
 
-const CONTENT_TYPES = ['match_recap', 'weekly_recap', 'standings_recap', 'match_teaser', 'free_pick'] as const;
+const CONTENT_TYPES = ['match_recap', 'weekly_recap', 'standings_recap', 'match_teaser', 'free_pick', 'goal'] as const;
 type ContentType = typeof CONTENT_TYPES[number];
+
+/**
+ * Tipos que se pueden componer a mano desde «Componer ahora».
+ *
+ * `goal` no está: sus hechos los trae una incidencia real de un partido en
+ * curso, no un builder al que se le pueda pedir uno de la nada. Pedirlo
+ * devolvería un 422 del backend.
+ */
+const COMPOSABLE_TYPES = ['match_recap', 'weekly_recap', 'standings_recap', 'match_teaser', 'free_pick'] as const;
 
 /**
  * Configuración de UN tipo. Desde la migración `0193` vive en su propia fila
@@ -101,6 +110,7 @@ const TYPE_LABELS: Record<string, string> = {
   standings_recap: 'Tablas',
   match_teaser: 'Partidazo',
   free_pick: 'Pick gratis',
+  goal: 'Goles en vivo',
   manual: 'Manual',
 };
 
@@ -197,6 +207,7 @@ function TypeCard({
   config,
   onChange,
   extra,
+  eventDriven = false,
 }: {
   title: string;
   subtitle?: string;
@@ -204,6 +215,12 @@ function TypeCard({
   config: ContentTypeConfig;
   onChange: (patch: Partial<ContentTypeConfig>) => void;
   extra?: React.ReactNode;
+  /**
+   * El tipo se dispara por un HECHO (un gol), no por el reloj. Se ocultan las
+   * horas, los días y el prompt: enseñar controles que el backend ignora es
+   * peor que no tenerlos — el operador cree haber configurado algo.
+   */
+  eventDriven?: boolean;
 }) {
   const toggleWeekday = (day: number) => {
     const next = config.weekdays.includes(day)
@@ -222,59 +239,69 @@ function TypeCard({
       <Field label="Modo" info="Automático publica solo; Con aprobación deja un borrador en la cola.">
         <Select value={config.mode} options={MODE_OPTIONS} onChange={(v) => onChange({ mode: v })} />
       </Field>
-      <Field
-        label="Horas (Bogotá)"
-        subtitle="Una o varias, separadas por coma."
-        info="Cada hora de la lista es una publicación distinta ese día, siempre que el tipo no haya alcanzado su tope diario. Vacío = no se agenda nunca."
-      >
-        <TextInput
-          value={config.hours.join(', ')}
-          onChange={(v) => onChange({ hours: parseHours(v) })}
-          placeholder="11, 19"
-        />
-      </Field>
-      <Field
-        label="Días"
-        subtitle="Días de la semana en los que se publica."
-        info="Al menos uno. Quitar todos equivaldría a apagar el tipo sin que el interruptor lo refleje, así que no se permite."
-      >
-        <div className="flex gap-1">
-          {WEEKDAY_LABELS.map((label, day) => {
-            const on = config.weekdays.includes(day);
-            return (
-              <button
-                key={day}
-                type="button"
-                onClick={() => toggleWeekday(day)}
-                aria-pressed={on}
-                aria-label={`Día ${label}`}
-                className={`w-8 h-8 rounded-md text-xs font-sans font-semibold transition-colors ${
-                  on
-                    ? 'bg-accent text-bg-primary'
-                    : 'bg-surface-2 text-text-muted hover:text-text-secondary'
-                }`}
-              >
-                {label}
-              </button>
-            );
-          })}
-        </div>
-      </Field>
+      {!eventDriven && (
+        <>
+          <Field
+            label="Horas (Bogotá)"
+            subtitle="Una o varias, separadas por coma."
+            info="Cada hora de la lista es una publicación distinta ese día, siempre que el tipo no haya alcanzado su tope diario. Vacío = no se agenda nunca."
+          >
+            <TextInput
+              value={config.hours.join(', ')}
+              onChange={(v) => onChange({ hours: parseHours(v) })}
+              placeholder="11, 19"
+            />
+          </Field>
+          <Field
+            label="Días"
+            subtitle="Días de la semana en los que se publica."
+            info="Al menos uno. Quitar todos equivaldría a apagar el tipo sin que el interruptor lo refleje, así que no se permite."
+          >
+            <div className="flex gap-1">
+              {WEEKDAY_LABELS.map((label, day) => {
+                const on = config.weekdays.includes(day);
+                return (
+                  <button
+                    key={day}
+                    type="button"
+                    onClick={() => toggleWeekday(day)}
+                    aria-pressed={on}
+                    aria-label={`Día ${label}`}
+                    className={`w-8 h-8 rounded-md text-xs font-sans font-semibold transition-colors ${
+                      on
+                        ? 'bg-accent text-bg-primary'
+                        : 'bg-surface-2 text-text-muted hover:text-text-secondary'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </Field>
+        </>
+      )}
       <Field
         label="Tope diario del tipo"
         subtitle="Máximo de publicaciones al día de este tipo."
-        info="Se aplica además del tope global del canal, nunca en su lugar: un tipo con tope 5 sigue sin poder pasarse del límite global."
+        info={
+          eventDriven
+            ? 'Este tipo NO consume el tope global del canal: una tarde de goles no puede dejar sin cupo al resto de la parrilla. Este es su único límite diario.'
+            : 'Se aplica además del tope global del canal, nunca en su lugar: un tipo con tope 5 sigue sin poder pasarse del límite global.'
+        }
       >
         <NumInput value={config.maxPerDay} onChange={(v) => onChange({ maxPerDay: v })} min={1} max={100} />
       </Field>
       {extra}
-      <Field label="Prompt extra (opcional)" subtitle="Vacío = por defecto" info="Instrucción adicional para el redactor IA.">
-        <TextArea
-          value={config.promptOverride ?? ''}
-          onChange={(v) => onChange({ promptOverride: v || null })}
-          placeholder="Tono, ángulo, énfasis…"
-        />
-      </Field>
+      {!eventDriven && (
+        <Field label="Prompt extra (opcional)" subtitle="Vacío = por defecto" info="Instrucción adicional para el redactor IA.">
+          <TextArea
+            value={config.promptOverride ?? ''}
+            onChange={(v) => onChange({ promptOverride: v || null })}
+            placeholder="Tono, ángulo, énfasis…"
+          />
+        </Field>
+      )}
     </SectionCard>
   );
 }
@@ -362,6 +389,16 @@ export default function TelegramPage() {
   const numSetting = (type: ContentType, key: string, fallback: number): number => {
     const raw = typeCfg(type).settings[key];
     return typeof raw === 'number' && Number.isFinite(raw) ? raw : fallback;
+  };
+
+  const boolSetting = (type: ContentType, key: string, fallback: boolean): boolean => {
+    const raw = typeCfg(type).settings[key];
+    return typeof raw === 'boolean' ? raw : fallback;
+  };
+
+  const idListText = (type: ContentType, key: string): string => {
+    const raw = typeCfg(type).settings[key];
+    return Array.isArray(raw) ? raw.join(', ') : '';
   };
 
   const saveCfg = useMutation({
@@ -485,16 +522,19 @@ export default function TelegramPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, canSave, saveCfg.isPending, cfg, tokenInput]);
 
-  /* ── league ids text helper (standings) ── */
-  const leagueIdsRaw = typeCfg('standings_recap').settings.leagueIds;
-  const leagueIdsText = Array.isArray(leagueIdsRaw) ? leagueIdsRaw.join(', ') : '';
-  const parseLeagueIds = (raw: string): number[] | null => {
+  /* ── listas de ids escritas a mano (tablas, goles) ── */
+  const parseIdList = (raw: string): number[] | null => {
     const ids = raw
       .split(/[\s,]+/)
       .map((s) => Number(s.trim()))
       .filter((n) => Number.isFinite(n) && n > 0);
     return ids.length > 0 ? Array.from(new Set(ids)) : null;
   };
+  // Tablas: `null` = volver a las ligas destacadas. Goles: la lista vacía es un
+  // valor con significado propio (no publicar nada), así que ahí se manda `[]`.
+  const leagueIdsText = idListText('standings_recap', 'leagueIds');
+  const goalLeagueIdsText = idListText('goal', 'leagueIds');
+  const goalTeamIdsText = idListText('goal', 'teamIds');
 
   return (
     <div className="p-8 max-w-3xl">
@@ -666,7 +706,7 @@ export default function TelegramPage() {
               <Field label="Tipo" subtitle="Qué post componer.">
                 <Select<ContentType>
                   value={composeType}
-                  options={CONTENT_TYPES.map((t) => ({ value: t, label: TYPE_LABELS[t] ?? t }))}
+                  options={COMPOSABLE_TYPES.map((t) => ({ value: t, label: TYPE_LABELS[t] ?? t }))}
                   onChange={setComposeType}
                 />
               </Field>
@@ -722,7 +762,7 @@ export default function TelegramPage() {
                 <Field label="Ligas (apiFootballId)" subtitle="IDs separados por coma. Vacío = ligas destacadas.">
                   <TextInput
                     value={leagueIdsText}
-                    onChange={(v) => patchSetting('standings_recap', 'leagueIds', parseLeagueIds(v))}
+                    onChange={(v) => patchSetting('standings_recap', 'leagueIds', parseIdList(v))}
                     placeholder="39, 140, 135"
                   />
                 </Field>
@@ -750,6 +790,63 @@ export default function TelegramPage() {
                     max={95}
                   />
                 </Field>
+              }
+            />
+
+            <TypeCard
+              title="Goles en vivo"
+              subtitle="Avisa en el canal cada vez que cae un gol."
+              info="Se dispara por el gol, no por el reloj, así que no tiene horario. Solo cubre las ligas que ESPN sigue y que actives abajo. El texto es fijo (marcador, goleador y minuto): no pasa por el redactor IA para que salga en segundos y nadie pueda reescribir un marcador."
+              config={typeCfg('goal')}
+              onChange={(p) => patchType('goal', p)}
+              eventDriven
+              extra={
+                <>
+                  <Field
+                    label="Modo sombra"
+                    subtitle="Detecta y registra, pero NO publica."
+                    info="Déjalo encendido durante una jornada completa antes de abrir el canal: sirve para comparar los goles detectados con los reales sin que el canal diga nada. Apágalo cuando la lista cuadre."
+                  >
+                    <Toggle
+                      value={boolSetting('goal', 'shadowMode', true)}
+                      onChange={(v) => patchSetting('goal', 'shadowMode', v)}
+                    />
+                  </Field>
+                  <Field
+                    label="Ligas (apiFootballId)"
+                    subtitle="IDs separados por coma. VACÍO = no publica ningún gol."
+                    info="Es una lista de permitidos, no un filtro opcional: sin ninguna liga aquí, el tipo no publica nada aunque esté encendido. Solo funcionan las ligas que ESPN cubre (39 Premier, 140 LaLiga, 135 Serie A, 78 Bundesliga, 61 Ligue 1, 88 Eredivisie, 94 Primeira, 2 Champions)."
+                  >
+                    <TextInput
+                      value={goalLeagueIdsText}
+                      onChange={(v) => patchSetting('goal', 'leagueIds', parseIdList(v) ?? [])}
+                      placeholder="39, 140"
+                    />
+                  </Field>
+                  <Field
+                    label="Equipos (id interno)"
+                    subtitle="IDs separados por coma. Vacío = todos los de esas ligas."
+                    info="Al revés que las ligas: aquí vacío NO restringe. Con equipos puestos, solo se publica el gol si uno de los dos del partido está en la lista."
+                  >
+                    <TextInput
+                      value={goalTeamIdsText}
+                      onChange={(v) => patchSetting('goal', 'teamIds', parseIdList(v) ?? [])}
+                      placeholder="11, 22"
+                    />
+                  </Field>
+                  <Field
+                    label="Tope por partido"
+                    subtitle="Máximo de goles publicados de un mismo encuentro."
+                    info="Evita que un 5-0 se lleve la tarde entera del canal."
+                  >
+                    <NumInput
+                      value={numSetting('goal', 'maxPerMatch', 3)}
+                      onChange={(v) => patchSetting('goal', 'maxPerMatch', v)}
+                      min={1}
+                      max={20}
+                    />
+                  </Field>
+                </>
               }
             />
           </div>
