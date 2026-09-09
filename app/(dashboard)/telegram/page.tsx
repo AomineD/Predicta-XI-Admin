@@ -385,16 +385,22 @@ export default function TelegramPage() {
 
   /* ── test connection ── */
   const [testMsg, setTestMsg] = useState<string | null>(null);
+  /** Un fallo de la prueba se pinta en rojo: en gris se confunde con una nota. */
+  const [testFailed, setTestFailed] = useState(false);
   const testMut = useMutation({
     mutationFn: (send: boolean) => api.post<{ ok: boolean; username: string | null; messageId?: number }>('/admin/telegram/test', { send }),
     onSuccess: (res, send) => {
+      setTestFailed(false);
       setTestMsg(
         send
           ? `Mensaje de prueba enviado (id ${res.messageId ?? '?'}). Bot: @${res.username ?? '?'}.`
-          : `Conexión OK. Bot: @${res.username ?? '?'}.`,
+          : `Conexión OK (el token es válido). Esto NO comprueba el canal: usa «Enviar prueba» para eso. Bot: @${res.username ?? '?'}.`,
       );
     },
-    onError: (e) => setTestMsg((e as Error)?.message ?? 'Falló la prueba.'),
+    onError: (e) => {
+      setTestFailed(true);
+      setTestMsg((e as Error)?.message ?? 'Falló la prueba.');
+    },
   });
 
   /* ── compose now ── */
@@ -524,11 +530,25 @@ export default function TelegramPage() {
               </Field>
               <Field label="Probar" info="Verifica el token (getMe) y, opcionalmente, envía un mensaje de prueba al canal.">
                 <div className="flex gap-2">
-                  <Button variant="secondary" size="sm" loading={testMut.isPending} onClick={() => { setTestMsg(null); testMut.mutate(false); }}>Probar conexión</Button>
-                  <Button variant="secondary" size="sm" loading={testMut.isPending} onClick={() => { setTestMsg(null); testMut.mutate(true); }}>Enviar prueba</Button>
+                  {/* Deshabilitados mientras haya cambios sin guardar: la prueba
+                      usa lo que hay en la BASE, no lo del formulario, así que
+                      probar un token recién escrito daría un fallo desconcertante
+                      («no configurado» con el campo relleno delante). */}
+                  <Button variant="secondary" size="sm" loading={testMut.isPending} disabled={canSave} onClick={() => { setTestMsg(null); testMut.mutate(false); }}>Probar conexión</Button>
+                  <Button variant="secondary" size="sm" loading={testMut.isPending} disabled={canSave} onClick={() => { setTestMsg(null); testMut.mutate(true); }}>Enviar prueba</Button>
                 </div>
               </Field>
-              {testMsg && <p className="text-xs font-sans text-text-secondary pt-2">{testMsg}</p>}
+              {canSave && (
+                <p className="text-xs text-warning font-sans">
+                  Tienes cambios sin guardar. Pulsa <strong>Guardar</strong> antes de probar: la
+                  prueba usa la configuración ya guardada, no lo que ves en el formulario.
+                </p>
+              )}
+              {testMsg && (
+                <p className={`text-xs font-sans pt-2 ${testFailed ? 'text-danger' : 'text-text-secondary'}`}>
+                  {testMsg}
+                </p>
+              )}
             </SectionCard>
 
             <SectionCard title="Idioma del canal" info="Bilingüe = un canal con ES+EN en cada post. Separado = ES a un canal y EN a otro.">
