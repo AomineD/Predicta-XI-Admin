@@ -76,6 +76,19 @@ export interface BadgeDefinition {
    * regla que contar (una insignia por criterios todavía sin condiciones).
    */
   howToEarn: { es: string; en: string } | null;
+  /**
+   * Ajustes numéricos que mueven la exigencia de ESTA insignia.
+   *
+   * Lo deriva el backend de la propia explicación, así que el panel no mantiene
+   * su propio mapeo insignia→umbral: uno escrito a mano se desincronizaría en
+   * cuanto alguien tocara una regla, y la ficha ofrecería un campo que no hace
+   * nada. Vacío significa que la regla no tiene ningún número configurable (el
+   * "3" de Podio global ES la regla, no una exigencia).
+   *
+   * `sharedWith` son las OTRAS insignias que miran ese mismo umbral: cambiarlo
+   * desde aquí también las mueve.
+   */
+  tunables: { key: string; sharedWith: string[] }[];
   enabled: boolean;
   isBuiltin: boolean;
   sortOrder: number;
@@ -116,7 +129,10 @@ export interface BadgesConfig {
 }
 
 /** Formulario del editor. Es la definición sin los campos que fija el servidor. */
-export type BadgeDraft = Omit<BadgeDefinition, 'evaluator' | 'isBuiltin' | 'howToEarn'>;
+export type BadgeDraft = Omit<
+  BadgeDefinition,
+  'evaluator' | 'isBuiltin' | 'howToEarn' | 'tunables'
+>;
 
 export function emptyDraft(nextSortOrder: number): BadgeDraft {
   return {

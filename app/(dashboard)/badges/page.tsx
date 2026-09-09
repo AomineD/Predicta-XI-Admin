@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Pencil, Trash2, RefreshCw } from 'lucide-react';
 import { api } from '@/lib/api';
@@ -11,6 +11,12 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useToast } from '@/components/ui/ToastProvider';
 import { BadgeChipPreview } from './_components/BadgeChipPreview';
 import { BadgeEditor } from './_components/BadgeEditor';
+import {
+  TUNABLE_FIELDS,
+  readTunable,
+  writeTunable,
+  type TunableKey,
+} from './_components/tunables';
 import {
   BADGE_CATEGORIES,
   emptyDraft,
@@ -26,6 +32,22 @@ interface MaintenanceConfig {
 }
 
 const CATEGORY_LABEL = Object.fromEntries(BADGE_CATEGORIES.map((c) => [c.value, c.label]));
+
+/**
+ * Solo lo de insignias, para no pisar el resto de la configuración.
+ *
+ * `GET /admin/credits-config` devuelve TODO el documento compartido (precios,
+ * bonos, IAP, flags, redes) y el estado local lo propaga con spread, así que
+ * mandarlo entero reescribía todo con la foto de cuando cargó la página: un
+ * precio que otro admin cambió entretanto se revertía en silencio. `updateConfig`
+ * ignora las claves ausentes, así que acotar el cuerpo basta para cerrarlo.
+ */
+function badgesOnly(cfg: MaintenanceConfig): Pick<
+  MaintenanceConfig,
+  'badgesEnabled' | 'badgesConfig'
+> {
+  return { badgesEnabled: cfg.badgesEnabled, badgesConfig: cfg.badgesConfig };
+}
 
 /**
  * System → Badges.
@@ -62,6 +84,10 @@ export default function BadgesPage() {
   const items = useMemo(() => data?.items ?? [], [data]);
   const metrics = metricsData?.metrics ?? [];
 
+  // Los ajustes se declaran aquí arriba porque el "Guardar" de la ficha de una
+  // insignia también los persiste: sus umbrales se editan desde el modal.
+  const [cfgForm, setCfgForm] = useState<MaintenanceConfig | null>(null);
+
   // ── Editor ────────────────────────────────────────────────────────────────
   const [draft, setDraft] = useState<BadgeDraft | null>(null);
   const [editingKey, setEditingKey] = useState<string | null>(null);
@@ -69,25 +95,95 @@ export default function BadgesPage() {
   // La explicación la calcula el servidor, así que se guarda aparte del
   // formulario: no es un campo editable, es lo que el usuario acabará leyendo.
   const [editingHowTo, setEditingHowTo] = useState<{ es: string; en: string } | null>(null);
+  // Igual que `howToEarn`: lo declara el servidor y no viaja en el formulario.
+  const [editingTunables, setEditingTunables] = useState<
+    { key: string; sharedWith: string[] }[]
+  >([]);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [toDelete, setToDelete] = useState<BadgeDefinition | null>(null);
 
+  /**
+   * Ajustes tal como estaban al abrir la ficha, para poder deshacer.
+   *
+   * Cancelar tiene que revertir los umbrales tocados DENTRO del modal. Sin esto
+   * sobrevivían en el estado de la página y los escribía el siguiente guardado
+   * —el de otra insignia, o el botón "Guardar ajustes"—, una acción que no los
+   * nombra. Con `minParticipants`, que es el suelo anti-farming de tres
+   * insignias PERMANENTES, lo que se otorgase por error no se puede retirar.
+   * No basta con poner `null`: el admin puede traer cambios de la tarjeta de
+   * abajo, y cancelar una ficha no debe tirarlos.
+   */
+  const [cfgSnapshot, setCfgSnapshot] = useState<MaintenanceConfig | null>(null);
+
   const closeEditor = (): void => {
+    setCfgForm(cfgSnapshot);
+    setCfgSnapshot(null);
     setDraft(null);
     setEditingKey(null);
     setEditingHowTo(null);
+    setEditingTunables([]);
     setSaveError(null);
   };
 
+  /**
+   * Nombre visible de cada insignia, para nombrar a las que comparten umbral.
+   *
+   * `Map` y no un objeto: las claves vienen de la base y un objeto plano hereda
+   * de `Object.prototype`, así que una clave como `constructor` devolvería la
+   * función heredada en vez de caer al `??`. Hoy no es alcanzable, pero en este
+   * backend ya hay antecedente de claves de usuario llegando al prototipo.
+   */
+  const titleByKey = useMemo(
+    () => new Map(items.map((b) => [b.key, b.titleEs])),
+    [items],
+  );
+
+  /** Si el PUT de umbrales llegó a escribir antes de que fallara la ficha. */
+  const configWritten = useRef(false);
+
   const save = useMutation({
-    mutationFn: (d: BadgeDraft) =>
-      editingKey ? api.patch(`/admin/badges/${editingKey}`, d) : api.post('/admin/badges', d),
+    mutationFn: async (d: BadgeDraft) => {
+      // Los umbrales viven en otro documento (`credits-config`) que el de la
+      // insignia, pero para quien usa el panel son un solo "Guardar". Van
+      // PRIMERO y en secuencia: si la config falla, la ficha no se guarda y el
+      // error se ve, en vez de dejar el texto de la app describiendo un umbral
+      // que no llegó a escribirse.
+      configWritten.current = false;
+      if (cfgForm) {
+        await api.put('/admin/credits-config', badgesOnly(cfgForm));
+        configWritten.current = true;
+      }
+      return editingKey
+        ? await api.patch(`/admin/badges/${editingKey}`, d)
+        : await api.post('/admin/badges', d);
+    },
     onSuccess: () => {
       toast.success(editingKey ? 'Insignia actualizada.' : 'Insignia creada.');
-      closeEditor();
+      setCfgForm(null);
+      setCfgSnapshot(null);
+      setDraft(null);
+      setEditingKey(null);
+      setEditingHowTo(null);
+      setEditingTunables([]);
+      setSaveError(null);
       void qc.invalidateQueries({ queryKey: ['admin-badges'] });
+      void qc.invalidateQueries({ queryKey: ['credits-config'] });
     },
-    onError: (err: Error) => setSaveError(err.message),
+    onError: (err: Error) => {
+      // Si la ficha falló DESPUÉS de escribir los umbrales, ya están en la base.
+      // Callarlo dejaría al admin creyendo que no se guardó nada, con el panel
+      // enseñando su copia vieja.
+      if (configWritten.current) {
+        setCfgForm(null);
+        setCfgSnapshot(null);
+        void qc.invalidateQueries({ queryKey: ['credits-config'] });
+        setSaveError(
+          `${err.message} — ojo: los umbrales SÍ se guardaron; lo que falló fue la ficha.`,
+        );
+        return;
+      }
+      setSaveError(err.message);
+    },
   });
 
   const remove = useMutation({
@@ -115,11 +211,11 @@ export default function BadgesPage() {
   });
 
   // ── Ajustes globales (venían de Config → Maintenance) ──────────────────────
-  const [cfgForm, setCfgForm] = useState<MaintenanceConfig | null>(null);
   const cfg = cfgForm ?? maintCfg ?? null;
 
   const saveCfg = useMutation({
-    mutationFn: (body: MaintenanceConfig) => api.put('/admin/credits-config', body),
+    mutationFn: (body: MaintenanceConfig) =>
+      api.put('/admin/credits-config', badgesOnly(body)),
     onSuccess: () => {
       setCfgForm(null);
       toast.success('Ajustes de insignias guardados.');
@@ -128,19 +224,14 @@ export default function BadgesPage() {
     onError: (err: Error) => toast.error(err.message),
   });
 
-  const setThreshold = (key: keyof BadgesConfig['thresholds'], value: number): void => {
-    if (!cfg) return;
-    setCfgForm({
-      ...cfg,
-      badgesConfig: {
-        ...cfg.badgesConfig,
-        thresholds: { ...cfg.badgesConfig.thresholds, [key]: value },
-      },
-    });
-  };
   const setCfgField = (patch: Partial<BadgesConfig>): void => {
     if (!cfg) return;
     setCfgForm({ ...cfg, badgesConfig: { ...cfg.badgesConfig, ...patch } });
+  };
+  /** Umbral cambiado desde la ficha: puede estar en `thresholds` o en la raíz. */
+  const setTunable = (key: TunableKey, value: number): void => {
+    if (!cfg) return;
+    setCfgForm({ ...cfg, badgesConfig: writeTunable(cfg.badgesConfig, key, value) });
   };
 
   return (
@@ -180,6 +271,8 @@ export default function BadgesPage() {
                 setEditingKey(null);
                 setEditingBuiltin(false);
                 setEditingHowTo(null);
+                setEditingTunables([]);
+                setCfgSnapshot(cfgForm);
                 setSaveError(null);
               }}
             >
@@ -245,146 +338,24 @@ export default function BadgesPage() {
             </Field>
 
             <SubHeading>Umbrales de las 18 originales</SubHeading>
-            <Field
-              label="Participantes mínimos"
-              subtitle="def. 3"
-              info="Cuánta gente tiene que haber competido de verdad (enviaron picks y quedaron clasificados) para que una quiniela otorgue insignias. Es la defensa anti-farming: sin ella, crear una quiniela en solitario y 'ganarla' regala la insignia de Campeón por unos pocos créditos."
-            >
-              <NumInput
-                value={cfg.badgesConfig.thresholds.minParticipants}
-                min={1}
-                max={100}
-                onChange={(v) => setThreshold('minParticipants', v)}
-              />
-            </Field>
-            <Field
-              label="Partidos mínimos por semana"
-              subtitle="def. 5"
-              info="Partidos que tiene que tener una jornada para que cuente como pleno. Sin este suelo, acertar el marcador de una quiniela de un solo partido otorgaba 'Perfecto' y 'Maestro' a la vez."
-            >
-              <NumInput
-                value={cfg.badgesConfig.thresholds.minFixturesPerWeek}
-                min={1}
-                max={50}
-                onChange={(v) => setThreshold('minFixturesPerWeek', v)}
-              />
-            </Field>
-            <Field label="Cazacuotas: cuota mínima" subtitle="def. 8.00">
-              <NumInput
-                value={cfg.badgesConfig.thresholds.cazacuotasMinOdds}
-                min={1.01}
-                max={1000}
-                step={0.5}
-                onChange={(v) => setThreshold('cazacuotasMinOdds', v)}
-              />
-            </Field>
-            <Field label="Vidente de llaves: rondas seguidas" subtitle="def. 4">
-              <NumInput
-                value={cfg.badgesConfig.thresholds.videnteLlavesMinStreak}
-                min={1}
-                max={20}
-                onChange={(v) => setThreshold('videnteLlavesMinStreak', v)}
-              />
-            </Field>
-            <Field label="Marcador clavado: exactos acumulados" subtitle="def. 25">
-              <NumInput
-                value={cfg.badgesConfig.thresholds.marcadorClavadoMinExact}
-                min={1}
-                max={1000}
-                onChange={(v) => setThreshold('marcadorClavadoMinExact', v)}
-              />
-            </Field>
-            <Field label="Veterano: quinielas jugadas" subtitle="def. 50">
-              <NumInput
-                value={cfg.badgesConfig.thresholds.veteranoMinGroups}
-                min={1}
-                max={1000}
-                onChange={(v) => setThreshold('veteranoMinGroups', v)}
-              />
-            </Field>
-            <Field
-              label="Ventana de estilo (días)"
-              subtitle="def. 90"
-              info="Cuánto hacia atrás se mira para juzgar los rasgos de estilo. Una ventana corta reacciona rápido pero es injusta con una mala racha; una larga tarda en soltar a quien ya mejoró."
-            >
-              <NumInput
-                value={cfg.badgesConfig.thresholds.riskWindowDays}
-                min={7}
-                max={365}
-                onChange={(v) => setThreshold('riskWindowDays', v)}
-              />
-            </Field>
-            <Field label="Riesgos innecesarios: picks mínimos" subtitle="def. 10">
-              <NumInput
-                value={cfg.badgesConfig.thresholds.riskMinPicks}
-                min={1}
-                max={500}
-                onChange={(v) => setThreshold('riskMinPicks', v)}
-              />
-            </Field>
-            <Field
-              label="Riesgos innecesarios: acierto máximo"
-              subtitle="0 a 1 · def. 0.25"
-              info="Se otorga cuando la tasa de acierto en riesgos queda POR DEBAJO de este valor. 0.25 = acierta menos de uno de cada cuatro."
-            >
-              <NumInput
-                value={cfg.badgesConfig.thresholds.riskMaxHitRate}
-                min={0}
-                max={1}
-                step={0.05}
-                onChange={(v) => setThreshold('riskMaxHitRate', v)}
-              />
-            </Field>
-            <Field label="Uno de más: patas mínimas" subtitle="def. 4">
-              <NumInput
-                value={cfg.badgesConfig.thresholds.unoDeMasMinLegs}
-                min={2}
-                max={20}
-                onChange={(v) => setThreshold('unoDeMasMinLegs', v)}
-              />
-            </Field>
-            <Field label="Uno de más: combinadas mínimas" subtitle="def. 5">
-              <NumInput
-                value={cfg.badgesConfig.thresholds.unoDeMasMinCombinadas}
-                min={1}
-                max={500}
-                onChange={(v) => setThreshold('unoDeMasMinCombinadas', v)}
-              />
-            </Field>
-            <Field
-              label="Uno de más: proporción"
-              subtitle="0 a 1 · def. 0.5"
-              info="Qué parte de sus combinadas perdidas tienen que haberse caído por una sola pata. 0.5 = la mitad o más."
-            >
-              <NumInput
-                value={cfg.badgesConfig.thresholds.unoDeMasMinShare}
-                min={0}
-                max={1}
-                step={0.05}
-                onChange={(v) => setThreshold('unoDeMasMinShare', v)}
-              />
-            </Field>
-            <Field label="Sin puntería: picks mínimos" subtitle="def. 30">
-              <NumInput
-                value={cfg.badgesConfig.thresholds.sinPunteriaMinPicks}
-                min={1}
-                max={5000}
-                onChange={(v) => setThreshold('sinPunteriaMinPicks', v)}
-              />
-            </Field>
-            <Field
-              label="Sin puntería: fracción del promedio"
-              subtitle="0 a 1 · def. 0.6"
-              info="Se otorga cuando la precisión del usuario cae por debajo de esta fracción del promedio de toda la comunidad. 0.6 = acierta menos del 60 % de lo que acierta el jugador medio. Bájalo para que sea más difícil de ganar."
-            >
-              <NumInput
-                value={cfg.badgesConfig.thresholds.sinPunteriaMaxRatio}
-                min={0}
-                max={1}
-                step={0.05}
-                onChange={(v) => setThreshold('sinPunteriaMaxRatio', v)}
-              />
-            </Field>
+            {/*
+              Se pintan desde TUNABLE_FIELDS, el mismo catálogo que usa la ficha
+              de cada insignia. Escritos a mano en los dos sitios, subir un tope
+              aquí dejaba a la ficha aceptando un valor que el backend recorta.
+              `combinadaGlobalMinScored` se excluye: no es de las 18, ya tiene su
+              campo arriba entre los ajustes generales.
+            */}
+            {TUNABLE_FIELDS.filter((f) => f.key !== 'combinadaGlobalMinScored').map((f) => (
+              <Field key={f.key} label={f.label} subtitle={f.subtitle} info={f.info}>
+                <NumInput
+                  value={readTunable(cfg.badgesConfig, f.key)}
+                  min={f.min}
+                  max={f.max}
+                  step={f.step}
+                  onChange={(v) => setTunable(f.key, v)}
+                />
+              </Field>
+            ))}
 
             <div className="flex items-center gap-3 pt-3">
               <Button variant="primary" loading={saveCfg.isPending} onClick={() => saveCfg.mutate(cfg)}>
@@ -483,12 +454,15 @@ export default function BadgesPage() {
                               evaluator: _e,
                               isBuiltin: _b,
                               howToEarn: _h,
+                              tunables: _t,
                               ...rest
                             } = b;
                             setDraft(rest);
                             setEditingKey(b.key);
                             setEditingBuiltin(b.isBuiltin);
                             setEditingHowTo(b.howToEarn);
+                            setEditingTunables(b.tunables ?? []);
+                            setCfgSnapshot(cfgForm);
                             setSaveError(null);
                           }}
                           className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-2 transition-colors"
@@ -525,6 +499,10 @@ export default function BadgesPage() {
           isNew={editingKey === null}
           isBuiltin={editingBuiltin}
           howToEarn={editingHowTo}
+          tunables={editingTunables}
+          badgesConfig={cfg?.badgesConfig ?? null}
+          titleByKey={titleByKey}
+          onTunableChange={setTunable}
           metrics={metrics}
           saving={save.isPending}
           error={saveError}

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
-import { Field, SubHeading, Toggle } from '@/components/ui/form-controls';
+import { Field, NumInput, SubHeading, Toggle } from '@/components/ui/form-controls';
 import { Input, Select, Textarea } from '@/components/ui/inputs';
 import { BadgeChipPreview } from './BadgeChipPreview';
 import { CriteriaBuilder } from './CriteriaBuilder';
@@ -14,7 +14,9 @@ import {
   type BadgeDraft,
   type BadgeKind,
   type BadgeMetric,
+  type BadgesConfig,
 } from './types';
+import { TUNABLE_BY_KEY, readTunable, type TunableKey } from './tunables';
 
 /**
  * Editor de una insignia.
@@ -39,6 +41,83 @@ import {
  * tanto aquí como en `/badges/catalog`, de modo que lo que lee el admin es
  * literalmente lo que lee el usuario.
  */
+/**
+ * Las exigencias de una insignia original, editables aquí mismo.
+ *
+ * Antes esta tarjeta decía "no se edita desde aquí" y mandaba a buscar el campo
+ * correcto entre los catorce de la tarjeta de ajustes, sin decir cuál era el de
+ * esta insignia. Ahora se ofrecen solo los suyos —los que el backend declara en
+ * `tunables`— y el texto de arriba se reescribe con el número nuevo al guardar.
+ *
+ * Lo que sigue sin poder tocarse es CÓMO se concede: eso es lógica del servidor.
+ */
+function TunablesCard({
+  tunables,
+  badgesConfig,
+  titleByKey,
+  onTunableChange,
+}: {
+  tunables: { key: string; sharedWith: string[] }[];
+  badgesConfig: BadgesConfig | null;
+  titleByKey: ReadonlyMap<string, string>;
+  onTunableChange: (key: TunableKey, value: number) => void;
+}) {
+  const known = tunables.filter((t) => TUNABLE_BY_KEY.has(t.key as TunableKey));
+
+  return (
+    <div className="rounded-xl border border-border bg-surface-2 p-4 mt-4">
+      <p className="text-sm text-text-primary font-sans">
+        La concede el servidor con lógica propia: cómo se gana no se cambia desde aquí.
+      </p>
+
+      {known.length === 0 ? (
+        <p className="text-xs text-text-muted font-sans mt-2 leading-relaxed">
+          Y su regla no tiene ningún número que ajustar: lo que exige —terminar entre los primeros,
+          encadenar dos jornadas perfectas— <strong>es</strong> la regla, no un umbral. Para cambiarla
+          hay que tocar el código.
+        </p>
+      ) : !badgesConfig ? (
+        <p className="text-xs text-text-muted font-sans mt-2 leading-relaxed">
+          Sus exigencias no se pueden mostrar porque los ajustes de insignias no cargaron. Recarga la
+          página para editarlas.
+        </p>
+      ) : (
+        <>
+          <p className="text-xs text-text-muted font-sans mt-2 leading-relaxed">
+            Lo que sí puedes mover son sus exigencias. Se guardan con el botón{' '}
+            <strong>Guardar</strong> de abajo, junto al resto de la ficha.
+          </p>
+          <div className="mt-4 space-y-1">
+            {known.map((t) => {
+              const field = TUNABLE_BY_KEY.get(t.key as TunableKey)!;
+              const shared = t.sharedWith.map((k) => titleByKey.get(k) ?? k);
+              return (
+                <div key={t.key}>
+                  <Field label={field.label} subtitle={field.subtitle} info={field.info}>
+                    <NumInput
+                      value={readTunable(badgesConfig, field.key)}
+                      min={field.min}
+                      max={field.max}
+                      step={field.step}
+                      onChange={(v) => onTunableChange(field.key, v)}
+                    />
+                  </Field>
+                  {shared.length > 0 && (
+                    <p className="text-xs text-warning font-sans -mt-1 mb-2 leading-relaxed">
+                      Ojo: este mismo número lo usa también {shared.join(', ')}. Cambiarlo aquí las
+                      mueve igual.
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function HowToEarnCard({
   howToEarn,
   isBuiltin,
@@ -90,6 +169,10 @@ export function BadgeEditor({
   isNew,
   isBuiltin,
   howToEarn,
+  tunables,
+  badgesConfig,
+  titleByKey,
+  onTunableChange,
   metrics,
   saving,
   error,
@@ -103,6 +186,13 @@ export function BadgeEditor({
   isBuiltin: boolean;
   /** Regla real, derivada por el servidor. `null` = todavía no hay ninguna. */
   howToEarn: { es: string; en: string } | null;
+  /** Umbrales que mueven ESTA insignia, declarados por el backend. */
+  tunables: { key: string; sharedWith: string[] }[];
+  /** Config viva de insignias. `null` si no cargó: los umbrales no se editan. */
+  badgesConfig: BadgesConfig | null;
+  /** Clave de insignia -> su nombre, para nombrar a las que comparten umbral. */
+  titleByKey: ReadonlyMap<string, string>;
+  onTunableChange: (key: TunableKey, value: number) => void;
   metrics: BadgeMetric[];
   saving: boolean;
   error: string | null;
@@ -301,18 +391,12 @@ export function BadgeEditor({
           <HowToEarnCard howToEarn={howToEarn} isBuiltin={isBuiltin} isNew={isNew} />
 
           {isBuiltin ? (
-            <div className="rounded-xl border border-border bg-surface-2 p-4 mt-4">
-              <p className="text-sm text-text-primary font-sans">
-                La concede el servidor con lógica propia: no se edita desde aquí.
-              </p>
-              <p className="text-xs text-text-muted font-sans mt-2 leading-relaxed">
-                Depende de cosas que no son un número por usuario —las semanas perfectas de un grupo
-                recién liquidado, el ganador de una quiniela con su gate anti-farming—. Lo que sí
-                puedes mover son sus exigencias (cuota mínima de Cazacuotas, rondas seguidas de
-                Vidente de llaves, y demás): se ajustan en la tarjeta <strong>Umbrales</strong> de
-                esta misma página, y el texto de arriba se reescribe solo con el número nuevo.
-              </p>
-            </div>
+            <TunablesCard
+              tunables={tunables}
+              badgesConfig={badgesConfig}
+              titleByKey={titleByKey}
+              onTunableChange={onTunableChange}
+            />
           ) : (
             <>
               <Field
