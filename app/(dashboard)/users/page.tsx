@@ -53,6 +53,9 @@ export default function UsersPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Las cuentas eliminadas se ocultan por defecto: al borrarse se anonimizan
+  // (email y nombre a NULL) y en la tabla se leían como registros incompletos.
+  const [includeDeleted, setIncludeDeleted] = useState(false);
 
   // Debounce the search box and reset to page 1 on a new term.
   useEffect(() => {
@@ -69,10 +72,11 @@ export default function UsersPage() {
   });
 
   const { data, isLoading } = useQuery<UsersPage>({
-    queryKey: ['users-list', search, page],
+    queryKey: ['users-list', search, page, includeDeleted],
     queryFn: () => {
       const params = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE) });
       if (search) params.set('search', search);
+      if (includeDeleted) params.set('includeDeleted', 'true');
       return api.get(`/admin/users?${params.toString()}`);
     },
   });
@@ -86,7 +90,17 @@ export default function UsersPage() {
       header: 'Usuario',
       render: (r) => (
         <div className="flex flex-col">
-          <span className="text-text-primary font-medium">{r.displayName ?? '—'}</span>
+          <span className="flex items-center gap-2">
+            <span className="text-text-primary font-medium">{r.displayName ?? '—'}</span>
+            {r.deletedAt && (
+              <span
+                className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium uppercase tracking-wide bg-danger/15 text-danger"
+                title={`Cuenta eliminada el ${formatDateTime(r.deletedAt)}`}
+              >
+                Eliminado
+              </span>
+            )}
+          </span>
           <span className="text-xs text-text-muted">{r.email ?? '—'}</span>
         </div>
       ),
@@ -133,7 +147,12 @@ export default function UsersPage() {
       <PageHeader title="Usuarios" description="KPIs, búsqueda y detalle por usuario (solo lectura)" />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <MetricCard label="Total" value={kpis?.totalUsers ?? '—'} accent />
+        <MetricCard
+          label="Total"
+          value={kpis?.totalUsers ?? '—'}
+          sub={kpis && kpis.deleted > 0 ? `sin contar ${kpis.deleted} eliminadas` : 'cuentas vivas'}
+          accent
+        />
         <MetricCard label="Nuevos hoy" value={kpis?.newToday ?? '—'} sub={`${kpis?.new7d ?? 0} en 7d · ${kpis?.new30d ?? 0} en 30d`} />
         <MetricCard label="Activos 7d" value={kpis?.active7d ?? '—'} sub={`${kpis?.active30d ?? 0} en 30d`} />
         <MetricCard
@@ -168,7 +187,7 @@ export default function UsersPage() {
         )}
       </div>
 
-      <div className="mb-4">
+      <div className="mb-4 flex flex-wrap items-center gap-4">
         <input
           type="text"
           value={searchInput}
@@ -177,6 +196,18 @@ export default function UsersPage() {
           className="w-full max-w-md rounded-xl px-3 py-2 text-sm text-text-primary outline-none"
           style={{ background: '#121A2B', border: '1px solid rgba(255,255,255,0.12)' }}
         />
+        <label className="flex items-center gap-2 text-sm text-text-secondary cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={includeDeleted}
+            onChange={(e) => {
+              setIncludeDeleted(e.target.checked);
+              setPage(1);
+            }}
+            className="h-4 w-4 accent-primary"
+          />
+          Mostrar cuentas eliminadas
+        </label>
       </div>
 
       <DataTable<UserRow>

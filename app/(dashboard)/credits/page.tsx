@@ -50,6 +50,8 @@ interface CreditsConfig {
   dailyLoginStreakDays: number;
   // Earn-credits hints (link in gates + "Cómo ganar créditos" hub).
   earnCreditsHintsEnabled: boolean;
+  // Aviso de saldo bajo en la Home de la app.
+  lowCreditsWarningEnabled: boolean;
   // One-time action rewards.
   actionRewardNotificationsEnabled: boolean;
   actionRewardNotificationsCredits: number;
@@ -517,6 +519,17 @@ function CreditsPageInner() {
       <SectionCard title="Earn-credits Hints" subtitle='Shows a "more ways to earn free credits" link at the friction points (insufficient-credits gate + credits sheet) that opens the "Cómo ganar créditos" hub listing every active way to earn. On by default (purely informational).'>
         <Field label="Enabled" subtitle="When on, the app surfaces the earn-credits link + hub.">
           <Toggle value={f.earnCreditsHintsEnabled} onChange={(v) => set('earnCreditsHintsEnabled', v)} />
+        </Field>
+      </SectionCard>
+
+      {/* ── Low-credits warning ── */}
+      <SectionCard
+        title="Low-credits Warning"
+        subtitle="Franja en la Home cuando el saldo no alcanza para una predicción"
+        info={'Today a user with no credits finds out only when they open a prediction and hit the insufficient-credits gate — too late: they already picked the match they wanted. With this on, the Home shows a quiet strip (not a modal — the modal chain is already balanced) as soon as the balance drops below the cost of one prediction, opening the "Cómo ganar créditos" hub in one tap. Subscribers with unlimited credits never see it. Off by default.'}
+      >
+        <Field label="Enabled" subtitle="When on, the Home surfaces the low-balance strip.">
+          <Toggle value={f.lowCreditsWarningEnabled} onChange={(v) => set('lowCreditsWarningEnabled', v)} />
         </Field>
       </SectionCard>
 
