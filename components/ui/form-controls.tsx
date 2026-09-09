@@ -1,9 +1,12 @@
+'use client';
+
 /**
  * Shared form primitives for admin config screens (Credits, Social Quiniela,
  * Config, …). Un solo juego de controles para que todas las pantallas de ajustes
  * rendericen idéntico. Usan los tokens del theme (no hex inline).
  */
 
+import { useState } from 'react';
 import { Card } from './Card';
 import { InfoPopover } from './InfoPopover';
 
@@ -92,15 +95,60 @@ export function NumInput({
    *  último tramo de dificultad, que siempre arranca en 0%). */
   disabled?: boolean;
 }) {
+  /**
+   * Lo tecleado mientras el campo tiene el foco. `null` = manda la prop.
+   *
+   * Hace falta porque el input es controlado y hay estados intermedios que no
+   * son un número: la caja vacía al borrar para reescribir, un `-` suelto, un
+   * `1e`. Sin esto, `Number('')` es 0 y el campo mandaba un CERO real al
+   * borrarlo — en `minParticipants` eso apagaba el suelo anti-farming y el
+   * backend lo recortaba a 1 sin que nada avisara.
+   */
+  const [typed, setTyped] = useState<string | null>(null);
+
+  /**
+   * Ajusta al rango. Solo al salir del campo, NUNCA mientras se teclea: con
+   * `min=10`, recortar en vivo convertiría el primer `5` de "50" en un 10 y
+   * dejaría el valor imposible de escribir.
+   */
+  const clamp = (n: number): number => {
+    const low = Math.max(n, min);
+    return max === undefined ? low : Math.min(low, max);
+  };
+
   return (
     <input
       type="number"
       min={min}
       max={max}
       step={step}
-      value={value}
+      value={typed ?? String(value)}
       disabled={disabled}
-      onChange={(e) => onChange(Number(e.target.value))}
+      onChange={(e) => {
+        const raw = e.target.value;
+        setTyped(raw);
+        // Solo se propaga lo que ya es un número: el padre nunca ve un 0
+        // fantasma ni un NaN, y la caja puede quedarse vacía mientras escribes.
+        const n = Number(raw);
+        if (raw.trim() !== '' && Number.isFinite(n)) onChange(n);
+      }}
+      onWheel={(e) => e.currentTarget.blur()}
+      onBlur={(e) => {
+        // Nadie tecleó: pasar por encima con el tabulador NO puede reescribir lo
+        // que hay guardado. Sin esto, un valor persistido fuera del rango que
+        // declara el JSX se recortaba solo por enfocarlo, ensuciaba el
+        // formulario y se colaba en el siguiente guardado sin que nada avisara.
+        if (typed === null) return;
+        const raw = e.target.value;
+        const n = Number(raw);
+        // Al soltar el campo se decide: lo válido se ajusta al rango —para no
+        // dejar nada fuera de límites esperando a que el backend lo recorte en
+        // silencio— y lo que no es un número vuelve al último valor propagado
+        // (ojo: el último bueno que se tecleó, no el que había al empezar).
+        const next = raw.trim() === '' || !Number.isFinite(n) ? value : clamp(n);
+        setTyped(null);
+        if (next !== value) onChange(next);
+      }}
       className="h-9 w-24 px-3 rounded-xl text-sm bg-surface-2 border border-border text-text-primary font-sans transition-colors focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/30 disabled:opacity-50 disabled:cursor-not-allowed"
     />
   );
