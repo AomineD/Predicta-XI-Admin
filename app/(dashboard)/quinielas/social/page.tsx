@@ -224,6 +224,8 @@ interface GroupRow {
   joinClosesAt: string | null;
   settledAt: string | null;
   createdAt: string | null;
+  // Publicada en la vitrina de descubrimiento de la app (§6.2 del plan de retención).
+  isPublic: boolean;
   ownerId: string;
   ownerName: string | null;
   ownerEmail: string | null;
@@ -1222,23 +1224,40 @@ function ConfigTab() {
 
 const STATUS_FILTERS = ['', 'open', 'locked', 'settling', 'settled', 'cancelled'];
 const TYPE_FILTERS = ['', 'weekly', 'competition', 'team', 'running', 'knockout', 'championship'];
+const VISIBILITY_FILTERS = [
+  { value: '', label: 'All visibility' },
+  { value: 'true', label: 'Public only' },
+  { value: 'false', label: 'Private only' },
+];
 
 function GroupsTab() {
+  const qc = useQueryClient();
   const [status, setStatus] = useState('');
   const [type, setType] = useState('');
+  const [visibility, setVisibility] = useState('');
   const [page, setPage] = useState(1);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [createKnockout, setCreateKnockout] = useState(false);
   const pageSize = 20;
 
   const listQ = useQuery({
-    queryKey: ['admin-groups', status, type, page],
+    queryKey: ['admin-groups', status, type, visibility, page],
     queryFn: () => {
       const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
       if (status) params.set('status', status);
       if (type) params.set('type', type);
+      if (visibility) params.set('isPublic', visibility);
       return api.get<GroupListResponse>(`/admin/groups?${params.toString()}`);
     },
+  });
+
+  // Moderación de la vitrina: retirar una quiniela inadecuada sin esperar a su
+  // dueño, o destacar una oficial. El dueño conserva su propio interruptor en la
+  // app; este no lo sustituye.
+  const publicMut = useMutation({
+    mutationFn: ({ id, isPublic }: { id: string; isPublic: boolean }) =>
+      api.post<{ isPublic: boolean }>(`/admin/groups/${id}/public`, { isPublic }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-groups'] }),
   });
 
   const data = listQ.data;
@@ -1265,6 +1284,15 @@ function GroupsTab() {
             <option key={t} value={t}>{t || 'All types'}</option>
           ))}
         </select>
+        <select
+          value={visibility}
+          onChange={(e) => { setVisibility(e.target.value); setPage(1); }}
+          className="h-9 px-3 rounded-xl text-sm bg-surface-2 border border-border text-text-primary font-sans"
+        >
+          {VISIBILITY_FILTERS.map((v) => (
+            <option key={v.value} value={v.value}>{v.label}</option>
+          ))}
+        </select>
         {data && <span className="text-xs text-text-muted font-sans ml-auto">{data.total} groups</span>}
         <Button variant="primary" size="sm" onClick={() => setCreateKnockout(true)}>
           <Plus size={14} /> Crear eliminatorias
@@ -1275,16 +1303,16 @@ function GroupsTab() {
         <table className="w-full text-sm font-sans">
           <thead>
             <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-              {['Group', 'Type', 'Status', 'Members', 'Credits', 'Prize', 'Created', ''].map((h, i) => (
+              {['Group', 'Type', 'Status', 'Public', 'Members', 'Credits', 'Prize', 'Created', ''].map((h, i) => (
                 <th key={h || `col-${i}`} className="px-4 py-3 text-left text-xs font-medium text-text-muted uppercase tracking-wider">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {listQ.isLoading ? (
-              <tr><td colSpan={8} className="px-4 py-8 text-center text-text-muted">Loading…</td></tr>
+              <tr><td colSpan={9} className="px-4 py-8 text-center text-text-muted">Loading…</td></tr>
             ) : !data || data.items.length === 0 ? (
-              <tr><td colSpan={8} className="px-4 py-8 text-center text-text-muted">No groups match these filters.</td></tr>
+              <tr><td colSpan={9} className="px-4 py-8 text-center text-text-muted">No groups match these filters.</td></tr>
             ) : (
               data.items.map((g) => (
                 <tr
@@ -1301,6 +1329,24 @@ function GroupsTab() {
                   </td>
                   <td className="px-4 py-3 text-text-secondary text-xs uppercase">{g.type}</td>
                   <td className="px-4 py-3"><GroupStatusPill status={g.status} /></td>
+                  <td className="px-4 py-3">
+                    {/* stopPropagation: la fila entera abre el detalle, y publicar
+                        no debe arrastrar al operador a otra pantalla. */}
+                    <button
+                      type="button"
+                      disabled={publicMut.isPending}
+                      onClick={(e) => { e.stopPropagation(); publicMut.mutate({ id: g.id, isPublic: !g.isPublic }); }}
+                      title={g.isPublic ? 'Retirar de la vitrina pública' : 'Publicar en la vitrina'}
+                      className="px-2 py-1 rounded-lg text-[11px] font-medium uppercase tracking-wider transition-colors disabled:opacity-50"
+                      style={
+                        g.isPublic
+                          ? { background: 'rgba(16,185,129,0.15)', color: '#10B981', border: '1px solid rgba(16,185,129,0.35)' }
+                          : { background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.45)', border: '1px solid rgba(255,255,255,0.10)' }
+                      }
+                    >
+                      {g.isPublic ? 'Public' : 'Private'}
+                    </button>
+                  </td>
                   <td className="px-4 py-3 font-mono text-xs">{g.memberCount}/{g.maxMembers}</td>
                   <td className="px-4 py-3 font-mono text-xs">{g.creditsCharged}</td>
                   <td className="px-4 py-3 text-xs"><PrizeCell row={g} /></td>
