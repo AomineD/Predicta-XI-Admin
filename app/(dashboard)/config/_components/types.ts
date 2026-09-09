@@ -146,6 +146,10 @@ export interface PredictionConfig {
   combinadasPremiumMinLegs?: number;
   combinadasPremiumMaxLegs?: number;
   combinadasMaxPremiumPerMatch?: number;
+  combinadasMaxRegularPerMatch?: number;
+  combinadasMarketFamilyDiversity?: boolean;
+  combinadasMaxLegsSameFamily?: number;
+  combinadasCalibrationOddsExempt?: number;
   combinadasPremiumExcludedTeams?: number[];
   /** Per-model max output token override. Empty/missing → backend uses baked-in default. */
   llmMaxTokens?: Record<string, number>;

@@ -180,6 +180,37 @@ export function CombinadasTab({
         >
           <Input type="number" min={1} max={5} className="w-24" value={form.combinadasMaxPremiumPerMatch ?? 1} onChange={(e) => setField('combinadasMaxPremiumPerMatch', Number(e.target.value))} />
         </Field>
+        <Field
+          label="Max. regular por partido"
+          subtitle="def. 1 · 0 = sin tope"
+          info="En cuantas combinadas regular distintas puede aparecer un mismo partido. Hasta ahora el tier regular NO tenia tope y ese era el agujero: el 2026-09-07 seis combinadas salieron de siete picks distintos y un solo pick fallido (Cagliari over 1.5, presente en cinco de las seis) las mato todas a la vez. El conteo cubre la semana entera y cruza los dos productos, asi que la combinada semanal ya no puede volver a anclarse en un partido que la diaria uso esos dias (y al reves). Cada tier cuenta el suyo: una pata premium no recorta el pool regular. Ojo: con el tope activo el numero de combinadas queda limitado por los partidos distintos disponibles, asi que en dias flacos se generan menos, a proposito."
+        >
+          <Input type="number" min={0} max={5} className="w-24" value={form.combinadasMaxRegularPerMatch ?? 1} onChange={(e) => setField('combinadasMaxRegularPerMatch', Number(e.target.value))} />
+        </Field>
+
+        <SubHeading>Diversidad de mercado</SubHeading>
+        <Field
+          label="Familias de mercado distintas"
+          subtitle="def. activado"
+          info="Cada partido aporta al pool picks de familias distintas (goles / resultado / tarjetas / corners / jugador), no solo de mercados distintos. Sin esto, el pool se queda con los 3 picks de mayor confianza de cada partido — y como la confianza esta anclada al mercado (tiende a 1/cuota), ordenar por confianza es ordenar por cuota corta. Medido en 14 dias: 321 picks de btts pasaban todos los filtros y se usaron CERO; corners 219 y cero; asian_handicap 118 y cero. No los excluia ningun criterio de calidad, perdian el empate contra total_goals (confianza media 71) y double_chance (72). Esto ordena, no filtra: si un dia solo hay una familia disponible, el pool no se queda corto."
+        >
+          <Toggle value={form.combinadasMarketFamilyDiversity ?? true} onChange={(v) => setField('combinadasMarketFamilyDiversity', v)} />
+        </Field>
+        <Field
+          label="Max. patas de la misma familia"
+          subtitle="def. 2 · 0 = sin tope"
+          info="Tope de patas del mismo eje DENTRO de una combinada. Tres 'mas de 1.5 goles' en tres partidos distintos parecen tres apuestas pero comparten el factor comun de la jornada (partidos cerrados, arbitraje, clima): no diversifican. Medido: 17 de las 28 patas premium eran del eje de goles. Los mercados hibridos (resultado + total, win to nil) cuentan como goles a proposito, para que el tope no se pueda esquivar."
+        >
+          <Input type="number" min={0} max={8} className="w-24" value={form.combinadasMaxLegsSameFamily ?? 2} onChange={(e) => setField('combinadasMaxLegsSameFamily', Number(e.target.value))} />
+        </Field>
+        <Field
+          label="Cuota que exime del piso de calibracion"
+          subtitle="0 = apagado · sugerido 1.80"
+          info="Un pick con cuota igual o mayor que esta se salta el filtro de calibracion. Ese filtro puntua confianza/100 x winrates historicos contra un piso de 0,45, asi que castiga exactamente a la confianza baja — y la confianza baja es lo que producen las cuotas largas: un pick a confianza 50 con winrate 0,85 da 0,425 y muere, aunque su cuota este bien pagada. Ya existe una exencion para los picks respaldados por el modelo de valor, pero es letra muerta mientras el modelo independiente este apagado. Empieza bajo y mide: sin muestras historicas de estos mercados en combinadas, subirlo mucho es cambiar un sesgo por otro."
+        >
+          <Input type="number" min={0} max={10} step={0.05} className="w-24" value={form.combinadasCalibrationOddsExempt ?? 0} onChange={(e) => setField('combinadasCalibrationOddsExempt', Number(e.target.value))} />
+        </Field>
+
         <Field label="Equipos excluidos (premium)" subtitle="Salta cualquier combinada premium con estos equipos">
           <TeamBlacklistPicker value={form.combinadasPremiumExcludedTeams ?? []} onChange={(v) => setField('combinadasPremiumExcludedTeams', v)} />
         </Field>
