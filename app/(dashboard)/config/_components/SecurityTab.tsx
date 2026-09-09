@@ -7,6 +7,7 @@ import { SectionCard, Field } from '@/components/ui/form-controls';
 import { Input } from '@/components/ui/inputs';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/ToastProvider';
+import { PasskeysCard } from './PasskeysCard';
 
 export function SecurityTab() {
   const toast = useToast();
@@ -38,29 +39,33 @@ export function SecurityTab() {
   };
 
   return (
-    <SectionCard title="Security" subtitle="Change your admin panel password">
-      <Field label="Current password" subtitle="Enter your current password to verify identity">
-        <Input type="password" className="w-64" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} placeholder="Current password" />
-      </Field>
+    <>
+      <PasskeysCard />
 
-      <Field label="New password" subtitle="Minimum 8 characters">
-        <Input type="password" className="w-64" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="New password" />
-      </Field>
+      <SectionCard title="Security" subtitle="Change your admin panel password">
+        <Field label="Current password" subtitle="Enter your current password to verify identity">
+          <Input type="password" className="w-64" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} placeholder="Current password" />
+        </Field>
 
-      <Field label="Confirm password" subtitle="Re-enter the new password">
-        <Input type="password" className="w-64" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Confirm new password" />
-      </Field>
+        <Field label="New password" subtitle="Minimum 8 characters">
+          <Input type="password" className="w-64" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="New password" />
+        </Field>
 
-      <div className="mt-4">
-        <Button
-          variant="secondary"
-          loading={changePassword.isPending}
-          disabled={!currentPassword || !newPassword || !confirmPassword}
-          onClick={handleChangePassword}
-        >
-          Change Password
-        </Button>
-      </div>
-    </SectionCard>
+        <Field label="Confirm password" subtitle="Re-enter the new password">
+          <Input type="password" className="w-64" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Confirm new password" />
+        </Field>
+
+        <div className="mt-4">
+          <Button
+            variant="secondary"
+            loading={changePassword.isPending}
+            disabled={!currentPassword || !newPassword || !confirmPassword}
+            onClick={handleChangePassword}
+          >
+            Change Password
+          </Button>
+        </div>
+      </SectionCard>
+    </>
   );
 }

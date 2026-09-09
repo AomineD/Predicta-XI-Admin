@@ -1,16 +1,59 @@
 'use client';
 
-import { useActionState, useState } from 'react';
+import { useActionState, useCallback, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { login, type LoginState } from '@/app/actions/auth';
 import { requestResetCode, resetPassword, type PasswordActionState } from '@/app/actions/password';
+import { beginPasskeyLogin, finishPasskeyLogin } from '@/app/actions/passkey';
+import { getPasskeyAssertion, isWebAuthnAvailable, describeWebAuthnError } from '@/lib/webauthn';
 import { Button } from '@/components/ui/Button';
+import { useMounted } from '@/lib/use-mounted';
 
 type View = 'login' | 'forgot-email' | 'forgot-code' | 'forgot-newpass';
 
 export default function LoginPage() {
+  const router = useRouter();
   const [view, setView] = useState<View>('login');
   const [resetEmail, setResetEmail] = useState('');
   const [resetCode, setResetCode] = useState('');
+
+  // El botón de passkey solo aparece si el navegador puede usarlas. Se resuelve
+  // tras hidratar porque `window` no existe durante el render del servidor.
+  const mounted = useMounted();
+  const passkeySupported = mounted && isWebAuthnAvailable();
+  const [passkeyPending, setPasskeyPending] = useState(false);
+  const [passkeyError, setPasskeyError] = useState<string | null>(null);
+
+  const handlePasskeyLogin = useCallback(async () => {
+    setPasskeyError(null);
+    setPasskeyPending(true);
+
+    try {
+      const start = await beginPasskeyLogin();
+      if ('error' in start) {
+        setPasskeyError(start.error);
+        return;
+      }
+
+      const assertion = await getPasskeyAssertion(start.options);
+      // `null` es cancelación del diálogo del sistema: no es un error que mostrar.
+      if (!assertion) return;
+
+      const result = await finishPasskeyLogin(start.challengeId, assertion);
+      if (!result.ok) {
+        setPasskeyError(result.error ?? 'Could not sign in with this passkey.');
+        return;
+      }
+
+      router.replace('/');
+      router.refresh();
+    } catch (error) {
+      const message = describeWebAuthnError(error);
+      if (message) setPasskeyError(message);
+    } finally {
+      setPasskeyPending(false);
+    }
+  }, [router]);
 
   // Login form
   const [loginState, loginAction, loginPending] = useActionState<LoginState | undefined, FormData>(login, undefined);
@@ -61,6 +104,30 @@ export default function LoginPage() {
               Sign In
             </h2>
 
+            {passkeySupported && (
+              <div className="mb-5">
+                <Button
+                  type="button"
+                  variant="primary"
+                  className="w-full"
+                  loading={passkeyPending}
+                  onClick={handlePasskeyLogin}
+                >
+                  Sign in with passkey
+                </Button>
+
+                {passkeyError && (
+                  <p className="text-danger text-xs font-sans mt-2">{passkeyError}</p>
+                )}
+
+                <div className="flex items-center gap-3 mt-5">
+                  <span className="h-px flex-1 bg-border" />
+                  <span className="text-[10px] uppercase tracking-wider text-text-muted font-sans">or</span>
+                  <span className="h-px flex-1 bg-border" />
+                </div>
+              </div>
+            )}
+
             <div className="space-y-4">
               <div>
                 <label htmlFor="email" className="block text-xs text-text-muted font-sans mb-1">Email</label>
@@ -93,7 +160,12 @@ export default function LoginPage() {
               <p className="text-danger text-xs font-sans mt-3">{loginState.error}</p>
             )}
 
-            <Button type="submit" variant="primary" className="w-full mt-5" loading={loginPending}>
+            <Button
+              type="submit"
+              variant={passkeySupported ? 'secondary' : 'primary'}
+              className="w-full mt-5"
+              loading={loginPending}
+            >
               Sign In
             </Button>
 
