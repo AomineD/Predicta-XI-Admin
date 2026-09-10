@@ -37,6 +37,10 @@ const CONTENT_TYPES = [
   'day_results',
   'match_result',
   'combinada_teaser',
+  'weekly_top_picks',
+  'promo',
+  'poll',
+  'fun_fact',
 ] as const;
 type ContentType = typeof CONTENT_TYPES[number];
 
@@ -56,6 +60,10 @@ const COMPOSABLE_TYPES = [
   'today_matches',
   'day_results',
   'combinada_teaser',
+  'weekly_top_picks',
+  'promo',
+  'poll',
+  'fun_fact',
 ] as const;
 
 /**
@@ -136,6 +144,10 @@ const TYPE_LABELS: Record<string, string> = {
   day_results: 'Cierre del día',
   match_result: 'Final del partido',
   combinada_teaser: 'Combinada del día',
+  weekly_top_picks: 'Aciertos de la semana',
+  promo: 'Promoción',
+  poll: 'Encuesta',
+  fun_fact: 'Dato curioso',
   manual: 'Manual',
 };
 
@@ -168,16 +180,18 @@ function TextInput({ value, onChange, placeholder, type = 'text', maxLength }: {
   );
 }
 
-function TextArea({ value, onChange, placeholder, rows = 3 }: {
+function TextArea({ value, onChange, placeholder, rows = 3, maxLength }: {
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   rows?: number;
+  maxLength?: number;
 }) {
   return (
     <textarea
       rows={rows}
       value={value}
+      maxLength={maxLength}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
       className="w-full px-3 py-2 rounded-xl text-sm bg-surface-2 border border-border text-text-primary font-sans resize-none"
@@ -277,6 +291,176 @@ function CreativeField({
         )}
       </div>
     </Field>
+  );
+}
+
+/* ── catálogo de promociones ────────────────────────────────────────────────── */
+
+/**
+ * Una pieza del catálogo de promoción.
+ *
+ * Vive dentro de `settings.templates` del tipo `promo`, no en una tabla propia:
+ * una campaña nueva tiene que ser una fila más de este array, nunca una
+ * migración ni un tipo de contenido nuevo.
+ */
+/**
+ * Topes del texto de una campaña, los MISMOS que aplica el backend al guardar.
+ *
+ * Son cortos a propósito: el post es bilingüe y Telegram corta el pie de una foto
+ * en 1024 caracteres. Al pasarse, el publicador degrada a mensaje de texto y la
+ * imagen desaparece sin decir nada, así que el límite se enseña aquí en vez de
+ * recortar el texto al guardar.
+ */
+const PROMO_BODY_MAX = 350;
+const PROMO_TITLE_MAX = 80;
+
+interface PromoTemplate {
+  id: string;
+  titleEs: string;
+  titleEn: string;
+  bodyEs: string;
+  bodyEn: string;
+  imageUrl: string | null;
+  utmContent: string | null;
+  weight: number;
+  enabled: boolean;
+}
+
+/** Lee el catálogo del jsonb, tolerando lo que no tenga forma. */
+function readTemplates(settings: Record<string, unknown>): PromoTemplate[] {
+  const raw = settings.templates;
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((t): t is Record<string, unknown> => t !== null && typeof t === 'object' && !Array.isArray(t))
+    .map((t) => ({
+      id: typeof t.id === 'string' ? t.id : '',
+      titleEs: typeof t.titleEs === 'string' ? t.titleEs : '',
+      titleEn: typeof t.titleEn === 'string' ? t.titleEn : '',
+      bodyEs: typeof t.bodyEs === 'string' ? t.bodyEs : '',
+      bodyEn: typeof t.bodyEn === 'string' ? t.bodyEn : '',
+      imageUrl: typeof t.imageUrl === 'string' && t.imageUrl.length > 0 ? t.imageUrl : null,
+      utmContent: typeof t.utmContent === 'string' && t.utmContent.length > 0 ? t.utmContent : null,
+      weight: typeof t.weight === 'number' && Number.isFinite(t.weight) ? t.weight : 1,
+      enabled: t.enabled !== false,
+    }));
+}
+
+/**
+ * Editor del catálogo de promociones.
+ *
+ * El backend descarta al guardar cualquier plantilla sin cuerpo en LOS DOS
+ * idiomas: el canal publica bilingüe y media plantilla no es publicable. Por eso
+ * se avisa aquí en vez de dejar que desaparezca al recargar.
+ */
+function PromoTemplatesEditor({
+  templates,
+  creatives,
+  onChange,
+}: {
+  templates: PromoTemplate[];
+  creatives: Creative[];
+  onChange: (next: PromoTemplate[]) => void;
+}) {
+  const patchAt = (index: number, patch: Partial<PromoTemplate>): void =>
+    onChange(templates.map((t, i) => (i === index ? { ...t, ...patch } : t)));
+
+  const add = (): void =>
+    onChange([
+      ...templates,
+      {
+        id: `campana-${templates.length + 1}`,
+        titleEs: '',
+        titleEn: '',
+        bodyEs: '',
+        bodyEn: '',
+        imageUrl: null,
+        utmContent: null,
+        weight: 1,
+        enabled: true,
+      },
+    ]);
+
+  return (
+    <div className="pt-2">
+      <div className="flex items-center justify-between gap-3 pb-2">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold text-text-primary font-sans">Catálogo de campañas</span>
+          <InfoPopover label="Cómo funciona el catálogo de campañas">
+            Cada campaña es una variante del mismo tipo: se rotan por peso y nunca sale dos veces seguidas la
+            misma. Sin ninguna activa, el tipo no publica nada aunque esté encendido. El identificador viaja
+            como <code>utm_content</code>, así que es lo que distingue en analítica qué campaña trajo el clic.
+          </InfoPopover>
+        </div>
+        <Button variant="secondary" size="sm" onClick={add}>Añadir campaña</Button>
+      </div>
+
+      {templates.length === 0 && (
+        <p className="text-xs font-sans text-warning pb-2">
+          Sin campañas escritas, este tipo no publica nada aunque lo enciendas.
+        </p>
+      )}
+
+      {templates.map((t, i) => (
+        <div
+          key={i}
+          className="rounded-2xl p-4 mb-3"
+          style={{ background: '#121A2B', border: '1px solid rgba(255,255,255,0.08)' }}
+        >
+          <div className="flex items-center justify-between gap-3 pb-2">
+            <div className="flex items-center gap-2">
+              <Toggle value={t.enabled} onChange={(v) => patchAt(i, { enabled: v })} />
+              <span className="text-xs font-sans text-text-muted">{t.enabled ? 'Activa' : 'Apagada'}</span>
+            </div>
+            <Button variant="ghost" size="sm" onClick={() => onChange(templates.filter((_, j) => j !== i))}>
+              Quitar
+            </Button>
+          </div>
+
+          <Field label="Identificador" subtitle="Sin espacios ni acentos. Viaja como utm_content.">
+            <TextInput value={t.id} onChange={(v) => patchAt(i, { id: v })} placeholder="quiniela-semanal" maxLength={40} />
+          </Field>
+          <Field label="Peso" subtitle="Cuanto más alto, más veces sale.">
+            <NumInput value={t.weight} onChange={(v) => patchAt(i, { weight: v })} min={1} max={100} />
+          </Field>
+          <Field label="Título (ES)" subtitle="Opcional. Primera línea del post.">
+            <TextInput value={t.titleEs} onChange={(v) => patchAt(i, { titleEs: v })} maxLength={PROMO_TITLE_MAX} />
+          </Field>
+          <Field label="Título (EN)" subtitle="Opcional.">
+            <TextInput value={t.titleEn} onChange={(v) => patchAt(i, { titleEn: v })} maxLength={PROMO_TITLE_MAX} />
+          </Field>
+          <Field
+            label="Texto (ES)"
+            subtitle={`Obligatorio. ${t.bodyEs.length}/${PROMO_BODY_MAX}`}
+            info="El tope es corto a propósito: el post es bilingüe y Telegram corta el pie de una foto en 1024 caracteres. Pasarse convierte la publicación con imagen en una sin ella, sin avisar."
+          >
+            <TextArea
+              value={t.bodyEs}
+              onChange={(v) => patchAt(i, { bodyEs: v })}
+              maxLength={PROMO_BODY_MAX}
+              placeholder="Compite con tus amigos cada jornada."
+            />
+          </Field>
+          <Field label="Texto (EN)" subtitle={`Obligatorio. ${t.bodyEn.length}/${PROMO_BODY_MAX}`}>
+            <TextArea
+              value={t.bodyEn}
+              onChange={(v) => patchAt(i, { bodyEn: v })}
+              maxLength={PROMO_BODY_MAX}
+              placeholder="Compete with your friends every matchday."
+            />
+          </Field>
+          <CreativeField
+            value={t.imageUrl}
+            creatives={creatives}
+            onChange={(v) => patchAt(i, { imageUrl: v })}
+          />
+          {(t.bodyEs.trim().length === 0 || t.bodyEn.trim().length === 0) && (
+            <p className="text-xs font-sans text-warning pt-1">
+              Falta el texto en un idioma: al guardar, esta campaña se descarta.
+            </p>
+          )}
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -536,14 +720,31 @@ export default function TelegramPage() {
   /* ── compose now ── */
   const [composeType, setComposeType] = useState<ContentType>('match_teaser');
   const [composeMsg, setComposeMsg] = useState<string | null>(null);
+  /** Texto de la última vista previa. No existe como fila: solo se ve aquí. */
+  const [previewText, setPreviewText] = useState<string | null>(null);
   const composeMut = useMutation({
-    mutationFn: (publish: boolean) =>
-      api.post<{ status: string; text: string }>('/admin/telegram/compose', { type: composeType, publish }),
+    mutationFn: (action: 'preview' | 'draft' | 'publish') =>
+      api.post<{ status: string; text: string; usedLlm?: boolean }>('/admin/telegram/compose', {
+        type: composeType,
+        publish: action === 'publish',
+        dryRun: action === 'preview',
+      }),
     onSuccess: (res) => {
+      if (res.status === 'preview') {
+        // La vista previa NO deja fila: antes, cada clic metía un borrador en la
+        // cola que había que rechazar a mano solo por haber mirado.
+        setPreviewText(res.text);
+        setComposeMsg(res.usedLlm === false ? 'Vista previa (plantilla fija, sin IA).' : 'Vista previa.');
+        return;
+      }
+      setPreviewText(null);
       setComposeMsg(res.status === 'published' ? 'Publicado.' : 'Borrador creado en la cola.');
       qc.invalidateQueries({ queryKey: ['telegram-posts'] });
     },
-    onError: (e) => setComposeMsg((e as Error)?.message ?? 'No se pudo componer.'),
+    onError: (e) => {
+      setPreviewText(null);
+      setComposeMsg((e as Error)?.message ?? 'No se pudo componer.');
+    },
   });
 
   /* ── posts (queue + history) ── */
@@ -683,6 +884,8 @@ export default function TelegramPage() {
   const goalTeamIdsText = idListText('goal', 'teamIds');
   const resultLeagueIdsText = idListText('match_result', 'leagueIds');
   const resultTeamIdsText = idListText('match_result', 'teamIds');
+  const pollLeagueIdsText = idListText('poll', 'leagueIds');
+  const funFactLeagueIdsText = idListText('fun_fact', 'leagueIds');
 
   /** URL de la imagen configurada para un tipo, si la hay. */
   const imageOf = (type: ContentType): string | null => {
@@ -856,7 +1059,10 @@ export default function TelegramPage() {
 
           {/* ── CONTENT ── */}
           <div hidden={tab !== 'content'} role="tabpanel" id="tabpanel-content" aria-labelledby="tab-content">
-            <SectionCard title="Componer ahora" info="Genera un post al instante, ignorando el horario. “Previsualizar” lo deja como borrador en la Cola; “Publicar” lo manda directo.">
+            <SectionCard
+              title="Componer ahora"
+              info="Genera un post al instante, ignorando el horario. «Ver cómo queda» solo lo enseña aquí y no deja nada en la cola; «Dejar borrador» sí crea la fila para aprobarla luego; «Publicar» lo manda al canal directamente."
+            >
               <Field label="Tipo" subtitle="Qué post componer.">
                 <Select<ContentType>
                   value={composeType}
@@ -866,11 +1072,17 @@ export default function TelegramPage() {
               </Field>
               <Field label="Acción" subtitle="">
                 <div className="flex gap-2">
-                  <Button variant="secondary" size="sm" loading={composeMut.isPending} onClick={() => { setComposeMsg(null); composeMut.mutate(false); }}>Previsualizar (borrador)</Button>
-                  <Button variant="primary" size="sm" loading={composeMut.isPending} onClick={() => { setComposeMsg(null); composeMut.mutate(true); }}>Publicar ahora</Button>
+                  <Button variant="secondary" size="sm" loading={composeMut.isPending} onClick={() => { setComposeMsg(null); composeMut.mutate('preview'); }}>Ver cómo queda</Button>
+                  <Button variant="secondary" size="sm" loading={composeMut.isPending} onClick={() => { setComposeMsg(null); composeMut.mutate('draft'); }}>Dejar borrador</Button>
+                  <Button variant="primary" size="sm" loading={composeMut.isPending} onClick={() => { setComposeMsg(null); composeMut.mutate('publish'); }}>Publicar ahora</Button>
                 </div>
               </Field>
               {composeMsg && <p className="text-xs font-sans text-text-secondary pt-2">{composeMsg}</p>}
+              {previewText && (
+                <pre className="whitespace-pre-wrap text-xs text-text-secondary font-sans bg-surface-2 rounded-xl p-3 mt-2 max-h-80 overflow-auto">
+                  {previewText}
+                </pre>
+              )}
             </SectionCard>
 
             <TypeCard
@@ -986,6 +1198,18 @@ export default function TelegramPage() {
                       value={goalTeamIdsText}
                       onChange={(v) => patchSetting('goal', 'teamIds', parseIdList(v) ?? [])}
                       placeholder="11, 22"
+                    />
+                  </Field>
+                  <Field
+                    label="Equipos populares"
+                    subtitle="Suma los N más marcados como favoritos. 0 = apagado."
+                    info="Se calculan cada madrugada a partir de los favoritos de los usuarios y se suman a la lista manual de arriba. OJO con la asimetría: si la lista manual está vacía, poner un número aquí NO amplía la cobertura, la ACOTA a esos equipos. Con 0 el filtro es exactamente la lista manual."
+                  >
+                    <NumInput
+                      value={numSetting('goal', 'popularTeamsCount', 0)}
+                      onChange={(v) => patchSetting('goal', 'popularTeamsCount', v)}
+                      min={0}
+                      max={100}
                     />
                   </Field>
                   <Field
@@ -1105,6 +1329,18 @@ export default function TelegramPage() {
                       placeholder="11, 22"
                     />
                   </Field>
+                  <Field
+                    label="Equipos populares"
+                    subtitle="Suma los N más marcados como favoritos. 0 = apagado."
+                    info="Igual que en los goles: se calculan cada madrugada desde los favoritos de los usuarios y se suman a la lista manual. Con la lista manual vacía, poner un número aquí ACOTA a esos equipos en vez de ampliar."
+                  >
+                    <NumInput
+                      value={numSetting('match_result', 'popularTeamsCount', 0)}
+                      onChange={(v) => patchSetting('match_result', 'popularTeamsCount', v)}
+                      min={0}
+                      max={100}
+                    />
+                  </Field>
                 </>
               }
             />
@@ -1135,6 +1371,133 @@ export default function TelegramPage() {
                     value={imageOf('combinada_teaser')}
                     creatives={creatives}
                     onChange={(v) => patchSetting('combinada_teaser', 'imageUrl', v)}
+                  />
+                </>
+              }
+            />
+
+            <TypeCard
+              title="Aciertos de la semana"
+              subtitle="Los que fueron contra el mercado, con el balance real."
+              info="Los aciertos NO se eligen por confianza sino por mérito: gana el que el mercado veía menos probable. El balance completo de la semana va en el MISMO mensaje — es lo que separa esto de un anuncio, y si el redactor IA se lo deja fuera, el post sale con la plantilla fija en vez de con su texto."
+              config={typeCfg('weekly_top_picks')}
+              onChange={(p) => patchType('weekly_top_picks', p)}
+              extra={
+                <>
+                  <Field
+                    label="Mín. aciertos"
+                    subtitle="No publica si la semana no dejó al menos N."
+                    info="Una semana floja no tiene por qué tener post. Con menos aciertos que este número, el tipo se calla."
+                  >
+                    <NumInput
+                      value={numSetting('weekly_top_picks', 'minPicks', 3)}
+                      onChange={(v) => patchSetting('weekly_top_picks', 'minPicks', v)}
+                      min={1}
+                      max={10}
+                    />
+                  </Field>
+                  <Field label="Máx. aciertos" subtitle="Cuántos se listan como mucho.">
+                    <NumInput
+                      value={numSetting('weekly_top_picks', 'maxPicks', 5)}
+                      onChange={(v) => patchSetting('weekly_top_picks', 'maxPicks', v)}
+                      min={1}
+                      max={10}
+                    />
+                  </Field>
+                  {numSetting('weekly_top_picks', 'minPicks', 3) > numSetting('weekly_top_picks', 'maxPicks', 5) && (
+                    <p className="text-xs font-sans text-warning pt-1">
+                      El mínimo es mayor que el máximo: se usará el máximo como mínimo.
+                    </p>
+                  )}
+                  <CreativeField
+                    value={imageOf('weekly_top_picks')}
+                    creatives={creatives}
+                    onChange={(v) => patchSetting('weekly_top_picks', 'imageUrl', v)}
+                  />
+                </>
+              }
+            />
+
+            <TypeCard
+              title="Promoción"
+              subtitle="Campañas escritas aquí, rotadas por peso."
+              info="El texto sale TAL CUAL lo escribas: este tipo no pasa por el redactor IA, porque una campaña aprobada no se reescribe sola. La imagen de cada campaña manda sobre la del tipo."
+              config={typeCfg('promo')}
+              onChange={(p) => patchType('promo', p)}
+              extra={
+                <>
+                  <PromoTemplatesEditor
+                    templates={readTemplates(typeCfg('promo').settings)}
+                    creatives={creatives}
+                    onChange={(next) => patchSetting('promo', 'templates', next)}
+                  />
+                  <CreativeField
+                    value={imageOf('promo')}
+                    creatives={creatives}
+                    onChange={(v) => patchSetting('promo', 'imageUrl', v)}
+                  />
+                </>
+              }
+            />
+
+            <TypeCard
+              title="Encuesta"
+              subtitle="Sobre el partido destacado del día."
+              info="Salen DOS encuestas, una por idioma: una encuesta no se puede partir en bloques como un mensaje de texto. En modo separado, cada una va a su canal. Se cierran solas al empezar el partido. Nota: solo se miden los votos de la española — Telegram manda los totales en absoluto y dos encuestas sobre la misma publicación se pisarían los contadores."
+              config={typeCfg('poll')}
+              onChange={(p) => patchType('poll', p)}
+              extra={
+                <>
+                  <Field
+                    label="Ligas (apiFootballId)"
+                    subtitle="IDs separados por coma. Vacío = todas las activas."
+                    info="Al revés que en los goles: aquí vacío NO restringe."
+                  >
+                    <TextInput
+                      value={pollLeagueIdsText}
+                      onChange={(v) => patchSetting('poll', 'leagueIds', parseIdList(v) ?? [])}
+                      placeholder="39, 140"
+                    />
+                  </Field>
+                  <Field
+                    label="Margen mínimo (minutos)"
+                    subtitle="Cuánto tiene que faltar para el saque."
+                    info="Una encuesta que cierra en cinco minutos no la vota nadie. Si al partido destacado le queda menos que esto, se elige otro; si no queda ninguno, ese día no hay encuesta."
+                  >
+                    <NumInput
+                      value={numSetting('poll', 'minLeadMinutes', 60)}
+                      onChange={(v) => patchSetting('poll', 'minLeadMinutes', v)}
+                      min={5}
+                      max={1440}
+                    />
+                  </Field>
+                </>
+              }
+            />
+
+            <TypeCard
+              title="Dato curioso"
+              subtitle="Una racha real de un equipo que juega hoy."
+              info="Se calcula sobre el historial, sin IA: si ningún equipo del día llega al umbral, no se publica nada. Es deliberado — «ganó 2 de los últimos 5» no es un dato curioso. Los amistosos no cuentan para las rachas."
+              config={typeCfg('fun_fact')}
+              onChange={(p) => patchType('fun_fact', p)}
+              extra={
+                <>
+                  <Field
+                    label="Ligas (apiFootballId)"
+                    subtitle="IDs separados por coma. Vacío = todas las activas."
+                    info="Al revés que en los goles: aquí vacío NO restringe."
+                  >
+                    <TextInput
+                      value={funFactLeagueIdsText}
+                      onChange={(v) => patchSetting('fun_fact', 'leagueIds', parseIdList(v) ?? [])}
+                      placeholder="39, 140"
+                    />
+                  </Field>
+                  <CreativeField
+                    value={imageOf('fun_fact')}
+                    creatives={creatives}
+                    onChange={(v) => patchSetting('fun_fact', 'imageUrl', v)}
                   />
                 </>
               }
