@@ -12,7 +12,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useToast } from '@/components/ui/ToastProvider';
 // Mismo catálogo que expone la página Config: se importa en vez de copiarse para
 // que no vuelva a quedar desfasado. '' = usar el modelo activo global.
-import { MODELS } from '../config/_components/constants';
+import { MODELS, MODEL_LABELS } from '../config/_components/constants';
 
 type LinkType = 'none' | 'route' | 'url';
 
@@ -267,7 +267,7 @@ export default function HomeAnnouncementsPage() {
               <option value="">Modelo activo</option>
               {MODELS.map((m) => (
                 <option key={m} value={m}>
-                  {m}
+                  {MODEL_LABELS[m] ?? m}
                 </option>
               ))}
             </Select>

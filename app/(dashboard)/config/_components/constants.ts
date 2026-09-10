@@ -12,9 +12,16 @@ export const CONFIG_TABS = [
 export type ConfigTabId = (typeof CONFIG_TABS)[number]['id'];
 export const DEFAULT_CONFIG_TAB: ConfigTabId = 'general';
 
+// `deepseek-v4-pro` ya no está: desde el 2026-09-14 DeepSeek enruta sus
+// peticiones a V4.1 Flash y las cobra a precio de Flash, así que elegirlo no
+// daría un modelo distinto. `deepseek-v4-flash` se queda porque es el valor
+// guardado hoy en producción (verificado en `prediction_config.model` el
+// 2026-09-10) — si se quita, el <select> queda sin opción que case y muestra un
+// modelo activo que no es el que corre. El backend sigue aceptando los dos
+// alias, así que una config guardada nunca falla al arrancar.
 export const MODELS = [
+  'deepseek-flash',
   'deepseek-v4-flash',
-  'deepseek-v4-pro',
   'gpt-5.6-luna',
   'gpt-5.6-sol',
   'gemini-3.1-pro',
@@ -24,12 +31,22 @@ export const MODELS = [
   'kimi-k2.5',
 ];
 
+// Texto que se muestra en el <select> de modelo. Sin entrada, se muestra el id
+// tal cual. Sirve para que un alias no parezca un modelo distinto del real.
+export const MODEL_LABELS: Record<string, string> = {
+  'deepseek-flash': 'deepseek-flash (V4.1 Flash)',
+  'deepseek-v4-flash': 'deepseek-v4-flash (alias → V4.1 Flash)',
+};
+
 // Backend defaults baked into batch-processor.getMaxTokens. Shown as placeholder
 // in the per-model max-tokens inputs so operators can see what the system uses
 // when no override is set. Keep in sync with backend; see batch-processor.ts.
 export const MODEL_DEFAULT_MAX_TOKENS: Record<string, number> = {
-  'deepseek-v4-pro': 16384,
-  'deepseek-v4-flash': 12288,
+  // Los dos DeepSeek estaban desfasados (16384/12288): son los defaults de
+  // COMBINADAS, no los de predicción, que subieron a 24576 cuando el
+  // razonamiento pasó a comerse el 85% de la salida.
+  'deepseek-flash': 24576,
+  'deepseek-v4-flash': 24576,
   'deepseek-r1': 8192,
   'gpt-5.6-luna': 4096,
   'gpt-5.6-sol': 4096,

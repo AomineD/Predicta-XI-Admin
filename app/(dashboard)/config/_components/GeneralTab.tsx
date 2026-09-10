@@ -4,7 +4,7 @@ import { SectionCard, Field } from '@/components/ui/form-controls';
 import { Input, Select } from '@/components/ui/inputs';
 import { Toggle } from '@/components/ui/form-controls';
 import { MultiCheckbox, PredictionEngineCard } from './controls';
-import { MODELS, MODEL_DEFAULT_MAX_TOKENS, MARKETS, DATA_FIELDS, REASONING_OPTIONS } from './constants';
+import { MODELS, MODEL_LABELS, MODEL_DEFAULT_MAX_TOKENS, MARKETS, DATA_FIELDS, REASONING_OPTIONS } from './constants';
 import type { PredictionConfig, RecommendationsConfig, SetField } from './types';
 
 const DEFAULT_RECOMMENDATIONS_CONFIG: RecommendationsConfig = { minSample: 20, minWinratePct: 55, topK: 4, windowDays: 90 };
@@ -38,7 +38,7 @@ export function GeneralTab({ form, setField }: { form: PredictionConfig; setFiel
           <Select className="w-64" value={form.model} onChange={(e) => setField('model', e.target.value)}>
             {MODELS.map((m) => (
               <option key={m} value={m}>
-                {m}
+                {MODEL_LABELS[m] ?? m}
               </option>
             ))}
           </Select>
