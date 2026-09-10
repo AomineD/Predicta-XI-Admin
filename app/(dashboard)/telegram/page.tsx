@@ -41,6 +41,7 @@ const CONTENT_TYPES = [
   'promo',
   'poll',
   'fun_fact',
+  'news',
 ] as const;
 type ContentType = typeof CONTENT_TYPES[number];
 
@@ -64,6 +65,7 @@ const COMPOSABLE_TYPES = [
   'promo',
   'poll',
   'fun_fact',
+  'news',
 ] as const;
 
 /**
@@ -124,6 +126,13 @@ interface TelegramPost {
   approvedBy: string | null;
   errorLog: string | null;
   createdAt: string | null;
+  /**
+   * Los hechos con los que se compuso. Solo se lee para las noticias: es donde
+   * viven el titular del medio y el extracto del artículo, que hay que poder
+   * comparar con la reescritura ANTES de aprobar (F5-03). El resto de tipos no
+   * lo necesita.
+   */
+  factsJson?: Record<string, unknown> | null;
 }
 
 interface PostsPage {
@@ -148,8 +157,38 @@ const TYPE_LABELS: Record<string, string> = {
   promo: 'Promoción',
   poll: 'Encuesta',
   fun_fact: 'Dato curioso',
+  news: 'Noticias',
   manual: 'Manual',
 };
+
+/**
+ * Tipos cuyo texto NO pasa por el redactor IA (`deterministicCopy` en el registro
+ * del backend).
+ *
+ * Son deterministas por motivos distintos —un gol tiene que salir en segundos,
+ * una campaña ya la aprobó una persona, un dato curioso son números, una noticia
+ * llega ya reescrita y validada— pero el efecto en el panel es el mismo: el
+ * «Prompt extra» no lo lee nadie y «Regenerar» devuelve el MISMO texto. Enseñar
+ * esos dos controles es peor que no tenerlos: quien los usa cree haber cambiado
+ * algo y no pasa nada, sin ningún error que lo delate.
+ */
+const DETERMINISTIC_TYPES = new Set<string>(['goal', 'promo', 'poll', 'fun_fact', 'news']);
+
+/**
+ * Tipos de noticia que el selector editorial puede mirar, en el orden en el que
+ * el canal los prioriza. Espejo de `NEWS_EDITORIAL_TYPES` en el backend.
+ */
+const NEWS_TYPES: { value: string; label: string }[] = [
+  { value: 'transfer', label: 'Fichajes' },
+  { value: 'tactical', label: 'Banquillo' },
+  { value: 'injury', label: 'Lesiones' },
+  { value: 'suspension', label: 'Sanciones' },
+  { value: 'lineup', label: 'Alineaciones' },
+  { value: 'other', label: 'Otras' },
+];
+
+/** El mismo conjunto por defecto que aplica el backend cuando no hay selección. */
+const DEFAULT_NEWS_TYPES = ['transfer', 'tactical', 'injury', 'suspension'];
 
 /** Un creativo del canal, tal como lo lista el bucket. */
 interface Creative {
@@ -199,16 +238,18 @@ function TextArea({ value, onChange, placeholder, rows = 3, maxLength }: {
   );
 }
 
-function Select<T extends string>({ value, options, onChange }: {
+function Select<T extends string>({ value, options, onChange, disabled = false }: {
   value: T;
   options: readonly { value: T; label: string }[];
   onChange: (v: T) => void;
+  disabled?: boolean;
 }) {
   return (
     <select
       value={value}
+      disabled={disabled}
       onChange={(e) => onChange(e.target.value as T)}
-      className="h-9 px-3 rounded-xl text-sm bg-surface-2 border border-border text-text-primary font-sans"
+      className="h-9 px-3 rounded-xl text-sm bg-surface-2 border border-border text-text-primary font-sans disabled:opacity-50 disabled:cursor-not-allowed"
     >
       {options.map((o) => (
         <option key={o.value} value={o.value}>{o.label}</option>
@@ -485,6 +526,8 @@ function TypeCard({
   onChange,
   extra,
   eventDriven = false,
+  lockedMode,
+  deterministic = false,
 }: {
   title: string;
   subtitle?: string;
@@ -498,6 +541,20 @@ function TypeCard({
    * peor que no tenerlos — el operador cree haber configurado algo.
    */
   eventDriven?: boolean;
+  /**
+   * El backend clava el modo de este tipo y rechaza cualquier otro. Se enseña
+   * deshabilitado con el motivo al lado, en vez de esconderlo: quien abre la
+   * tarjeta tiene que ver QUE hay un modo y POR QUÉ no se puede tocar. Un
+   * selector que parece editable y devuelve un 400 al guardar es peor que uno
+   * apagado.
+   */
+  lockedMode?: { mode: PublishMode; reason: string };
+  /**
+   * El texto de este tipo no pasa por el redactor IA, así que su «Prompt extra»
+   * no lo lee nadie. Se oculta en vez de dejarlo inerte (ver
+   * {@link DETERMINISTIC_TYPES}).
+   */
+  deterministic?: boolean;
 }) {
   const toggleWeekday = (day: number) => {
     const next = config.weekdays.includes(day)
@@ -513,8 +570,17 @@ function TypeCard({
       <Field label="Activo" subtitle="Si está apagado, este tipo nunca se publica.">
         <Toggle value={config.enabled} onChange={(v) => onChange({ enabled: v })} />
       </Field>
-      <Field label="Modo" info="Automático publica solo; Con aprobación deja un borrador en la cola.">
-        <Select value={config.mode} options={MODE_OPTIONS} onChange={(v) => onChange({ mode: v })} />
+      <Field
+        label="Modo"
+        subtitle={lockedMode ? lockedMode.reason : undefined}
+        info="Automático publica solo; Con aprobación deja un borrador en la cola."
+      >
+        <Select
+          value={lockedMode ? lockedMode.mode : config.mode}
+          options={MODE_OPTIONS}
+          onChange={(v) => onChange({ mode: v })}
+          disabled={Boolean(lockedMode)}
+        />
       </Field>
       {!eventDriven && (
         <>
@@ -570,7 +636,7 @@ function TypeCard({
         <NumInput value={config.maxPerDay} onChange={(v) => onChange({ maxPerDay: v })} min={1} max={100} />
       </Field>
       {extra}
-      {!eventDriven && (
+      {!eventDriven && !deterministic && (
         <Field label="Prompt extra (opcional)" subtitle="Vacío = por defecto" info="Instrucción adicional para el redactor IA.">
           <TextArea
             value={config.promptOverride ?? ''}
@@ -580,6 +646,54 @@ function TypeCard({
         </Field>
       )}
     </SectionCard>
+  );
+}
+
+/**
+ * El material del medio, al lado de la reescritura que se va a publicar.
+ *
+ * Aprobar una noticia sin ver el original es aprobar a ciegas: el riesgo de esta
+ * fase no es que el modelo escriba mal —eso se ve— sino que cambie el hecho o
+ * copie al medio, y las dos cosas solo se detectan comparando. Por eso el
+ * original viaja en los hechos aunque nunca se publique.
+ *
+ * Solo aparece en las noticias; en cualquier otro tipo no hay nada que comparar.
+ */
+function NewsOriginal({ facts }: { facts?: Record<string, unknown> | null }) {
+  if (!facts || facts.kind !== 'news') return null;
+  const headline = typeof facts.originalHeadline === 'string' ? facts.originalHeadline : '';
+  const excerpt = typeof facts.originalExcerpt === 'string' ? facts.originalExcerpt : '';
+  const sourceName = typeof facts.sourceName === 'string' ? facts.sourceName : '';
+  const sourceUrl = typeof facts.sourceUrl === 'string' ? facts.sourceUrl : '';
+  const hadBody = facts.hadBody === true;
+  if (!headline && !excerpt) return null;
+  return (
+    <details className="mt-3 rounded-xl bg-surface-2 p-3">
+      <summary className="text-[11px] text-text-muted font-sans cursor-pointer">
+        Material original {sourceName ? `(${sourceName})` : ''}
+        {hadBody ? '' : ' · sin cuerpo: la nota sale solo del titular'}
+      </summary>
+      {headline && (
+        <p className="text-xs text-text-secondary font-sans mt-2">
+          <span className="text-text-muted">Titular del medio:</span> {headline}
+        </p>
+      )}
+      {excerpt && (
+        <pre className="whitespace-pre-wrap text-[11px] text-text-muted font-sans mt-2 max-h-40 overflow-auto">
+          {excerpt}
+        </pre>
+      )}
+      {sourceUrl && (
+        <a
+          href={sourceUrl}
+          target="_blank"
+          rel="noopener noreferrer nofollow"
+          className="text-[11px] text-primary font-sans mt-2 inline-block break-all"
+        >
+          Abrir la fuente ↗
+        </a>
+      )}
+    </details>
   );
 }
 
@@ -607,6 +721,7 @@ function PostCard({
       <pre className="whitespace-pre-wrap text-xs text-text-secondary font-sans bg-surface-2 rounded-xl p-3 max-h-64 overflow-auto">
         {post.renderedText}
       </pre>
+      <NewsOriginal facts={post.factsJson} />
       {post.deepLink && (
         <p className="text-[11px] text-text-muted font-sans mt-2 break-all">CTA: {post.deepLink}</p>
       )}
@@ -886,6 +1001,28 @@ export default function TelegramPage() {
   const resultTeamIdsText = idListText('match_result', 'teamIds');
   const pollLeagueIdsText = idListText('poll', 'leagueIds');
   const funFactLeagueIdsText = idListText('fun_fact', 'leagueIds');
+  const newsLeagueIdsText = idListText('news', 'leagueIds');
+  const newsTeamIdsText = idListText('news', 'teamIds');
+
+  /**
+   * Tipos de noticia marcados. Vacío o ausente NO significa "ninguno": el
+   * backend vuelve al conjunto por defecto, porque una lista vacía dejaría el
+   * tipo mudo para siempre sin dar ningún error. Aquí se refleja igual.
+   */
+  const newsTypesSelected = ((): string[] => {
+    const raw = typeCfg('news').settings.newsTypes;
+    const clean = Array.isArray(raw) ? raw.filter((v): v is string => typeof v === 'string') : [];
+    return clean.length > 0 ? clean : DEFAULT_NEWS_TYPES;
+  })();
+
+  const toggleNewsType = (type: string) => {
+    const next = newsTypesSelected.includes(type)
+      ? newsTypesSelected.filter((t) => t !== type)
+      : [...newsTypesSelected, type];
+    // Quitar el último no apaga nada: el backend volvería al conjunto por
+    // defecto y el panel enseñaría una selección que no es la real. Se ignora.
+    if (next.length > 0) patchSetting('news', 'newsTypes', next);
+  };
 
   /** URL de la imagen configurada para un tipo, si la hay. */
   const imageOf = (type: ContentType): string | null => {
@@ -1424,6 +1561,7 @@ export default function TelegramPage() {
               info="El texto sale TAL CUAL lo escribas: este tipo no pasa por el redactor IA, porque una campaña aprobada no se reescribe sola. La imagen de cada campaña manda sobre la del tipo."
               config={typeCfg('promo')}
               onChange={(p) => patchType('promo', p)}
+              deterministic
               extra={
                 <>
                   <PromoTemplatesEditor
@@ -1446,6 +1584,7 @@ export default function TelegramPage() {
               info="Salen DOS encuestas, una por idioma: una encuesta no se puede partir en bloques como un mensaje de texto. En modo separado, cada una va a su canal. Se cierran solas al empezar el partido. Nota: solo se miden los votos de la española — Telegram manda los totales en absoluto y dos encuestas sobre la misma publicación se pisarían los contadores."
               config={typeCfg('poll')}
               onChange={(p) => patchType('poll', p)}
+              deterministic
               extra={
                 <>
                   <Field
@@ -1481,6 +1620,7 @@ export default function TelegramPage() {
               info="Se calcula sobre el historial, sin IA: si ningún equipo del día llega al umbral, no se publica nada. Es deliberado — «ganó 2 de los últimos 5» no es un dato curioso. Los amistosos no cuentan para las rachas."
               config={typeCfg('fun_fact')}
               onChange={(p) => patchType('fun_fact', p)}
+              deterministic
               extra={
                 <>
                   <Field
@@ -1499,6 +1639,87 @@ export default function TelegramPage() {
                     creatives={creatives}
                     onChange={(v) => patchSetting('fun_fact', 'imageUrl', v)}
                   />
+                </>
+              }
+            />
+
+            <TypeCard
+              title="Noticias"
+              subtitle="Una noticia de fútbol al día, reescrita y con enlace al medio."
+              info="Nunca se publica el texto del medio: se escribe un titular propio y dos o tres frases con el hecho, y el enlace a la fuente es obligatorio. Ese enlace sale limpio, sin parámetros de medición — es dominio ajeno y ahí no se mide nada."
+              config={typeCfg('news')}
+              onChange={(p) => patchType('news', p)}
+              deterministic
+              lockedMode={{
+                mode: 'approval',
+                reason: 'Clavado en aprobación: es el único tipo que digiere texto de terceros y nada sale sin que lo leas.',
+              }}
+              extra={
+                <>
+                  <Field
+                    label="Qué noticias"
+                    subtitle="Al menos una. Quitar todas volvería al conjunto por defecto."
+                    info="El criterio del canal NO es el de las predicciones: un fichaje cerrado no cambia quién juega el sábado y es la mejor noticia del día. «Otras» abre la puerta a rumores y declaraciones: sube el volumen y baja la calidad."
+                  >
+                    <div className="flex flex-wrap gap-1.5">
+                      {NEWS_TYPES.map((t) => {
+                        const on = newsTypesSelected.includes(t.value);
+                        return (
+                          <button
+                            key={t.value}
+                            type="button"
+                            onClick={() => toggleNewsType(t.value)}
+                            aria-pressed={on}
+                            className={`px-3 h-8 rounded-md text-xs font-sans font-semibold transition-colors ${
+                              on
+                                ? 'bg-accent text-bg-primary'
+                                : 'bg-surface-2 text-text-muted hover:text-text-secondary'
+                            }`}
+                          >
+                            {t.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </Field>
+                  <Field
+                    label="Ventana (horas)"
+                    subtitle="Antigüedad máxima de la noticia."
+                    info="Más atrás deja de ser actualidad, aunque el canal lleve días sin publicar. El tope es una semana."
+                  >
+                    <NumInput
+                      value={numSetting('news', 'windowHours', 72)}
+                      onChange={(v) => patchSetting('news', 'windowHours', v)}
+                      min={1}
+                      max={168}
+                    />
+                  </Field>
+                  <Field
+                    label="Ligas (apiFootballId)"
+                    subtitle="IDs separados por coma. Vacío = todas."
+                    info="Al revés que en los goles: aquí vacío NO restringe. Filtra por los equipos que juegan esas competiciones."
+                  >
+                    <TextInput
+                      value={newsLeagueIdsText}
+                      onChange={(v) => patchSetting('news', 'leagueIds', parseIdList(v) ?? [])}
+                      placeholder="39, 140"
+                    />
+                  </Field>
+                  <Field
+                    label="Equipos (id interno)"
+                    subtitle="IDs separados por coma. Vacío = todos."
+                    info="Para seguir solo a unos clubes concretos. Vacío NO restringe."
+                  >
+                    <TextInput
+                      value={newsTeamIdsText}
+                      onChange={(v) => patchSetting('news', 'teamIds', parseIdList(v) ?? [])}
+                      placeholder="12, 34"
+                    />
+                  </Field>
+                  {/* Sin campo de imagen: el pie de una foto de Telegram son 1.024
+                      caracteres para el post bilingüe entero, y la línea de fuente
+                      obligatoria no deja sitio. Con imagen configurada, el envío
+                      degradaría a texto y la perdería siempre, en silencio. */}
                 </>
               }
             />
@@ -1608,7 +1829,12 @@ export default function TelegramPage() {
                   actions={
                     <>
                       <Button variant="primary" size="sm" loading={postAction.isPending} onClick={() => postAction.mutate({ id: post.id, action: 'approve' })}>Aprobar y publicar</Button>
-                      <Button variant="secondary" size="sm" loading={postAction.isPending} onClick={() => postAction.mutate({ id: post.id, action: 'regenerate' })}>Regenerar</Button>
+                      {/* Regenerar rehace el texto desde los MISMOS hechos: en un
+                          tipo determinista sale idéntico. Un botón que no cambia
+                          nada y tampoco falla es peor que no tenerlo. */}
+                      {!DETERMINISTIC_TYPES.has(post.contentType) && (
+                        <Button variant="secondary" size="sm" loading={postAction.isPending} onClick={() => postAction.mutate({ id: post.id, action: 'regenerate' })}>Regenerar</Button>
+                      )}
                       <Button variant="ghost" size="sm" loading={postAction.isPending} onClick={() => postAction.mutate({ id: post.id, action: 'reject' })}>Rechazar</Button>
                     </>
                   }

@@ -18,6 +18,7 @@ export const CALL_TYPES = [
   'home_announcement',
   'live_narration',
   'telegram_copy',
+  'telegram_news',
 ] as const;
 
 export type CallType = (typeof CALL_TYPES)[number];
@@ -33,6 +34,7 @@ export const CALL_TYPE_LABELS: Record<CallType, string> = {
   home_announcement: 'Home announcement',
   live_narration: 'Live narration',
   telegram_copy: 'Telegram copy',
+  telegram_news: 'Telegram noticias',
 };
 
 export const CALL_TYPE_COLORS: Record<CallType, string> = {
@@ -46,6 +48,7 @@ export const CALL_TYPE_COLORS: Record<CallType, string> = {
   home_announcement: '#EC4899',
   live_narration: '#14B8A6',
   telegram_copy: '#38BDF8',
+  telegram_news: '#0EA5E9',
 };
 
 export function isCallType(value: unknown): value is CallType {
