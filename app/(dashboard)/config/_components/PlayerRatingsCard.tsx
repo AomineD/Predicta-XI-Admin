@@ -128,12 +128,14 @@ export function PlayerRatingsCard() {
   const [backfillTo, setBackfillTo] = useState(() => new Date().toISOString().slice(0, 10));
   const [preview, setPreview] = useState<BackfillPreview | null>(null);
 
+  // Ruta propia y no `/backfill` con `dryRun: true`: el encolado esta limitado a
+  // uno cada cinco minutos y el conteo se llevaba ese unico hueco, asi que el
+  // boton de encolar fallaba siempre justo despues de contar.
   const backfillPreview = useMutation({
     mutationFn: () =>
-      api.post('/admin/player-ratings/backfill', {
+      api.post('/admin/player-ratings/backfill/preview', {
         from: backfillFrom,
         to: backfillTo,
-        dryRun: true,
       }) as Promise<BackfillPreview>,
     onSuccess: (data) => setPreview(data),
     onError: (err: Error) => {
