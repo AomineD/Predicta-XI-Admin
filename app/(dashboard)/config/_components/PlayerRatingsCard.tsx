@@ -11,6 +11,30 @@ import { DataTable, type Column } from '@/components/ui/DataTable';
 import { useToast } from '@/components/ui/ToastProvider';
 import type { PlayerRatingsConfig, PlayerRatingsCoverageRow } from './types';
 
+/** Conteo previo de `/admin/player-ratings/backfill` con `dryRun: true`. */
+type BackfillPreview = {
+  scanned: number;
+  alreadyRated: number;
+  /** Partidos de ligas que la fuente nunca puntúa: no se encolan. */
+  unsupportedSkipped: number;
+  /** El rango daba más partidos del tope por lanzamiento y se recortó. */
+  truncated: boolean;
+  wouldQueue: number;
+  estimatedMinutes: number;
+};
+
+/** Resultado de ejecutar el backfill (`dryRun: false`). */
+type BackfillResult = {
+  scanned: number;
+  alreadyRated: number;
+  unsupportedSkipped: number;
+  truncated: boolean;
+  queued: number;
+  skipped: number;
+  errors: number;
+  estimatedMinutes: number;
+};
+
 /**
  * Notas de los jugadores (idea #33) — tabla propia `player_ratings_config` con
  * GET/PUT propios, igual que Sportium y la fuente secundaria. Vive junto a ellas
@@ -90,6 +114,60 @@ export function PlayerRatingsCard() {
     },
     onError: (err: Error) => toast.error(err.message),
   });
+
+  // Backfill por rango. Va en dos pasos a propósito: primero se consulta cuántos
+  // partidos entran (dryRun) y solo entonces se habilita el botón que encola.
+  // Sin ese paso previo, un rango mal escrito manda cientos de scrapes sin que
+  // nadie lo vea venir.
+  // Inicializadores perezosos: leer el reloj en el cuerpo del render es una
+  // llamada impura (`react-hooks/purity`) y además recalcularía el rango por
+  // defecto en cada render, pisando lo que el operador acabe de escribir.
+  const [backfillFrom, setBackfillFrom] = useState(() =>
+    new Date(Date.now() - 14 * 86_400_000).toISOString().slice(0, 10),
+  );
+  const [backfillTo, setBackfillTo] = useState(() => new Date().toISOString().slice(0, 10));
+  const [preview, setPreview] = useState<BackfillPreview | null>(null);
+
+  const backfillPreview = useMutation({
+    mutationFn: () =>
+      api.post('/admin/player-ratings/backfill', {
+        from: backfillFrom,
+        to: backfillTo,
+        dryRun: true,
+      }) as Promise<BackfillPreview>,
+    onSuccess: (data) => setPreview(data),
+    onError: (err: Error) => {
+      setPreview(null);
+      toast.error(err.message);
+    },
+  });
+
+  const backfillRun = useMutation({
+    mutationFn: () =>
+      api.post('/admin/player-ratings/backfill', {
+        from: backfillFrom,
+        to: backfillTo,
+        dryRun: false,
+      }) as Promise<BackfillResult>,
+    onSuccess: (data) => {
+      toast.success(
+        data.errors > 0
+          ? `${data.queued} partidos encolados, ${data.errors} fallaron al encolarse. Al menos ${data.estimatedMinutes} min de proceso.`
+          : `${data.queued} partidos encolados. Tardarán al menos ${data.estimatedMinutes} min en procesarse.`,
+      );
+      setPreview(null);
+      void refetchQueue();
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  // Cambiar el rango invalida el conteo: si no, se encolaría un rango distinto
+  // del que se revisó.
+  const onRangeChange = (which: 'from' | 'to', value: string) => {
+    setPreview(null);
+    if (which === 'from') setBackfillFrom(value);
+    else setBackfillTo(value);
+  };
 
   const columns: Column<PlayerRatingsCoverageRow>[] = [
     {
@@ -261,6 +339,94 @@ export function PlayerRatingsCard() {
               >
                 Probar partido
               </Button>
+            </div>
+
+            <div className="border-t border-border pt-4 mt-4">
+              <div className="flex items-end gap-3 flex-wrap">
+                <Field
+                  label="Recuperar notas desde"
+                  subtitle="YYYY-MM-DD"
+                  info="Encola la captura de notas de todos los partidos ya terminados del rango que aún no las tengan. Sirve para rellenar lo que se perdió mientras el scraper estuvo roto: se salta el corte por liga y el límite de antigüedad, y no vuelve a pedir los partidos que ya tienen notas."
+                >
+                  <Input
+                    type="date"
+                    className="w-40"
+                    value={backfillFrom}
+                    onChange={(e) => onRangeChange('from', e.target.value)}
+                  />
+                </Field>
+                <Field label="hasta" subtitle="YYYY-MM-DD">
+                  <Input
+                    type="date"
+                    className="w-40"
+                    value={backfillTo}
+                    onChange={(e) => onRangeChange('to', e.target.value)}
+                  />
+                </Field>
+                <Button
+                  variant="secondary"
+                  loading={backfillPreview.isPending}
+                  disabled={!backfillFrom || !backfillTo}
+                  onClick={() => backfillPreview.mutate()}
+                >
+                  Ver cuántos son
+                </Button>
+                {preview && preview.wouldQueue > 0 && (
+                  <Button
+                    variant="primary"
+                    loading={backfillRun.isPending}
+                    disabled={backfillPreview.isPending}
+                    onClick={() => {
+                      // Confirmación explícita: son horas de scraping contra la
+                      // fuente y no hay forma de cancelarlo a medias.
+                      if (
+                        window.confirm(
+                          `Se van a encolar ${preview.wouldQueue} partidos y el proceso tardará al menos ${preview.estimatedMinutes} minutos. ¿Continuar?`,
+                        )
+                      ) {
+                        backfillRun.mutate();
+                      }
+                    }}
+                  >
+                    Encolar {preview.wouldQueue}
+                  </Button>
+                )}
+              </div>
+
+              {preview && (
+                <p className="text-text-muted text-sm font-sans pt-3">
+                  {preview.wouldQueue > 0 ? (
+                    <>
+                      {preview.scanned} partidos terminados en el rango,{' '}
+                      {preview.alreadyRated} ya tienen notas
+                      {preview.unsupportedSkipped > 0 && (
+                        <> y {preview.unsupportedSkipped} son de ligas sin notas</>
+                      )}
+                      .{' '}
+                      <span className="text-text-primary">
+                        Se encolarán {preview.wouldQueue}
+                      </span>
+                      , al menos {preview.estimatedMinutes} min de proceso.
+                      {preview.truncated && (
+                        <>
+                          {' '}
+                          El rango daba más partidos del máximo por lanzamiento: se recortó, así
+                          que repite con un rango más corto para el resto.
+                        </>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      {preview.scanned} partidos terminados en el rango y no hay nada que
+                      recuperar: {preview.alreadyRated} ya tienen notas
+                      {preview.unsupportedSkipped > 0 && (
+                        <> y {preview.unsupportedSkipped} son de ligas sin notas</>
+                      )}
+                      .
+                    </>
+                  )}
+                </p>
+              )}
             </div>
           </div>
         </>
