@@ -7,6 +7,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { InfoPopover } from '@/components/ui/InfoPopover';
 import { MetricCard } from '@/components/ui/MetricCard';
 import { cn, formatDateTime } from '@/lib/utils';
+import { BackfillsCard } from './_components/BackfillsCard';
 
 interface ServiceCheck {
   status: string;
@@ -122,7 +123,7 @@ export default function HealthPage() {
     <div>
       <PageHeader
         title="Health"
-        description="Estado de servicios e integraciones (solo lectura)"
+        description="Estado de servicios e integraciones, y backfills de datos"
         action={
           <button
             type="button"
@@ -262,6 +263,10 @@ export default function HealthPage() {
           </Section>
         </>
       )}
+
+      {/* Fuera del bloque anterior a proposito: si el overview de salud falla, los
+          backfills siguen operables — que es justo cuando suelen hacer falta. */}
+      <BackfillsCard />
     </div>
   );
 }
