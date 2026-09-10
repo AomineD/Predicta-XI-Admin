@@ -27,13 +27,20 @@ interface Prediction {
   gradeSettledMarkets?: number | null;
   gradeWonMarkets?: number | null;
   createdAt: string | null;
+  kickoff: string | null;
   homeTeam?: { id: number; name: string; short_name: string; logo: string } | string;
   awayTeam?: { id: number; name: string; short_name: string; logo: string } | string;
 }
 
+/**
+ * El endpoint pagina con `hasMore` (no con un `total`): el conteo exacto exigiría un
+ * COUNT sobre el mismo join con los filtros de grado, y no se usa para nada más.
+ * La página venía leyendo `total`, que nunca llegaba, así que la paginación no se
+ * renderizaba jamás y la lista se quedaba en las primeras 20 filas.
+ */
 interface PredictionsResponse {
   items: Prediction[];
-  total: number;
+  hasMore: boolean;
   page: number;
   pageSize: number;
 }
@@ -77,6 +84,71 @@ const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: 'coverage:asc', label: 'Coverage (low → high)' },
 ];
 
+/**
+ * Presets de fecha, sobre el KICKOFF del partido y no sobre la fecha de creación
+ * de la fila.
+ *
+ * "Mañana" no existe como fecha de creación —nunca se genera una predicción en el
+ * futuro— pero sí como jornada: son los partidos que se juegan mañana, con su
+ * predicción ya emitida. Esa es la pregunta que se hace al abrir esta página, así
+ * que los presets viajan por `kickoffFrom`/`kickoffTo`. El rango manual sigue
+ * filtrando por fecha de creación, que es otra pregunta distinta y legítima
+ * ("qué generó el scheduler tal día").
+ */
+type DatePreset = 'today' | 'tomorrow' | 'yesterday' | 'week' | 'last7' | 'all';
+
+const DATE_PRESETS: { value: DatePreset; label: string }[] = [
+  { value: 'today', label: 'Hoy' },
+  { value: 'tomorrow', label: 'Mañana' },
+  { value: 'yesterday', label: 'Ayer' },
+  { value: 'week', label: 'Esta semana' },
+  { value: 'last7', label: 'Últimos 7 días' },
+  { value: 'all', label: 'Todo' },
+];
+
+/** Preset activo al entrar: lo del día es lo que se viene a mirar. */
+const DEFAULT_DATE_PRESET: DatePreset = 'today';
+
+const startOfDay = (d: Date): Date => {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+};
+
+const addDays = (d: Date, n: number): Date => {
+  const x = new Date(d);
+  x.setDate(x.getDate() + n);
+  return x;
+};
+
+/**
+ * Ventana [desde, hasta) del preset, en hora LOCAL del navegador.
+ *
+ * Se construye con `Date` local y se envía en ISO: así "Hoy" es el día que el
+ * operador tiene en su reloj y no el día UTC, que a partir de las 20:00 en Caracas
+ * ya sería el siguiente y dejaría la lista vacía.
+ */
+function presetRange(preset: DatePreset): { from: Date; to: Date } | null {
+  if (preset === 'all') return null;
+  const today = startOfDay(new Date());
+  switch (preset) {
+    case 'today':
+      return { from: today, to: addDays(today, 1) };
+    case 'tomorrow':
+      return { from: addDays(today, 1), to: addDays(today, 2) };
+    case 'yesterday':
+      return { from: addDays(today, -1), to: today };
+    case 'week': {
+      // Semana de lunes a domingo: la jornada se piensa así, no de domingo a sábado.
+      const dow = today.getDay(); // 0 = domingo
+      const monday = addDays(today, dow === 0 ? -6 : 1 - dow);
+      return { from: monday, to: addDays(monday, 7) };
+    }
+    case 'last7':
+      return { from: addDays(today, -6), to: addDays(today, 1) };
+  }
+}
+
 export default function PredictionsPage() {
   const [page, setPage] = useState(1);
   const [settlement, setSettlement] = useState('');
@@ -86,6 +158,8 @@ export default function PredictionsPage() {
   const [to, setTo] = useState('');
   const [accuracyBucket, setAccuracyBucket] = useState<AccuracyBucket>('');
   const [sort, setSort] = useState<SortKey>('createdAt:desc');
+  const [datePreset, setDatePreset] = useState<DatePreset>(DEFAULT_DATE_PRESET);
+  const [showCustomRange, setShowCustomRange] = useState(false);
 
   // La escala de grados vive en credits_config (Config → Prediction grade scale).
   // Se lee aquí para que el badge gradúe con los mismos cortes que la app y el
@@ -105,13 +179,18 @@ export default function PredictionsPage() {
   });
 
   const { data, isLoading } = useQuery<PredictionsResponse>({
-    queryKey: ['predictions', page, settlement, model, competitionId, from, to, accuracyBucket, sort],
+    queryKey: ['predictions', page, settlement, model, competitionId, from, to, accuracyBucket, sort, datePreset],
     queryFn: () => {
       const [sortBy, sortOrder] = sort.split(':');
       const params = new URLSearchParams({ page: String(page), pageSize: '20', sortBy, sortOrder });
       if (settlement) params.set('settlement', settlement);
       if (model) params.set('model', model);
       if (competitionId) params.set('competitionId', competitionId);
+      const kickoffRange = presetRange(datePreset);
+      if (kickoffRange) {
+        params.set('kickoffFrom', kickoffRange.from.toISOString());
+        params.set('kickoffTo', kickoffRange.to.toISOString());
+      }
       if (from) params.set('from', new Date(from).toISOString());
       if (to) {
         // Include the entire "to" day by pushing to 23:59:59.999 local time
@@ -134,6 +213,8 @@ export default function PredictionsPage() {
     setTo('');
     setAccuracyBucket('');
     setSort('createdAt:desc');
+    setDatePreset(DEFAULT_DATE_PRESET);
+    setShowCustomRange(false);
     setPage(1);
   };
 
@@ -222,6 +303,14 @@ export default function PredictionsPage() {
       ),
     },
     {
+      // Ahora que la lista se filtra por jornada, la fecha que se busca en la fila es
+      // la del PARTIDO. La de generación se queda al lado porque es la que delata un
+      // scheduler que llegó tarde.
+      key: 'kickoff',
+      header: 'Kickoff',
+      render: (row) => <span className="text-text-secondary text-xs">{formatDateTime(row.kickoff)}</span>,
+    },
+    {
       key: 'createdAt',
       header: 'Created',
       render: (row) => <span className="text-text-muted text-xs">{formatDateTime(row.createdAt)}</span>,
@@ -245,6 +334,38 @@ export default function PredictionsPage() {
       <PageHeader title="Predictions" description="All generated predictions" />
 
       <MarketReturnsCard />
+
+      {/* Presets de jornada. Primera fila propia porque es el filtro que se toca
+          siempre; los selects de abajo se ajustan una vez y se quedan. */}
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
+        {DATE_PRESETS.map((p) => (
+          <button
+            key={p.value}
+            type="button"
+            onClick={() => { setDatePreset(p.value); resetToFirstPage(); }}
+            aria-pressed={datePreset === p.value}
+            className={`px-3 h-9 rounded-xl text-sm font-sans transition-colors ${
+              datePreset === p.value
+                ? 'bg-primary/15 text-primary'
+                : 'bg-surface-2 border border-border text-text-secondary hover:text-text-primary'
+            }`}
+          >
+            {p.label}
+          </button>
+        ))}
+        <button
+          type="button"
+          onClick={() => setShowCustomRange((v) => !v)}
+          aria-expanded={showCustomRange}
+          className={`px-3 h-9 rounded-xl text-sm font-sans transition-colors ${
+            from || to
+              ? 'bg-secondary/15 text-secondary'
+              : 'bg-surface-2 border border-border text-text-secondary hover:text-text-primary'
+          }`}
+        >
+          Rango de generación{from || to ? ' ·' : '…'}
+        </button>
+      </div>
 
       {/* Filters */}
       <div className="flex items-center gap-3 mb-4 flex-wrap">
@@ -296,20 +417,26 @@ export default function PredictionsPage() {
           <option value="low">&lt; 45%</option>
         </select>
 
-        <input
-          type="date"
-          value={from}
-          onChange={(e) => { setFrom(e.target.value); resetToFirstPage(); }}
-          className={selectClass}
-          aria-label="From"
-        />
-        <input
-          type="date"
-          value={to}
-          onChange={(e) => { setTo(e.target.value); resetToFirstPage(); }}
-          className={selectClass}
-          aria-label="To"
-        />
+        {showCustomRange && (
+          <>
+            <input
+              type="date"
+              value={from}
+              onChange={(e) => { setFrom(e.target.value); resetToFirstPage(); }}
+              className={selectClass}
+              aria-label="Generada desde"
+              title="Generada desde (fecha de creación de la predicción)"
+            />
+            <input
+              type="date"
+              value={to}
+              onChange={(e) => { setTo(e.target.value); resetToFirstPage(); }}
+              className={selectClass}
+              aria-label="Generada hasta"
+              title="Generada hasta (fecha de creación de la predicción)"
+            />
+          </>
+        )}
 
         <select
           value={sort}
@@ -336,16 +463,16 @@ export default function PredictionsPage() {
       />
 
       {/* Pagination */}
-      {data && data.total > data.pageSize && (
+      {data && (data.hasMore || page > 1) && (
         <div className="flex items-center justify-between mt-4">
           <span className="text-text-muted text-sm font-sans">
-            Page {page} · {data.total} total
+            Page {page} · {data.items.length} shown
           </span>
           <div className="flex gap-2">
             <Button size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>
               Previous
             </Button>
-            <Button size="sm" onClick={() => setPage((p) => p + 1)} disabled={page * data.pageSize >= data.total}>
+            <Button size="sm" onClick={() => setPage((p) => p + 1)} disabled={!data.hasMore}>
               Next
             </Button>
           </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useSyncExternalStore } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { InfoPopover } from '@/components/ui/InfoPopover';
@@ -34,6 +34,47 @@ const WINDOWS = [30, 90, 365] as const;
  */
 const SAMPLE_FLOORS = [0, 25, 100] as const;
 
+/** Clave de `localStorage` donde se recuerda si el desglose queda abierto. */
+const BREAKDOWN_PREF_KEY = 'predicta.marketReturns.breakdownOpen';
+/** Evento propio: `storage` solo avisa a las OTRAS pestañas, no a la que escribe. */
+const BREAKDOWN_EVENT = 'predicta:marketReturnsBreakdown';
+
+/**
+ * La preferencia vive en `localStorage` y se lee con `useSyncExternalStore`, no con
+ * un `useState` + `useEffect`.
+ *
+ * En el servidor `localStorage` no existe, así que el snapshot de servidor es
+ * siempre `false` (colapsada, que es el default) y el de cliente el valor guardado:
+ * React reconcilia la diferencia sin avisar de hidratación y sin un `setState`
+ * dentro de un efecto. De paso, dos pestañas abiertas quedan sincronizadas.
+ */
+function subscribeBreakdownPref(onChange: () => void): () => void {
+  window.addEventListener('storage', onChange);
+  window.addEventListener(BREAKDOWN_EVENT, onChange);
+  return () => {
+    window.removeEventListener('storage', onChange);
+    window.removeEventListener(BREAKDOWN_EVENT, onChange);
+  };
+}
+
+function readBreakdownPref(): boolean {
+  try {
+    return localStorage.getItem(BREAKDOWN_PREF_KEY) === '1';
+  } catch {
+    // Modo privado o cookies bloqueadas: se queda colapsada, que es el default.
+    return false;
+  }
+}
+
+function writeBreakdownPref(open: boolean): void {
+  try {
+    localStorage.setItem(BREAKDOWN_PREF_KEY, open ? '1' : '0');
+  } catch {
+    // Sin persistencia la tarjeta sigue funcionando; solo se olvida al recargar.
+  }
+  window.dispatchEvent(new Event(BREAKDOWN_EVENT));
+}
+
 type SortKey = 'edge' | 'return' | 'picks' | 'winrate';
 
 const SORTS: ReadonlyArray<{ key: SortKey; label: string }> = [
@@ -65,13 +106,20 @@ export function MarketReturnsCard() {
   const [days, setDays] = useState<number>(90);
   const [minPicks, setMinPicks] = useState<number>(25);
   const [sort, setSort] = useState<SortKey>('edge');
+  // Colapsada por defecto: al entrar a Predictions lo que se viene a ver es la LISTA.
+  // La tira de cuatro KPIs se queda siempre visible porque es el resumen del motor
+  // entero; el desglose de ~20 mercados empujaba la tabla fuera de la pantalla y solo
+  // se consulta cuando se viene a mirar justo eso. La preferencia se recuerda por
+  // navegador para no volver a abrirla en cada visita.
+  const open = useSyncExternalStore(subscribeBreakdownPref, readBreakdownPref, () => false);
+  const toggle = (): void => writeBreakdownPref(!open);
 
   const { data, isLoading, error } = useQuery<MarketReturns>({
     queryKey: ['market-returns', days],
     queryFn: () => api.get(`/admin/stats/market-returns?days=${days}`) as Promise<MarketReturns>,
   });
 
-  const { strong, weak, maxEdge } = useMemo(() => {
+  const { strong, weak, maxEdge, best, worst } = useMemo(() => {
     const rows = data?.items ?? [];
     const by = (a: MarketReturn, b: MarketReturn): number => {
       switch (sort) {
@@ -90,7 +138,15 @@ export function MarketReturnsCard() {
     // La escala de la barra sale solo de las filas con muestra: si la fijara un
     // mercado de 1 pick con +38 puntos, el resto quedaría aplastado contra cero.
     const maxEdge = Math.max(10, ...strong.map((r) => Math.abs(edgeOf(r))));
-    return { strong, weak, maxEdge };
+    // Extremos por VENTAJA (no por retorno): el retorno de una muestra corta lo mueve
+    // un solo pick, y la ventaja es la cifra que dice si el mercado aporta. Se calculan
+    // sobre `strong` para no coronar ni condenar un mercado de tres picks. El suelo de
+    // muestra lo elige el usuario, así que "Todo" puede volver a colar filas flojas:
+    // ese es su problema, no el default.
+    const byEdge = [...strong].sort((a, b) => edgeOf(b) - edgeOf(a));
+    const best = byEdge[0] ?? null;
+    const worst = byEdge.length > 1 ? byEdge[byEdge.length - 1] : null;
+    return { strong, weak, maxEdge, best, worst };
   }, [data, minPicks, sort]);
 
   const total = data?.items.length ?? 0;
@@ -118,18 +174,24 @@ export function MarketReturnsCard() {
             value={days}
             onChange={setDays}
           />
-          <Segmented
-            label="Muestra mín."
-            options={SAMPLE_FLOORS.map((n) => ({ value: n, label: n === 0 ? 'Todo' : `${n}+` }))}
-            value={minPicks}
-            onChange={setMinPicks}
-          />
-          <Segmented
-            label="Ordenar"
-            options={SORTS.map((s) => ({ value: s.key, label: s.label }))}
-            value={sort}
-            onChange={setSort}
-          />
+          <button
+            type="button"
+            onClick={toggle}
+            aria-expanded={open}
+            aria-controls="market-returns-breakdown"
+            className="flex items-center gap-1.5 px-2.5 h-8 rounded-lg text-xs font-sans bg-surface-3 text-text-secondary hover:text-text-primary transition-colors"
+          >
+            {open ? 'Ocultar' : 'Ver'} desglose
+            {total > 0 && <span className="text-text-muted">({total})</span>}
+            <svg
+              className={`w-3 h-3 transition-transform ${open ? 'rotate-180' : ''}`}
+              viewBox="0 0 12 12"
+              fill="none"
+              aria-hidden="true"
+            >
+              <path d="M3 4.5 6 7.5l3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
         </div>
       </div>
 
@@ -145,8 +207,36 @@ export function MarketReturnsCard() {
 
         {data?.overall && <OverallStrip row={data.overall} markets={total} days={days} />}
 
-        {total > 0 && (
-          <div className="overflow-x-auto mt-4">
+        {/* Colapsada, la tarjeta seguiría escondiendo lo único que se acciona: qué mercado
+            hay que tocar. Los dos extremos con muestra suficiente caben en una línea. */}
+        {!open && (best || worst) && (
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-1 mt-3">
+            {best && <Extreme label="Mejor" row={best} tone="good" />}
+            {worst && <Extreme label="Peor" row={worst} tone="bad" />}
+          </div>
+        )}
+
+        {/* Los controles del desglose viajan CON el desglose: colapsado no hay nada que
+            ordenar ni ninguna muestra que acotar, y en la cabecera solo hacían ruido. */}
+        {open && total > 0 && (
+          <div className="flex flex-wrap items-center gap-3 mt-4">
+            <Segmented
+              label="Muestra mín."
+              options={SAMPLE_FLOORS.map((n) => ({ value: n, label: n === 0 ? 'Todo' : `${n}+` }))}
+              value={minPicks}
+              onChange={setMinPicks}
+            />
+            <Segmented
+              label="Ordenar"
+              options={SORTS.map((s) => ({ value: s.key, label: s.label }))}
+              value={sort}
+              onChange={setSort}
+            />
+          </div>
+        )}
+
+        {open && total > 0 && (
+          <div id="market-returns-breakdown" className="overflow-x-auto mt-4">
             <table className="w-full text-sm font-sans">
               <thead>
                 <tr className="text-left text-xs text-text-muted">
@@ -224,6 +314,28 @@ function OverallStrip({ row, markets, days }: { row: MarketReturn; markets: numb
         tone={row.returnPct >= 0 ? 'good' : 'bad'}
       />
     </div>
+  );
+}
+
+/**
+ * El mercado que más aporta y el que más resta, en una línea.
+ *
+ * Es lo que se venía a buscar al desplegar la tabla, así que se adelanta al estado
+ * colapsado: con esto la vista por defecto ya dice qué hay que arreglar.
+ */
+function Extreme({ label, row, tone }: { label: string; row: MarketReturn; tone: 'good' | 'bad' }) {
+  const edge = edgeOf(row);
+  const color = tone === 'good' ? 'text-success' : 'text-danger';
+  return (
+    <span className="text-[11px] font-sans text-text-muted">
+      {label}:{' '}
+      <span className="text-text-secondary">{row.market.replace(/_/g, ' ')}</span>{' '}
+      <span className={`tabular-nums ${color}`}>
+        {edge >= 0 ? '+' : ''}
+        {edge.toFixed(1)} pts
+      </span>{' '}
+      <span className="text-text-muted">· {row.priced} picks</span>
+    </span>
   );
 }
 
