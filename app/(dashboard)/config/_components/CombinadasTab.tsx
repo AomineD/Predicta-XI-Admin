@@ -152,10 +152,54 @@ export function CombinadasTab({
           label="Edge mínimo (premium)"
           subtitle="0–50 % · def. 3"
           info={
-            'Filtro de valor del pool premium. OJO con subirlo: mientras el modelo independiente esté apagado, ese “edge” se calcula como (confianza/100) × cuota − 1, y con la calibración activa (que solo BAJA la confianza) más el anclaje a la probabilidad de mercado, la confianza tiende a 1/cuota — así que la fórmula acaba midiendo el margen de la casa con signo negativo, no valor. Medido sobre 100 combinadas el 2026-08-27: edge medio de pata −7,7 % y 96 % negativos. Pedir +3 % vaciaba el pool y dejó CERO combinadas premium desde el 5 de julio. Ahora, si este filtro deja el pool vacío, el pool se rearma sin él (manteniendo la cuota mínima por pata) y queda anotado en las notas del job.'
+            'Filtro de valor del pool premium. OJO con subirlo: mientras el modelo independiente esté apagado, ese “edge” se calcula como (confianza/100) × cuota − 1, y con la calibración activa (que solo BAJA la confianza) más el anclaje a la probabilidad de mercado, la confianza tiende a 1/cuota — así que la fórmula acaba midiendo el margen de la casa con signo negativo, no valor. Medido sobre 100 combinadas el 2026-08-27: edge medio de pata −7,7 % y 96 % negativos. Pedir +3 % vaciaba el pool y dejó CERO combinadas premium desde el 5 de julio. Ahora, si este filtro deja el pool vacío, el pool se rearma sin él (manteniendo la cuota mínima por pata) y queda anotado en las notas del job. Con el modo máxima probabilidad activo (sección de abajo) este filtro NO se aplica.'
           }
         >
           <Input type="number" min={0} max={50} step={0.5} className="w-24" value={form.combinadasPremiumMinEdgePct ?? 3} onChange={(e) => setField('combinadasPremiumMinEdgePct', Number(e.target.value))} />
+        </Field>
+
+        <SubHeading>Premium: máxima probabilidad con cuota mínima</SubHeading>
+        <Field
+          label="Modo máxima probabilidad"
+          subtitle="def. activado"
+          info="Cada premium es la combinación de partidos distintos con MAYOR probabilidad de acierto cuya cuota combinada cae entre el mínimo y el máximo de abajo, usando solo patas en las que la confianza del modelo no va por encima de lo que paga la cuota. Backtest sobre producción (68 días, 2026-04-20 a 2026-09-10): elegir por máxima confianza daba 35 % de acierto en combinadas de cuota ~2.0; este modo, 47-49 %. Con cuota 2.0 el techo realista está en torno a 50 %: ninguna regla probada lo superó. Con el modo activo el 'Edge mínimo (premium)' no se aplica, el piso de calibración viejo (confianza × winrate) tampoco, y no hay pasada relajada: un día sin combinación que quepa en la ventana no publica premium y lo anota en las notas del job. Apagado = selector clásico por confianza."
+        >
+          <Toggle value={form.combinadasPremiumQualityMode ?? true} onChange={(v) => setField('combinadasPremiumQualityMode', v)} />
+        </Field>
+        <Field
+          label="Cuota combinada mínima (premium)"
+          subtitle="def. 2.00"
+          info="La premium elige la combinación de MENOR cuota que alcanza este mínimo, porque es la de mayor probabilidad: cada punto de cuota de más es acierto de menos. Subirlo da más pago por acierto y menos aciertos."
+        >
+          <Input type="number" min={1.1} max={20} step={0.05} className="w-24" value={form.combinadasPremiumMinCombinedOdds ?? 2.0} onChange={(e) => setField('combinadasPremiumMinCombinedOdds', Number(e.target.value))} />
+        </Field>
+        <Field
+          label="Cuota combinada máxima (premium)"
+          subtitle="def. 2.60"
+          info="Tope de seguridad: en un día flaco evita publicar una premium de cuota 3+ (acierto ~30 %) solo porque no había nada mejor. Si queda por debajo del mínimo, el backend lo ignora y usa un ancho de +30 % sobre el mínimo, para que la premium no se quede muda."
+        >
+          <div className="flex flex-col gap-1">
+            <Input type="number" min={1.1} max={50} step={0.05} className="w-24" value={form.combinadasPremiumMaxCombinedOdds ?? 2.6} onChange={(e) => setField('combinadasPremiumMaxCombinedOdds', Number(e.target.value))} />
+            {(form.combinadasPremiumMaxCombinedOdds ?? 2.6) < (form.combinadasPremiumMinCombinedOdds ?? 2.0) && (
+              <span className="text-xs font-sans text-warning">Está por debajo del mínimo: se ignora.</span>
+            )}
+          </div>
+        </Field>
+        <Field
+          label="Confianza vs cuota (pts, min/max)"
+          subtitle="def. −12 a −3"
+          info="Una pata solo entra en la premium si su confianza queda dentro de esta banda respecto a la probabilidad que paga la cuota (100 / cuota). −12 a −3 = entre 3 y 12 puntos POR DEBAJO del mercado. Medido sobre patas de predicciones oficiales a cuota 1.30-1.65: a partir de −3 la pata acierta un 9 % menos de lo que paga (cuando el modelo 'sabe más' que la cuota, suele equivocarse); por debajo, todas las franjas rinden al precio. El mínimo no gana acierto: evita patas con confianza de 50 a cuota 1.43, que hundirían la confianza que ve el usuario sin aportar nada. Si el mínimo queda por encima del máximo, se ignora el mínimo."
+        >
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <Input type="number" min={-60} max={20} step={0.5} className="w-20" value={form.combinadasPremiumMinConfOverImplied ?? -12} onChange={(e) => setField('combinadasPremiumMinConfOverImplied', Number(e.target.value))} />
+              <span className="text-xs text-text-muted">a</span>
+              <Input type="number" min={-30} max={20} step={0.5} className="w-20" value={form.combinadasPremiumMaxConfOverImplied ?? -3} onChange={(e) => setField('combinadasPremiumMaxConfOverImplied', Number(e.target.value))} />
+            </div>
+            {(form.combinadasPremiumMinConfOverImplied ?? -12) > (form.combinadasPremiumMaxConfOverImplied ?? -3) && (
+              <span className="text-xs font-sans text-warning">El mínimo está por encima del máximo: se ignora el mínimo.</span>
+            )}
+          </div>
         </Field>
 
         <SubHeading>Rango de patas y anti-solapamiento</SubHeading>
@@ -176,7 +220,7 @@ export function CombinadasTab({
         <Field
           label="Max. premium por partido"
           subtitle="def. 1"
-          info="En cuantas combinadas premium distintas puede aparecer un mismo partido. Evita que todas las premium del dia giren alrededor del mismo partido ancla. Es un limite blando: el builder lo relaja a valor+1 si respetarlo dejaria el dia en cero combinadas premium, y lo anota en las notas del job."
+          info="En cuantas combinadas premium distintas puede aparecer un mismo partido. Evita que todas las premium del dia giren alrededor del mismo partido ancla. Es un limite blando: el builder lo relaja a valor+1 si respetarlo dejaria el dia en cero combinadas premium, y lo anota en las notas del job. En modo maxima probabilidad NO se relaja: repetir un partido entre dos premium ata sus resultados."
         >
           <Input type="number" min={1} max={5} className="w-24" value={form.combinadasMaxPremiumPerMatch ?? 1} onChange={(e) => setField('combinadasMaxPremiumPerMatch', Number(e.target.value))} />
         </Field>
@@ -209,6 +253,47 @@ export function CombinadasTab({
           info="Un pick con cuota igual o mayor que esta se salta el filtro de calibracion. Ese filtro puntua confianza/100 x winrates historicos contra un piso de 0,45, asi que castiga exactamente a la confianza baja — y la confianza baja es lo que producen las cuotas largas: un pick a confianza 50 con winrate 0,85 da 0,425 y muere, aunque su cuota este bien pagada. Ya existe una exencion para los picks respaldados por el modelo de valor, pero es letra muerta mientras el modelo independiente este apagado. Empieza bajo y mide: sin muestras historicas de estos mercados en combinadas, subirlo mucho es cambiar un sesgo por otro."
         >
           <Input type="number" min={0} max={10} step={0.05} className="w-24" value={form.combinadasCalibrationOddsExempt ?? 0} onChange={(e) => setField('combinadasCalibrationOddsExempt', Number(e.target.value))} />
+        </Field>
+
+        <SubHeading>Calibración por selección</SubHeading>
+        <Field
+          label="A/E mínimo por selección"
+          subtitle="def. 0.90 · 0 = apagado"
+          info="Saca del pool, en las DOS tiers, las selecciones (mercado + lado + línea, p. ej. 'total_goals under 3.5') que en los últimos 90 días acertaron menos de lo que pagaba su cuota. A/E = aciertos reales / aciertos esperados por la cuota; a precio justo ronda 0.95 porque el margen de la casa va dentro. La calibración de siempre agrupa por mercado entero y promedia lados opuestos: 'under 3.5' acertaba 54 % con la cuota exigiendo 68 % mientras 'over 2.5' iba al 84 %, y juntos parecían sanos. Es un filtro de exclusión, no de valor: en el backtest, las selecciones con A/E previo bajo 0.90 siguieron perdiendo (0.88 fuera de muestra), pero las que 'iban bien' volvieron al precio."
+        >
+          <Input type="number" min={0} max={1.5} step={0.01} className="w-24" value={form.combinadasSelectionMinAe ?? 0.9} onChange={(e) => setField('combinadasSelectionMinAe', Number(e.target.value))} />
+        </Field>
+        <Field
+          label="Muestra mínima por selección"
+          subtitle="def. 30 picks"
+          info="Picks liquidados que necesita una selección en la ventana de 90 días para que el filtro de arriba la juzgue. Por debajo, no se excluye nada: la falta de historia no es evidencia de que pierda."
+        >
+          <Input type="number" min={5} max={2000} className="w-24" value={form.combinadasSelectionMinSample ?? 30} onChange={(e) => setField('combinadasSelectionMinSample', Number(e.target.value))} />
+        </Field>
+
+        <SubHeading>Coherencia con la forma goleadora</SubHeading>
+        <Field
+          label="Filtrar patas de goles contra la forma"
+          subtitle="def. activado"
+          info="Saca del pool, en las DOS tiers, la pata de goles totales que va contra la forma goleadora de los dos equipos: 'más de' cuando los equipos marcan poco y 'menos de' cuando marcan mucho. La forma es la media de goles por partido de cada equipo en sus últimos 10 partidos oficiales (sin amistosos), promediada entre los dos; si a alguno le faltan 5 partidos, esa pata no se juzga. Medido sobre las predicciones oficiales: 'más de 2.5' con forma por debajo de 2.8 acierta un 12-20 % menos de lo que paga, y 'menos de 3.5' con forma de 2.8 o más, un 20-30 % menos. Es un filtro de exclusión: no premia rachas, quita contradicciones."
+        >
+          <Toggle value={form.combinadasGoalFormFilter ?? true} onChange={(v) => setField('combinadasGoalFormFilter', v)} />
+        </Field>
+        <Field
+          label="Umbral de forma (goles por partido)"
+          subtitle="def. 2.80"
+          info="Media de goles por partido de los dos equipos a partir de la cual se considera que el cruce es goleador. Por debajo, fuera los 'más de'; en o por encima, fuera los 'menos de'. 2.80 es el corte con el que se midió el efecto."
+        >
+          <Input type="number" min={0.5} max={8} step={0.05} className="w-24" value={form.combinadasGoalFormThreshold ?? 2.8} onChange={(e) => setField('combinadasGoalFormThreshold', Number(e.target.value))} />
+        </Field>
+
+        <SubHeading>Track record en la app</SubHeading>
+        <Field
+          label="Liquidadas mínimas para mostrarlo"
+          subtitle="def. 30 · 0 = siempre"
+          info="La app solo muestra el acierto y el retorno de una tier (regular / premium, diaria / semanal) cuando reúne al menos estas combinadas liquidadas en la ventana. Se aplica igual a las dos tiers y sin mirar si el número es bueno o malo. Con 12 muestras, un 17 % es compatible con un acierto real de entre 5 % y 45 %: no informa, asusta. Este panel sigue viéndolo todo."
+        >
+          <Input type="number" min={0} max={1000} className="w-24" value={form.trackRecordPublicMinSettled ?? 30} onChange={(e) => setField('trackRecordPublicMinSettled', Number(e.target.value))} />
         </Field>
 
         <Field label="Equipos excluidos (premium)" subtitle="Salta cualquier combinada premium con estos equipos">

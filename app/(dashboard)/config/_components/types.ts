@@ -150,6 +150,22 @@ export interface PredictionConfig {
   combinadasMarketFamilyDiversity?: boolean;
   combinadasMaxLegsSameFamily?: number;
   combinadasCalibrationOddsExempt?: number;
+  /** Premium de máxima probabilidad con cuota mínima (false = selector clásico). */
+  combinadasPremiumQualityMode?: boolean;
+  combinadasPremiumMinCombinedOdds?: number;
+  combinadasPremiumMaxCombinedOdds?: number;
+  /** Banda de confianza de una pata premium respecto a 100/cuota (puntos). */
+  combinadasPremiumMaxConfOverImplied?: number;
+  combinadasPremiumMinConfOverImplied?: number;
+  /** Piso de A/E por selección (mercado + lado + línea), las dos tiers. 0 = off. */
+  combinadasSelectionMinAe?: number;
+  combinadasSelectionMinSample?: number;
+  /** Excluye patas de goles que van contra la forma goleadora de los dos equipos. */
+  combinadasGoalFormFilter?: boolean;
+  /** Umbral de esa forma: goles por partido, media de los dos equipos. */
+  combinadasGoalFormThreshold?: number;
+  /** Liquidadas mínimas para que la app muestre el track record de una tier. 0 = siempre. */
+  trackRecordPublicMinSettled?: number;
   combinadasPremiumExcludedTeams?: number[];
   /** Per-model max output token override. Empty/missing → backend uses baked-in default. */
   llmMaxTokens?: Record<string, number>;
