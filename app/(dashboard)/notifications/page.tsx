@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Tabs } from '@/components/ui/Tabs';
 import { SectionCard, Field, Toggle, NumInput } from '@/components/ui/form-controls';
+import { UserPicker } from '@/components/pickers/UserPicker';
 
 /* ── tabs ───────────────────────────────────────────────────────────────────── */
 
@@ -44,7 +45,7 @@ interface SendForm {
   body: string;
   imageUrl: string;
   audience: Audience;
-  userIdsRaw: string;
+  userIds: string[];
   category: Category | '';
   route: string;
   optIn: OptIn;
@@ -55,20 +56,13 @@ const EMPTY_FORM: SendForm = {
   body: '',
   imageUrl: '',
   audience: 'all',
-  userIdsRaw: '',
+  userIds: [],
   category: '',
   route: '',
   optIn: 'news',
 };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function parseUserIds(raw: string): string[] {
-  return raw
-    .split(/[\s,]+/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-}
 
 /* ── pill selector ──────────────────────────────────────────────────────────── */
 
@@ -186,8 +180,7 @@ export default function NotificationsPage() {
     onError: () => setConfirming(false),
   });
 
-  const userIds = parseUserIds(f.userIdsRaw);
-  const invalidIds = userIds.filter((id) => !UUID_RE.test(id));
+  const invalidIds = f.userIds.filter((id) => !UUID_RE.test(id));
 
   const errors: string[] = [];
   if (!f.title.trim()) errors.push('Title is required.');
@@ -195,7 +188,7 @@ export default function NotificationsPage() {
   if (!f.body.trim()) errors.push('Body is required.');
   if (f.body.length > 1000) errors.push('Body must be ≤ 1000 characters.');
   if (f.imageUrl.trim() && !/^https?:\/\//i.test(f.imageUrl.trim())) errors.push('Image URL must start with http(s)://');
-  if (f.audience === 'users' && userIds.length === 0) errors.push('Add at least one user id (or switch audience to “all”).');
+  if (f.audience === 'users' && f.userIds.length === 0) errors.push('Add at least one user id (or switch audience to “all”).');
   if (f.audience === 'users' && invalidIds.length > 0) errors.push(`${invalidIds.length} id(s) are not valid UUIDs.`);
 
   const canSend = errors.length === 0 && !sendMut.isPending;
@@ -205,7 +198,7 @@ export default function NotificationsPage() {
     body: f.body.trim(),
     ...(f.imageUrl.trim() ? { imageUrl: f.imageUrl.trim() } : {}),
     audience: f.audience,
-    ...(f.audience === 'users' ? { userIds } : {}),
+    ...(f.audience === 'users' ? { userIds: f.userIds } : {}),
     ...(f.category ? { category: f.category } : {}),
     ...(f.route.trim() ? { route: f.route.trim() } : {}),
     optIn: f.optIn,
@@ -239,7 +232,7 @@ export default function NotificationsPage() {
             </Button>
           ) : (
             <Button variant="primary" size="sm" loading={sendMut.isPending} disabled={!canSend} onClick={submit}>
-              {f.audience === 'all' ? 'Send to everyone' : `Send to ${userIds.length || 0} user(s)`}
+              {f.audience === 'all' ? 'Send to everyone' : `Send to ${f.userIds.length || 0} user(s)`}
             </Button>
           )
         }
@@ -330,14 +323,8 @@ export default function NotificationsPage() {
             <Pills options={AUDIENCES} value={f.audience} onChange={(v) => set('audience', (v || 'all') as Audience)} />
           </Field>
           {f.audience === 'users' && (
-            <Field label="User IDs" subtitle="One UUID per line (or comma/space separated). Max 5000.">
-              <textarea
-                rows={4}
-                value={f.userIdsRaw}
-                onChange={(e) => set('userIdsRaw', e.target.value)}
-                placeholder="3f1c…-…&#10;a92b…-…"
-                className="w-full px-3 py-2 rounded-xl text-sm bg-surface-2 border border-border text-text-primary font-sans resize-none"
-              />
+            <Field label="Users" subtitle="Search by name/email, or paste a list of ids for a bulk send. Max 5000.">
+              <UserPicker value={f.userIds} onChange={(v) => set('userIds', v)} />
             </Field>
           )}
           <Field label="Channel (opt-in)" subtitle="Which preference toggle gates delivery: News or Maintenance.">

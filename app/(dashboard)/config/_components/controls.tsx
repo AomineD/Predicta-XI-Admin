@@ -1,16 +1,16 @@
 'use client';
 
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { ChevronRight, X } from 'lucide-react';
-import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
 import { InfoPopover } from '@/components/ui/InfoPopover';
 import { Input, Select } from '@/components/ui/inputs';
 import { Toggle } from '@/components/ui/form-controls';
+import { LeaguePicker } from '@/components/pickers/LeaguePicker';
+import { TeamPicker } from '@/components/pickers/TeamPicker';
 import { ENGINE_LAYERS } from './constants';
-import type { PredictionConfig, SetField, TeamLite } from './types';
+import type { PredictionConfig, SetField } from './types';
 
 /** Chips de selección múltiple (mercados de salida, campos de entrada). */
 export function MultiCheckbox({
@@ -99,7 +99,13 @@ export function PredictionEngineCard({ form, setField }: { form: PredictionConfi
   );
 }
 
-/** Selector múltiple de ligas por chips. */
+/**
+ * Selector múltiple de ligas — hoy chips de solo texto, delega en `LeaguePicker`
+ * (logo + nombre + país, activo/inactivo). `leagues` ya no aporta datos de
+ * render (esa versión no traía logo ni país): pasa a acotar el universo
+ * elegible, para que Combinadas siga limitado a las ligas V1 que le entrega su
+ * página en vez de a todas las competiciones sincronizadas.
+ */
 export function LeagueMultiSelect({
   leagues,
   value,
@@ -111,117 +117,25 @@ export function LeagueMultiSelect({
   onChange: (v: number[]) => void;
   emptyLabel: string;
 }) {
-  const toggle = (id: number) => {
-    if (value.includes(id)) onChange(value.filter((x) => x !== id));
-    else onChange([...value, id]);
-  };
   return (
-    <div>
-      <p className="text-xs text-text-muted/60 font-sans mb-2">
-        {value.length === 0 ? emptyLabel : `${value.length} selected`}
-      </p>
-      <div className="flex flex-wrap gap-2">
-        {leagues.map((l) => (
-          <button
-            key={l.apiFootballId}
-            type="button"
-            onClick={() => toggle(l.apiFootballId)}
-            className={cn(
-              'px-3 py-1 rounded-lg text-xs font-sans font-medium transition-colors cursor-pointer',
-              value.includes(l.apiFootballId)
-                ? 'bg-primary text-background'
-                : 'bg-surface-3 text-text-secondary hover:text-text-primary',
-            )}
-          >
-            {l.name}
-          </button>
-        ))}
-      </div>
-    </div>
+    <LeaguePicker
+      value={value}
+      onChange={onChange}
+      emptyStateText={emptyLabel}
+      restrictToIds={leagues.map((l) => l.apiFootballId)}
+    />
   );
 }
 
-/** Buscador de equipos para excluir (blacklist de combinadas). */
+/**
+ * Buscador de equipos para excluir (blacklist de combinadas) — delega en
+ * `TeamPicker`. Antes resolvía los ya seleccionados pidiendo
+ * `/admin/teams?pageSize=100` y cruzando: un equipo fuera de los primeros 100
+ * por orden alfabético desaparecía de la vista sin avisar. `TeamPicker` los
+ * resuelve con `?ids=`.
+ */
 export function TeamBlacklistPicker({ value, onChange }: { value: number[]; onChange: (v: number[]) => void }) {
-  const [q, setQ] = useState('');
-  const { data: searchResult } = useQuery<{ items: TeamLite[] }>({
-    queryKey: ['admin-teams-search', q],
-    queryFn: () => api.get(`/admin/teams?search=${encodeURIComponent(q)}&pageSize=20`),
-    enabled: q.trim().length >= 2,
-    staleTime: 30_000,
-  });
-  const { data: selectedTeams } = useQuery<TeamLite[]>({
-    queryKey: ['admin-teams-by-ids', value],
-    queryFn: async () => {
-      if (value.length === 0) return [];
-      const all = (await api.get<{ items: TeamLite[] }>(`/admin/teams?pageSize=100`))?.items ?? [];
-      const byId = new Map(all.map((t) => [t.id, t]));
-      return value.map((id) => byId.get(id)).filter((t): t is TeamLite => !!t);
-    },
-    enabled: value.length > 0,
-  });
-
-  const add = (team: TeamLite) => {
-    if (!value.includes(team.id)) onChange([...value, team.id]);
-    setQ('');
-  };
-  const remove = (id: number) => onChange(value.filter((x) => x !== id));
-
-  return (
-    <div>
-      <div className="flex flex-wrap gap-2 mb-2">
-        {(selectedTeams ?? []).map((t) => (
-          <span
-            key={t.id}
-            className="inline-flex items-center gap-2 px-2 py-1 rounded-lg bg-surface-3 text-xs text-text-primary"
-          >
-            {t.logo && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={t.logo} alt="" className="w-4 h-4 rounded-sm" />
-            )}
-            {t.name}
-            <button
-              type="button"
-              onClick={() => remove(t.id)}
-              className="text-text-muted hover:text-text-primary cursor-pointer"
-              aria-label={`Remove ${t.name}`}
-            >
-              <X size={13} />
-            </button>
-          </span>
-        ))}
-        {value.length === 0 && <span className="text-xs text-text-muted/60 font-sans">No teams excluded</span>}
-      </div>
-      <Input
-        type="text"
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        placeholder="Search team by name..."
-        className="max-w-sm"
-      />
-      {q.trim().length >= 2 && (searchResult?.items ?? []).length > 0 && (
-        <div className="mt-2 max-h-48 overflow-y-auto rounded-xl border border-border bg-surface-2">
-          {(searchResult?.items ?? [])
-            .filter((t) => !value.includes(t.id))
-            .slice(0, 10)
-            .map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => add(t)}
-                className="flex items-center gap-2 w-full px-3 py-2 text-left text-sm hover:bg-surface-3 cursor-pointer"
-              >
-                {t.logo && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={t.logo} alt="" className="w-5 h-5 rounded-sm" />
-                )}
-                <span className="text-text-primary">{t.name}</span>
-              </button>
-            ))}
-        </div>
-      )}
-    </div>
-  );
+  return <TeamPicker value={value} onChange={onChange} placeholder="Search team by name..." />;
 }
 
 /** Editor de cupones Sportium (competición → slug/URL). */

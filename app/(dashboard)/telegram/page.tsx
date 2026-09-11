@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
@@ -8,6 +8,9 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { InfoPopover } from '@/components/ui/InfoPopover';
 import { Tabs } from '@/components/ui/Tabs';
 import { SectionCard, Field, Toggle, NumInput } from '@/components/ui/form-controls';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { LeaguePicker } from '@/components/pickers/LeaguePicker';
+import { TeamPicker } from '@/components/pickers/TeamPicker';
 
 /* ── tabs ───────────────────────────────────────────────────────────────────── */
 
@@ -788,9 +791,11 @@ export default function TelegramPage() {
     return typeof raw === 'boolean' ? raw : fallback;
   };
 
-  const idListText = (type: ContentType, key: string): string => {
+  /** Lista de ids (ligas o equipos) de un ajuste, para pasarle su valor actual
+   *  a un `LeaguePicker`/`TeamPicker`. Sin entrada válida, lista vacía. */
+  const arraySetting = (type: ContentType, key: string): number[] => {
     const raw = typeCfg(type).settings[key];
-    return Array.isArray(raw) ? raw.join(', ') : '';
+    return Array.isArray(raw) ? raw.filter((n): n is number => typeof n === 'number') : [];
   };
 
   const saveCfg = useMutation({
@@ -837,30 +842,130 @@ export default function TelegramPage() {
   const [composeMsg, setComposeMsg] = useState<string | null>(null);
   /** Texto de la última vista previa. No existe como fila: solo se ve aquí. */
   const [previewText, setPreviewText] = useState<string | null>(null);
+  /** Vale UNA sola vez: publicar/dejar borrador tras generarla reusa este id
+   *  y NO vuelve a llamar al modelo. Se descarta al cambiar de tipo o al
+   *  fallar el reuso (caducó, ya se usó, o cualquier otro error). */
+  const [previewId, setPreviewId] = useState<string | null>(null);
+  const [previewType, setPreviewType] = useState<ContentType | null>(null);
+  const [previewTtlSeconds, setPreviewTtlSeconds] = useState<number | null>(null);
+
+  const discardPreview = () => {
+    setPreviewText(null);
+    setPreviewId(null);
+    setPreviewType(null);
+    setPreviewTtlSeconds(null);
+  };
+
+  // "Última verdad" de qué tipo está vigente, para que `onSuccess`/`onError`
+  // de una mutación YA en vuelo puedan comparar contra el tipo ACTUAL en vez
+  // del que tenían cerrado en su closure. TanStack sustituye los callbacks de
+  // una mutación pendiente por los del último render: si el admin cambia de
+  // A a B mientras A está generando, un `onSuccess` que lea `composeType` de
+  // su closure vería 'B' y etiquetaría el texto de A como si fuera de B.
+  const composeTypeRef = useRef(composeType);
+  useEffect(() => {
+    composeTypeRef.current = composeType;
+  }, [composeType]);
+
   const composeMut = useMutation({
-    mutationFn: (action: 'preview' | 'draft' | 'publish') =>
-      api.post<{ status: string; text: string; usedLlm?: boolean }>('/admin/telegram/compose', {
-        type: composeType,
-        publish: action === 'publish',
-        dryRun: action === 'preview',
-      }),
-    onSuccess: (res) => {
+    mutationFn: ({ action, reuse, type }: { action: 'preview' | 'draft' | 'publish'; reuse?: boolean; type: ContentType }) => {
+      // Reusar SIN id no puede degradar a "componer de cero": el servidor
+      // redactaría otro texto con el modelo, sin diálogo de coste, y lo mandaría
+      // al canal sin que nadie lo haya leído. Pasa si el panel llega a
+      // producción antes que el backend que devuelve `previewId`.
+      if (reuse && !previewId) {
+        return Promise.reject(new Error('La vista previa ya no es válida. Vuelve a generarla.'));
+      }
+      return api.post<{ status: string; text: string; usedLlm?: boolean; previewId?: string; previewTtlSeconds?: number }>(
+        '/admin/telegram/compose',
+        {
+          type,
+          publish: action === 'publish',
+          dryRun: action === 'preview',
+          ...(reuse && previewId ? { previewId } : {}),
+        },
+      );
+    },
+    onSuccess: (res, vars) => {
+      // El admin pudo cambiar de tipo mientras ESTA generación estaba en
+      // vuelo: si `vars.type` ya no es el tipo vigente, la respuesta es de un
+      // tipo que ya no se está viendo y no debe pisar el estado actual (ni el
+      // de un tipo nuevo que se haya generado mientras tanto).
+      if (vars.type !== composeTypeRef.current) return;
       if (res.status === 'preview') {
         // La vista previa NO deja fila: antes, cada clic metía un borrador en la
         // cola que había que rechazar a mano solo por haber mirado.
         setPreviewText(res.text);
+        setPreviewId(res.previewId ?? null);
+        setPreviewType(vars.type);
+        setPreviewTtlSeconds(res.previewTtlSeconds ?? null);
         setComposeMsg(res.usedLlm === false ? 'Vista previa (plantilla fija, sin IA).' : 'Vista previa.');
         return;
       }
-      setPreviewText(null);
+      discardPreview();
       setComposeMsg(res.status === 'published' ? 'Publicado.' : 'Borrador creado en la cola.');
       qc.invalidateQueries({ queryKey: ['telegram-posts'] });
     },
-    onError: (e) => {
-      setPreviewText(null);
+    onError: (e, vars) => {
+      if (vars.type !== composeTypeRef.current) return;
+      // Cualquier fallo al REUSAR una vista previa (caducó, ya se usó, o un
+      // error de red) la invalida: mejor forzar una generación nueva que
+      // reintentar con un previewId que ya no sirve.
+      if (vars.reuse) discardPreview();
       setComposeMsg((e as Error)?.message ?? 'No se pudo componer.');
     },
   });
+
+  /** Modelo activo y coste medio de generar con IA, para el diálogo de "esto
+   *  gasta tokens". Se carga siempre (no depende de la pestaña): es barata y
+   *  así está lista en cuanto se entra a Contenido o a Cola. */
+  const llmCostQ = useQuery<{
+    model: string;
+    llmTypes: string[];
+    /** Coste de UNA composición de cada tipo de `llmTypes` (ya resuelto por
+     *  tipo — no hace falta elegir bucket copy/news a mano). */
+    perType: Record<string, { usd: number | null; samples: number }>;
+    // Agregados por familia. Ya no se usan para elegir la estimación del
+    // diálogo (eso lo resuelve `perType`); se conservan por completar el contrato.
+    perGenerationUsd: { copy: number | null; news: number | null };
+    samples: { copy: number; news: number };
+  }>({
+    queryKey: ['telegram-llm-cost'],
+    queryFn: () => api.get('/admin/telegram/llm-cost'),
+    staleTime: 5 * 60_000,
+  });
+
+  /** Acción pendiente de confirmar por su coste en tokens. `null` = sin diálogo abierto. */
+  const [costConfirm, setCostConfirm] = useState<{ type: string; run: () => void } | null>(null);
+
+  /** Ejecuta `run` directo SOLO si consta que `type` no gasta tokens. Falla
+   *  CERRADO: mientras no haya datos de coste (cargando, o la consulta falló),
+   *  no se sabe si el tipo es gratis o no, así que se pide confirmación
+   *  igual — los botones que llaman esto están además deshabilitados
+   *  mientras `llmCostQ.isLoading`, así que este camino solo se ejerce si el
+   *  fetch llegó a fallar. */
+  const runMaybeWithCostConfirm = (type: string, run: () => void) => {
+    const llmTypes = llmCostQ.data?.llmTypes;
+    if (llmTypes == null || llmTypes.includes(type)) setCostConfirm({ type, run });
+    else run();
+  };
+
+  /** Cuerpo del diálogo de coste: `perType[tipo]` ya trae el coste resuelto
+   *  para ESE tipo (para `news` es la estimación de reescribir un artículo;
+   *  para el resto, la de redactar el post). Sin datos de coste (falló la
+   *  consulta), se avisa igual en vez de dar por seguro que no cuesta nada. */
+  const costConfirmMessage = (): string => {
+    if (!costConfirm) return '';
+    if (!llmCostQ.data) {
+      return 'No se pudo confirmar el coste; esta acción puede gastar tokens.';
+    }
+    const model = llmCostQ.data.model ?? 'el modelo activo';
+    const entry = llmCostQ.data.perType[costConfirm.type];
+    if (entry == null || entry.usd == null) {
+      return `Cada generación consume tokens del modelo activo (${model}). Aún no hay histórico para estimar el coste.`;
+    }
+    return `Para redactar el post se usa el modelo de IA activo (${model}). Cada generación cuesta ≈ $${entry.usd.toFixed(4)} (media de las últimas ${entry.samples}).`;
+  };
 
   /* ── posts (queue + history) ── */
   const queueQ = useQuery<PostsPage>({
@@ -983,26 +1088,6 @@ export default function TelegramPage() {
     return undefined;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, canSave, saveCfg.isPending, cfg, tokenInput]);
-
-  /* ── listas de ids escritas a mano (tablas, goles) ── */
-  const parseIdList = (raw: string): number[] | null => {
-    const ids = raw
-      .split(/[\s,]+/)
-      .map((s) => Number(s.trim()))
-      .filter((n) => Number.isFinite(n) && n > 0);
-    return ids.length > 0 ? Array.from(new Set(ids)) : null;
-  };
-  // Tablas: `null` = volver a las ligas destacadas. Goles: la lista vacía es un
-  // valor con significado propio (no publicar nada), así que ahí se manda `[]`.
-  const leagueIdsText = idListText('standings_recap', 'leagueIds');
-  const goalLeagueIdsText = idListText('goal', 'leagueIds');
-  const goalTeamIdsText = idListText('goal', 'teamIds');
-  const resultLeagueIdsText = idListText('match_result', 'leagueIds');
-  const resultTeamIdsText = idListText('match_result', 'teamIds');
-  const pollLeagueIdsText = idListText('poll', 'leagueIds');
-  const funFactLeagueIdsText = idListText('fun_fact', 'leagueIds');
-  const newsLeagueIdsText = idListText('news', 'leagueIds');
-  const newsTeamIdsText = idListText('news', 'teamIds');
 
   /**
    * Tipos de noticia marcados. Vacío o ausente NO significa "ninguno": el
@@ -1198,21 +1283,92 @@ export default function TelegramPage() {
           <div hidden={tab !== 'content'} role="tabpanel" id="tabpanel-content" aria-labelledby="tab-content">
             <SectionCard
               title="Componer ahora"
-              info="Genera un post al instante, ignorando el horario. «Ver cómo queda» solo lo enseña aquí y no deja nada en la cola; «Dejar borrador» sí crea la fila para aprobarla luego; «Publicar» lo manda al canal directamente."
+              info="Genera un post al instante, ignorando el horario. En los tipos redactados por IA, «Ver cómo queda» gasta tokens al generar el texto; una vez generada la vista previa, publicarla o dejarla como borrador NO vuelve a gastar — usa exactamente ese texto, sin redactar otro. «Volver a generar» sí cuenta como una nueva generación."
             >
+              {llmCostQ.isError && (
+                <p className="text-xs font-sans text-warning pb-2">
+                  No se pudo cargar el coste de generación — se pedirá confirmación de todas formas antes de gastar tokens.
+                </p>
+              )}
               <Field label="Tipo" subtitle="Qué post componer.">
                 <Select<ContentType>
                   value={composeType}
                   options={COMPOSABLE_TYPES.map((t) => ({ value: t, label: TYPE_LABELS[t] ?? t }))}
-                  onChange={setComposeType}
+                  disabled={composeMut.isPending}
+                  onChange={(t) => {
+                    setComposeType(t);
+                    discardPreview();
+                    setComposeMsg(null);
+                    setCostConfirm(null);
+                  }}
                 />
               </Field>
               <Field label="Acción" subtitle="">
-                <div className="flex gap-2">
-                  <Button variant="secondary" size="sm" loading={composeMut.isPending} onClick={() => { setComposeMsg(null); composeMut.mutate('preview'); }}>Ver cómo queda</Button>
-                  <Button variant="secondary" size="sm" loading={composeMut.isPending} onClick={() => { setComposeMsg(null); composeMut.mutate('draft'); }}>Dejar borrador</Button>
-                  <Button variant="primary" size="sm" loading={composeMut.isPending} onClick={() => { setComposeMsg(null); composeMut.mutate('publish'); }}>Publicar ahora</Button>
-                </div>
+                {previewText && previewId && previewType === composeType ? (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      loading={composeMut.isPending}
+                      onClick={() => { setComposeMsg(null); composeMut.mutate({ action: 'publish', reuse: true, type: composeType }); }}
+                    >
+                      Publicar esta versión
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      loading={composeMut.isPending}
+                      onClick={() => { setComposeMsg(null); composeMut.mutate({ action: 'draft', reuse: true, type: composeType }); }}
+                    >
+                      Guardar como borrador
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      loading={composeMut.isPending}
+                      disabled={llmCostQ.isLoading}
+                      onClick={() => runMaybeWithCostConfirm(composeType, () => { setComposeMsg(null); composeMut.mutate({ action: 'preview', type: composeType }); })}
+                    >
+                      Volver a generar
+                    </Button>
+                    {previewTtlSeconds != null && (
+                      <span className="text-[11px] text-text-muted font-sans">Vale {Math.max(1, Math.round(previewTtlSeconds / 60))} min.</span>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      loading={composeMut.isPending}
+                      disabled={llmCostQ.isLoading}
+                      onClick={() => runMaybeWithCostConfirm(composeType, () => { setComposeMsg(null); composeMut.mutate({ action: 'preview', type: composeType }); })}
+                    >
+                      Ver cómo queda
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      loading={composeMut.isPending}
+                      disabled={llmCostQ.isLoading}
+                      onClick={() => runMaybeWithCostConfirm(composeType, () => { setComposeMsg(null); composeMut.mutate({ action: 'draft', type: composeType }); })}
+                    >
+                      Dejar borrador
+                    </Button>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      loading={composeMut.isPending}
+                      disabled={llmCostQ.isLoading}
+                      onClick={() => runMaybeWithCostConfirm(composeType, () => { setComposeMsg(null); composeMut.mutate({ action: 'publish', type: composeType }); })}
+                    >
+                      Publicar ahora
+                    </Button>
+                    {llmCostQ.data && !llmCostQ.data.llmTypes.includes(composeType) && (
+                      <span className="text-[11px] text-text-muted font-sans">Plantilla fija, sin coste de IA.</span>
+                    )}
+                  </div>
+                )}
               </Field>
               {composeMsg && <p className="text-xs font-sans text-text-secondary pt-2">{composeMsg}</p>}
               {previewText && (
@@ -1262,11 +1418,12 @@ export default function TelegramPage() {
               config={typeCfg('standings_recap')}
               onChange={(p) => patchType('standings_recap', p)}
               extra={
-                <Field label="Ligas (apiFootballId)" subtitle="IDs separados por coma. Vacío = ligas destacadas.">
-                  <TextInput
-                    value={leagueIdsText}
-                    onChange={(v) => patchSetting('standings_recap', 'leagueIds', parseIdList(v))}
-                    placeholder="39, 140, 135"
+                <Field label="Ligas" subtitle="Vacío = ligas destacadas.">
+                  <LeaguePicker
+                    value={arraySetting('standings_recap', 'leagueIds')}
+                    onChange={(v) => patchSetting('standings_recap', 'leagueIds', v.length > 0 ? v : null)}
+                    emptyStateText="Vacío = ligas destacadas."
+                    showSelectAll={false}
                   />
                 </Field>
               }
@@ -1316,25 +1473,24 @@ export default function TelegramPage() {
                     />
                   </Field>
                   <Field
-                    label="Ligas (apiFootballId)"
-                    subtitle="IDs separados por coma. VACÍO = no publica ningún gol."
-                    info="Es una lista de permitidos, no un filtro opcional: sin ninguna liga aquí, el tipo no publica nada aunque esté encendido. Solo funcionan las ligas que ESPN cubre (39 Premier, 140 LaLiga, 135 Serie A, 78 Bundesliga, 61 Ligue 1, 88 Eredivisie, 94 Primeira, 2 Champions)."
+                    label="Ligas"
+                    subtitle="VACÍO = no publica ningún gol."
+                    info="Es una lista de permitidos, no un filtro opcional: sin ninguna liga aquí, el tipo no publica nada aunque esté encendido. Solo funcionan las ligas que ESPN cubre (Premier League, LaLiga, Serie A, Bundesliga, Ligue 1, Eredivisie, Primeira Liga, Champions League)."
                   >
-                    <TextInput
-                      value={goalLeagueIdsText}
-                      onChange={(v) => patchSetting('goal', 'leagueIds', parseIdList(v) ?? [])}
-                      placeholder="39, 140"
+                    <LeaguePicker
+                      value={arraySetting('goal', 'leagueIds')}
+                      onChange={(v) => patchSetting('goal', 'leagueIds', v)}
+                      emptyStateText="VACÍO = no publica ningún gol."
                     />
                   </Field>
                   <Field
-                    label="Equipos (id interno)"
-                    subtitle="IDs separados por coma. Vacío = todos los de esas ligas."
+                    label="Equipos"
+                    subtitle="Vacío = todos los de esas ligas."
                     info="Al revés que las ligas: aquí vacío NO restringe. Con equipos puestos, solo se publica el gol si uno de los dos del partido está en la lista."
                   >
-                    <TextInput
-                      value={goalTeamIdsText}
-                      onChange={(v) => patchSetting('goal', 'teamIds', parseIdList(v) ?? [])}
-                      placeholder="11, 22"
+                    <TeamPicker
+                      value={arraySetting('goal', 'teamIds')}
+                      onChange={(v) => patchSetting('goal', 'teamIds', v)}
                     />
                   </Field>
                   <Field
@@ -1382,14 +1538,14 @@ export default function TelegramPage() {
                     />
                   </Field>
                   <Field
-                    label="Ligas (apiFootballId)"
-                    subtitle="IDs separados por coma. Vacío = todas las ligas activas."
+                    label="Ligas"
+                    subtitle="Vacío = todas las ligas activas."
                     info="Al revés que en los goles: aquí vacío NO restringe, publica con todas las ligas activas."
                   >
-                    <TextInput
-                      value={idListText('today_matches', 'leagueIds')}
-                      onChange={(v) => patchSetting('today_matches', 'leagueIds', parseIdList(v) ?? [])}
-                      placeholder="39, 140"
+                    <LeaguePicker
+                      value={arraySetting('today_matches', 'leagueIds')}
+                      onChange={(v) => patchSetting('today_matches', 'leagueIds', v)}
+                      emptyStateText="Vacío = todas las ligas activas."
                     />
                   </Field>
                   <CreativeField
@@ -1418,13 +1574,13 @@ export default function TelegramPage() {
                     />
                   </Field>
                   <Field
-                    label="Ligas (apiFootballId)"
-                    subtitle="IDs separados por coma. Vacío = todas las ligas activas."
+                    label="Ligas"
+                    subtitle="Vacío = todas las ligas activas."
                   >
-                    <TextInput
-                      value={idListText('day_results', 'leagueIds')}
-                      onChange={(v) => patchSetting('day_results', 'leagueIds', parseIdList(v) ?? [])}
-                      placeholder="39, 140"
+                    <LeaguePicker
+                      value={arraySetting('day_results', 'leagueIds')}
+                      onChange={(v) => patchSetting('day_results', 'leagueIds', v)}
+                      emptyStateText="Vacío = todas las ligas activas."
                     />
                   </Field>
                   <CreativeField
@@ -1446,24 +1602,23 @@ export default function TelegramPage() {
               extra={
                 <>
                   <Field
-                    label="Ligas (apiFootballId)"
-                    subtitle="IDs separados por coma. VACÍO = no publica ningún resultado."
+                    label="Ligas"
+                    subtitle="VACÍO = no publica ningún resultado."
                     info="Es una lista de permitidos, igual que en los goles: sin ninguna liga aquí el tipo no publica nada aunque esté encendido."
                   >
-                    <TextInput
-                      value={resultLeagueIdsText}
-                      onChange={(v) => patchSetting('match_result', 'leagueIds', parseIdList(v) ?? [])}
-                      placeholder="39, 140"
+                    <LeaguePicker
+                      value={arraySetting('match_result', 'leagueIds')}
+                      onChange={(v) => patchSetting('match_result', 'leagueIds', v)}
+                      emptyStateText="VACÍO = no publica ningún resultado."
                     />
                   </Field>
                   <Field
-                    label="Equipos (id interno)"
-                    subtitle="IDs separados por coma. Vacío = todos los de esas ligas."
+                    label="Equipos"
+                    subtitle="Vacío = todos los de esas ligas."
                   >
-                    <TextInput
-                      value={resultTeamIdsText}
-                      onChange={(v) => patchSetting('match_result', 'teamIds', parseIdList(v) ?? [])}
-                      placeholder="11, 22"
+                    <TeamPicker
+                      value={arraySetting('match_result', 'teamIds')}
+                      onChange={(v) => patchSetting('match_result', 'teamIds', v)}
                     />
                   </Field>
                   <Field
@@ -1588,14 +1743,14 @@ export default function TelegramPage() {
               extra={
                 <>
                   <Field
-                    label="Ligas (apiFootballId)"
-                    subtitle="IDs separados por coma. Vacío = todas las activas."
+                    label="Ligas"
+                    subtitle="Vacío = todas las activas."
                     info="Al revés que en los goles: aquí vacío NO restringe."
                   >
-                    <TextInput
-                      value={pollLeagueIdsText}
-                      onChange={(v) => patchSetting('poll', 'leagueIds', parseIdList(v) ?? [])}
-                      placeholder="39, 140"
+                    <LeaguePicker
+                      value={arraySetting('poll', 'leagueIds')}
+                      onChange={(v) => patchSetting('poll', 'leagueIds', v)}
+                      emptyStateText="Vacío = todas las activas."
                     />
                   </Field>
                   <Field
@@ -1624,14 +1779,14 @@ export default function TelegramPage() {
               extra={
                 <>
                   <Field
-                    label="Ligas (apiFootballId)"
-                    subtitle="IDs separados por coma. Vacío = todas las activas."
+                    label="Ligas"
+                    subtitle="Vacío = todas las activas."
                     info="Al revés que en los goles: aquí vacío NO restringe."
                   >
-                    <TextInput
-                      value={funFactLeagueIdsText}
-                      onChange={(v) => patchSetting('fun_fact', 'leagueIds', parseIdList(v) ?? [])}
-                      placeholder="39, 140"
+                    <LeaguePicker
+                      value={arraySetting('fun_fact', 'leagueIds')}
+                      onChange={(v) => patchSetting('fun_fact', 'leagueIds', v)}
+                      emptyStateText="Vacío = todas las activas."
                     />
                   </Field>
                   <CreativeField
@@ -1695,25 +1850,24 @@ export default function TelegramPage() {
                     />
                   </Field>
                   <Field
-                    label="Ligas (apiFootballId)"
-                    subtitle="IDs separados por coma. Vacío = todas."
+                    label="Ligas"
+                    subtitle="Vacío = todas."
                     info="Al revés que en los goles: aquí vacío NO restringe. Filtra por los equipos que juegan esas competiciones."
                   >
-                    <TextInput
-                      value={newsLeagueIdsText}
-                      onChange={(v) => patchSetting('news', 'leagueIds', parseIdList(v) ?? [])}
-                      placeholder="39, 140"
+                    <LeaguePicker
+                      value={arraySetting('news', 'leagueIds')}
+                      onChange={(v) => patchSetting('news', 'leagueIds', v)}
+                      emptyStateText="Vacío = todas."
                     />
                   </Field>
                   <Field
-                    label="Equipos (id interno)"
-                    subtitle="IDs separados por coma. Vacío = todos."
+                    label="Equipos"
+                    subtitle="Vacío = todos."
                     info="Para seguir solo a unos clubes concretos. Vacío NO restringe."
                   >
-                    <TextInput
-                      value={newsTeamIdsText}
-                      onChange={(v) => patchSetting('news', 'teamIds', parseIdList(v) ?? [])}
-                      placeholder="12, 34"
+                    <TeamPicker
+                      value={arraySetting('news', 'teamIds')}
+                      onChange={(v) => patchSetting('news', 'teamIds', v)}
                     />
                   </Field>
                   {/* Sin campo de imagen: el pie de una foto de Telegram son 1.024
@@ -1833,7 +1987,15 @@ export default function TelegramPage() {
                           tipo determinista sale idéntico. Un botón que no cambia
                           nada y tampoco falla es peor que no tenerlo. */}
                       {!DETERMINISTIC_TYPES.has(post.contentType) && (
-                        <Button variant="secondary" size="sm" loading={postAction.isPending} onClick={() => postAction.mutate({ id: post.id, action: 'regenerate' })}>Regenerar</Button>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          loading={postAction.isPending}
+                          disabled={llmCostQ.isLoading}
+                          onClick={() => runMaybeWithCostConfirm(post.contentType, () => postAction.mutate({ id: post.id, action: 'regenerate' }))}
+                        >
+                          Regenerar
+                        </Button>
                       )}
                       <Button variant="ghost" size="sm" loading={postAction.isPending} onClick={() => postAction.mutate({ id: post.id, action: 'reject' })}>Rechazar</Button>
                     </>
@@ -1955,6 +2117,21 @@ export default function TelegramPage() {
           {saveCfg.isError && (
             <p className="text-xs text-danger font-sans mt-2">{(saveCfg.error as Error)?.message}</p>
           )}
+
+          <ConfirmDialog
+            open={costConfirm != null}
+            title="Esto gasta tokens"
+            message={costConfirmMessage()}
+            confirmLabel="Generar"
+            cancelLabel="Cancelar"
+            loading={composeMut.isPending || postAction.isPending}
+            onConfirm={() => {
+              const run = costConfirm?.run;
+              setCostConfirm(null);
+              run?.();
+            }}
+            onClose={() => setCostConfirm(null)}
+          />
         </>
       )}
     </div>

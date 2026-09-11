@@ -1,3 +1,4 @@
+import { forwardRef } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -6,9 +7,14 @@ import { cn } from '@/lib/utils';
 const base =
   'w-full rounded-xl bg-surface-2 border border-border text-text-primary font-sans text-sm placeholder:text-text-muted/60 transition-colors focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/30 disabled:opacity-50 disabled:cursor-not-allowed';
 
-export function Input({ className, ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
-  return <input className={cn(base, 'h-9 px-3', className)} {...props} />;
-}
+// `forwardRef`: los combobox de `components/pickers/*` necesitan el nodo DOM
+// real para posicionar su panel flotante y para devolver el foco tras elegir
+// una opción. Antes no se podía pasar `ref` a este componente.
+export const Input = forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
+  function Input({ className, ...props }, ref) {
+    return <input ref={ref} className={cn(base, 'h-9 px-3', className)} {...props} />;
+  },
+);
 
 export function Textarea({ className, ...props }: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return <textarea className={cn(base, 'px-3 py-2 min-h-[80px] resize-y leading-relaxed', className)} {...props} />;

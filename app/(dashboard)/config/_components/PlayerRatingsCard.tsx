@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/inputs';
 import { Button } from '@/components/ui/Button';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { useToast } from '@/components/ui/ToastProvider';
+import { MatchPicker } from '@/components/pickers/MatchPicker';
 import type { PlayerRatingsConfig, PlayerRatingsCoverageRow } from './types';
 
 /** Conteo previo de `/admin/player-ratings/backfill` con `dryRun: true`. */
@@ -104,12 +105,12 @@ export function PlayerRatingsCard() {
     enabled: false,
   });
 
-  const [probeMatchId, setProbeMatchId] = useState('');
+  const [probeMatch, setProbeMatch] = useState<number | null>(null);
   const probe = useMutation({
     mutationFn: (matchId: number) => api.post('/admin/player-ratings/probe', { matchId }),
     onSuccess: () => {
       toast.success('Partido encolado para capturar sus notas.');
-      setProbeMatchId('');
+      setProbeMatch(null);
       void refetchQueue();
     },
     onError: (err: Error) => toast.error(err.message),
@@ -323,21 +324,16 @@ export function PlayerRatingsCard() {
             <div className="flex items-end gap-3 pt-4">
               <Field
                 label="Probar un partido"
-                subtitle="ID interno del partido"
+                subtitle="Busca el partido por equipo."
                 info="Encola la captura saltándose el corte por liga y el 'ya resuelto'. Es la vía de recuperación cuando una liga se marcó por error o después de arreglar el scraper."
               >
-                <Input
-                  className="w-32"
-                  value={probeMatchId}
-                  onChange={(e) => setProbeMatchId(e.target.value)}
-                  placeholder="17299"
-                />
+                <MatchPicker className="w-80" value={probeMatch} onChange={setProbeMatch} />
               </Field>
               <Button
                 variant="secondary"
                 loading={probe.isPending}
-                disabled={!Number.isFinite(Number(probeMatchId)) || Number(probeMatchId) <= 0}
-                onClick={() => probe.mutate(Number(probeMatchId))}
+                disabled={probeMatch == null}
+                onClick={() => probeMatch != null && probe.mutate(probeMatch)}
               >
                 Probar partido
               </Button>
