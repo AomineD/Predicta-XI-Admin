@@ -135,6 +135,33 @@ function ConfigPageInner() {
       predictionWindowMinutes: cfg.predictionWindowMinutes ?? 0,
       featuredLeagueIds: cfg.featuredLeagueIds ?? [39, 140, 135],
       llmMaxTokens: cfg.llmMaxTokens ?? {},
+      // Estudio del motor (fase A) y veto por selección (fase B).
+      engineStudyEnabled: cfg.engineStudyEnabled ?? false,
+      engineStudyDayOfWeek: cfg.engineStudyDayOfWeek ?? 1,
+      engineStudyHourCaracas: cfg.engineStudyHourCaracas ?? 8,
+      engineStudyHoldoutDays: cfg.engineStudyHoldoutDays ?? 21,
+      predictionWeakSelectionFilter: cfg.predictionWeakSelectionFilter ?? false,
+      predictionSelectionMinAe: cfg.predictionSelectionMinAe ?? 0.9,
+      predictionSelectionMinSample: cfg.predictionSelectionMinSample ?? 50,
+      predictionCalibrationBulletinEnabled: cfg.predictionCalibrationBulletinEnabled ?? false,
+      // Conteo adaptativo (fase D), combinada del día (fase E) y tema Segura (fase F).
+      combinadasAdaptiveCounts: cfg.combinadasAdaptiveCounts ?? false,
+      combinadasMinRegular: cfg.combinadasMinRegular ?? 0,
+      combinadasMaxRegular: cfg.combinadasMaxRegular ?? 2,
+      combinadasMinPremium: cfg.combinadasMinPremium ?? 0,
+      combinadasMaxPremium: cfg.combinadasMaxPremium ?? 2,
+      weeklyCombinadasMinRegular: cfg.weeklyCombinadasMinRegular ?? 1,
+      weeklyCombinadasMaxRegular: cfg.weeklyCombinadasMaxRegular ?? 4,
+      weeklyCombinadasMinPremium: cfg.weeklyCombinadasMinPremium ?? 1,
+      weeklyCombinadasMaxPremium: cfg.weeklyCombinadasMaxPremium ?? 4,
+      combinadasDailyRelease: cfg.combinadasDailyRelease ?? false,
+      combinadasDailyHourCaracas: cfg.combinadasDailyHourCaracas ?? 10,
+      combinadasDailyAvoidWindowReuse: cfg.combinadasDailyAvoidWindowReuse ?? false,
+      combinadasThemeSafeEnabled: cfg.combinadasThemeSafeEnabled ?? false,
+      combinadasThemeSafeTier: cfg.combinadasThemeSafeTier ?? 'regular',
+      combinadasThemeSafeMinOdds: cfg.combinadasThemeSafeMinOdds ?? 1.5,
+      combinadasThemeSafeMaxOdds: cfg.combinadasThemeSafeMaxOdds ?? 1.8,
+      combinadasThemeSafeLegs: cfg.combinadasThemeSafeLegs ?? 2,
     };
   }, [cfg]);
 

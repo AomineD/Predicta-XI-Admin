@@ -47,8 +47,18 @@ export function MultiCheckbox({
   );
 }
 
-/** Tarjeta colapsable con todas las capas del "Motor Predicta calibrado". */
-export function PredictionEngineCard({ form, setField }: { form: PredictionConfig; setField: SetField }) {
+/** Tarjeta colapsable con todas las capas del "Motor Predicta calibrado".
+ *  `children` es el bloque que va DEBAJO de las capas (estudio del motor y veto
+ *  por selección): campos con `Field`, no capas del interruptor general. */
+export function PredictionEngineCard({
+  form,
+  setField,
+  children,
+}: {
+  form: PredictionConfig;
+  setField: SetField;
+  children?: React.ReactNode;
+}) {
   const [expanded, setExpanded] = useState(false);
 
   const enabledCount = ENGINE_LAYERS.filter((l) => form[l.key]).length;
@@ -93,6 +103,7 @@ export function PredictionEngineCard({ form, setField }: { form: PredictionConfi
               </div>
             </div>
           ))}
+          {children && <div className="pt-1 pb-3 border-t border-border">{children}</div>}
         </div>
       )}
     </div>

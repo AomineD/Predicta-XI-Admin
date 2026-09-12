@@ -1,11 +1,34 @@
 'use client';
 
-import { SectionCard, Field } from '@/components/ui/form-controls';
+import { useState } from 'react';
+import Link from 'next/link';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { SectionCard, Field, SubHeading } from '@/components/ui/form-controls';
 import { Input, Select } from '@/components/ui/inputs';
 import { Toggle } from '@/components/ui/form-controls';
+import { Button } from '@/components/ui/Button';
+import { useToast } from '@/components/ui/ToastProvider';
+import { cn, formatDateTime } from '@/lib/utils';
+import {
+  ENGINE_STUDY_QUERY_KEY,
+  RATE_LIMIT_NOTICE,
+  WEEKDAY_LABELS,
+  describeVerdict,
+  fetchEngineStudy,
+  isRateLimitError,
+  runEngineStudy,
+  triggerLabel,
+  verdictLabel,
+  verdictTone,
+  type EngineStudyRun,
+} from '@/app/(dashboard)/engine-study/_components/engine-study-api';
 import { MultiCheckbox, PredictionEngineCard } from './controls';
 import { MODELS, MODEL_LABELS, MODEL_DEFAULT_MAX_TOKENS, MARKETS, DATA_FIELDS, REASONING_OPTIONS } from './constants';
 import type { PredictionConfig, RecommendationsConfig, SetField } from './types';
+
+/** Acota un número al rango: el input vacío da `Number('') === 0`, y para los
+ *  campos con mínimo > 0 ese cero se colaría hasta que el zod lo rechazara. */
+const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
 
 const DEFAULT_RECOMMENDATIONS_CONFIG: RecommendationsConfig = { minSample: 20, minWinratePct: 55, topK: 4, windowDays: 90 };
 const DEFAULT_SPECIAL_SELECTOR = {
@@ -149,7 +172,9 @@ export function GeneralTab({ form, setField }: { form: PredictionConfig; setFiel
         )}
       </SectionCard>
 
-      <PredictionEngineCard form={form} setField={setField} />
+      <PredictionEngineCard form={form} setField={setField}>
+        <EngineStudyControls form={form} setField={setField} />
+      </PredictionEngineCard>
 
       <SpecialMarketsSelectorCard form={form} setField={setField} />
 
@@ -163,6 +188,224 @@ export function GeneralTab({ form, setField }: { form: PredictionConfig; setFiel
         <MultiCheckbox options={DATA_FIELDS} value={form.inputDataFields} onChange={(v) => setField('inputDataFields', v)} />
       </SectionCard>
     </div>
+  );
+}
+
+/**
+ * Estudio del motor (plan "motor que aprende", fase A) y veto por selección con
+ * boletín numérico (fase B). Va DENTRO de la card "Motor Predicta calibrado",
+ * debajo de las capas: es la reconstrucción del mapa que consume la capa
+ * "Confidence calibration", y el texto de ayuda de esa capa apunta aquí.
+ */
+function EngineStudyControls({ form, setField }: { form: PredictionConfig; setField: SetField }) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const [lastManualRun, setLastManualRun] = useState<EngineStudyRun | null>(null);
+
+  const overview = useQuery({
+    queryKey: ENGINE_STUDY_QUERY_KEY,
+    queryFn: fetchEngineStudy,
+    staleTime: 30_000,
+  });
+
+  const runNow = useMutation({
+    mutationFn: runEngineStudy,
+    onSuccess: (run) => {
+      setLastManualRun(run);
+      toast.success(describeVerdict(run));
+      qc.invalidateQueries({ queryKey: ENGINE_STUDY_QUERY_KEY });
+    },
+    onError: (err: Error) => {
+      // El 429 no es un fallo: es el límite de 2 corridas cada 5 minutos.
+      if (isRateLimitError(err)) toast.info(RATE_LIMIT_NOTICE);
+      else toast.error(err.message);
+    },
+  });
+
+  const latest = lastManualRun ?? overview.data?.latest ?? null;
+  const map = overview.data?.map;
+  const day = form.engineStudyDayOfWeek ?? 1;
+
+  return (
+    <>
+      <SubHeading>Estudio del motor</SubHeading>
+      <Field
+        label="Recalibrar cada semana"
+        subtitle="def. apagado"
+        info="Reconstruye el mapa de calibración una vez por semana (día y hora de abajo, en horario de Caracas) por mercado, por selección (mercado + lado + línea) y por el modelo activo, entrenando con la confianza declarada de los picks liquidados y recuperándola de los registros del LLM cuando el pick no la guardó. Es una recalibración CON GUARDA: parte las observaciones en entrenamiento y validación (los últimos «Días de validación»), construye el candidato solo con el entrenamiento y lo puntúa contra el mapa vigente. El candidato SOLO sustituye al mapa vigente si no empeora en validación (log-loss con un margen de 0.002); si es peor, se rechaza y el vigente se queda. Si la validación no llega a 300 observaciones, el veredicto es «muestra insuficiente» y el mapa vigente queda intacto: es lo que verás las primeras semanas, y es la prueba de que la guarda funciona. Sin esa guarda, la primera corrida con las 14 observaciones utilizables de hoy habría borrado el mapa de 8422. Cada corrida queda registrada en la página Estudio del motor. Apagado, nada corre solo; el botón «Recalibrar ahora» dispara la misma corrida con las mismas consecuencias: si el candidato pasa la validación (applied) sustituye el mapa vigente de producción; con insufficient_sample o rejected el mapa no se toca."
+      >
+        <Toggle value={form.engineStudyEnabled ?? false} onChange={(v) => setField('engineStudyEnabled', v)} />
+      </Field>
+      <Field
+        label="Día (Caracas)"
+        subtitle="0-6 · def. lunes"
+        info="Convención de Date.getUTCDay(): 0 = domingo, 1 = lunes … 6 = sábado, interpretado en horario de Caracas (entre las 00:00 y las 04:00 UTC del lunes todavía es domingo). Por defecto lunes, después de liquidar el fin de semana. Una vez por semana: la corrida programada es idempotente por semana en la base de datos."
+      >
+        <div className="flex items-center gap-2">
+          <Input
+            type="number"
+            min={0}
+            max={6}
+            className="w-24"
+            value={day}
+            onChange={(e) => setField('engineStudyDayOfWeek', clamp(Number(e.target.value) || 0, 0, 6))}
+          />
+          <span className="text-xs text-text-muted font-sans">{WEEKDAY_LABELS[day] ?? ''}</span>
+        </div>
+      </Field>
+      <Field
+        label="Hora (Caracas)"
+        subtitle="0-23 · def. 8"
+        info="Hora de Caracas (0-23) de la corrida semanal. Por defecto 8, con el settlement del domingo ya cerrado."
+      >
+        <Input
+          type="number"
+          min={0}
+          max={23}
+          className="w-24"
+          value={form.engineStudyHourCaracas ?? 8}
+          onChange={(e) => setField('engineStudyHourCaracas', clamp(Number(e.target.value) || 0, 0, 23))}
+        />
+      </Field>
+      <Field
+        label="Días de validación"
+        subtitle="7-60 · def. 21"
+        info="Cuántos días finales se reservan como validación (holdout) del walk-forward. El candidato se entrena con todo lo anterior y se puntúa solo sobre estos días, que no vio. Más días: veredicto más fiable, menos datos para entrenar; menos días: al revés. Por debajo de 300 observaciones en la validación el veredicto es «muestra insuficiente» y el mapa no se toca."
+      >
+        <Input
+          type="number"
+          min={7}
+          max={60}
+          className="w-24"
+          value={form.engineStudyHoldoutDays ?? 21}
+          onChange={(e) => setField('engineStudyHoldoutDays', clamp(Number(e.target.value) || 7, 7, 60))}
+        />
+      </Field>
+      <Field
+        label="Recalibrar ahora"
+        subtitle="Corrida manual · lee la config guardada"
+        info="Corre el estudio ahora aunque la recalibración semanal esté apagada, con la configuración YA GUARDADA (guarda antes si cambiaste algo arriba). No es una simulación: si el candidato pasa la validación (applied) sustituye el mapa vigente de producción; con insufficient_sample o rejected el mapa no se toca. Con la muestra actual el resultado esperado es insufficient_sample. Corre de forma síncrona y puede tardar unos segundos. Límite: 2 corridas cada 5 minutos."
+      >
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-wrap items-center gap-3">
+            <Button variant="secondary" loading={runNow.isPending} onClick={() => runNow.mutate()}>
+              Recalibrar ahora
+            </Button>
+            <span className="text-xs text-text-muted font-sans">
+              {runNow.isPending ? 'Corriendo el estudio… puede tardar unos segundos.' : 'Guarda los cambios antes de disparar.'}
+            </span>
+          </div>
+          {lastManualRun && (
+            <p className="text-xs font-sans text-text-secondary">
+              <VerdictPill run={lastManualRun} /> <span className="ml-1">{describeVerdict(lastManualRun)}</span>
+            </p>
+          )}
+        </div>
+      </Field>
+      <Field label="Última reconstrucción" subtitle="Lo que dice engine_study_runs">
+        {overview.isLoading ? (
+          <span className="text-xs text-text-muted font-sans">Cargando…</span>
+        ) : overview.isError ? (
+          <span className="text-xs text-danger font-sans">No se pudo leer el estudio del motor.</span>
+        ) : (
+          <div className="flex flex-col gap-1 text-xs font-sans text-text-secondary">
+            {latest ? (
+              <>
+                <span>
+                  Corrida <span className="text-text-primary">{latest.weekKey}</span> · {formatDateTime(latest.startedAt)} ·{' '}
+                  {triggerLabel(latest.trigger)} · modelo {latest.model ?? '—'}
+                </span>
+                <span>
+                  Observaciones: <span className="text-text-primary">{latest.observations.toLocaleString()}</span>{' '}
+                  (recuperadas del LLM: {latest.recoveredObservations.toLocaleString()} · validación:{' '}
+                  {latest.holdoutObservations.toLocaleString()}) · vetadas: {latest.vetoedSelections}
+                </span>
+                <span className="flex items-center gap-2">
+                  Veredicto: <VerdictPill run={latest} /> <span>{describeVerdict(latest)}</span>
+                </span>
+              </>
+            ) : (
+              <span>Todavía no se ha corrido el estudio del motor.</span>
+            )}
+            {map && (
+              <span>
+                Mapa vigente: <span className="text-text-primary">{map.observations.toLocaleString()}</span> observaciones ·
+                actualizado {formatDateTime(map.updatedAt)} · {map.hasSelectionBins ? 'con bins por selección' : 'sin bins por selección todavía'}
+                {map.missingMarkets.length > 0 && ` · sin bin: ${map.missingMarkets.join(', ')}`}
+              </span>
+            )}
+            <Link href="/engine-study" className="text-primary hover:underline w-fit">
+              Ver el estudio completo →
+            </Link>
+          </div>
+        )}
+      </Field>
+
+      <SubHeading>Selecciones que pierden</SubHeading>
+      <Field
+        label="Marcar selecciones que pierden"
+        subtitle="def. apagado"
+        info="Marca (no quita) los picks cuya selección (mercado + lado + línea) rinde por debajo del piso de A/E en la última corrida del estudio del motor. El pick se sigue emitiendo en el informe, marcado como selección débil, y deja de entrar en combinadas, en el canal de Telegram y en las notificaciones. Se marca en vez de quitar porque los créditos se cobran ANTES de filtrar por tier: un tier de un solo mercado se quedaría vacío y el usuario pagaría por nada. Los umbrales son propios de la predicción, no los de combinadas: allí una pata mala mata el billete entero y el piso puede ser más duro. Si el estudio no se puede leer, no se marca nada (fallo abierto, con aviso en el log). Los números de cada veto quedan en predictions.meta.weakSelections para auditarlos. La app publicada no pinta la marca todavía: el valor de hoy es que esos picks dejen de propagarse."
+      >
+        <Toggle
+          value={form.predictionWeakSelectionFilter ?? false}
+          onChange={(v) => setField('predictionWeakSelectionFilter', v)}
+        />
+      </Field>
+      <Field
+        label="A/E mínimo por selección (predicción)"
+        subtitle="0–1.5 · def. 0.90"
+        info="A/E = aciertos reales / aciertos que pagaba la cuota, encogido hacia 0.95 con peso 15 (a precio justo ronda 0.95 porque el margen de la casa va dentro). Por debajo de este piso la selección se marca. Con 0.90 y muestra 50 se marcan exactamente las tres medidas el 2026-09-12 (córners más de 9.5, hándicap asiático local −0.5 y menos de 3.5 goles) y ninguna sana. 0 apaga el filtro. Es un umbral distinto del de la pestaña Combinadas a propósito."
+      >
+        <Input
+          type="number"
+          min={0}
+          max={1.5}
+          step={0.01}
+          className="w-24"
+          value={form.predictionSelectionMinAe ?? 0.9}
+          onChange={(e) => setField('predictionSelectionMinAe', clamp(Number(e.target.value) || 0, 0, 1.5))}
+        />
+      </Field>
+      <Field
+        label="Muestra mínima por selección (predicción)"
+        subtitle="5–2000 · def. 50"
+        info="Picks liquidados que necesita una selección en los últimos 90 días para que el piso la juzgue. Por debajo no se marca nada: la falta de historia no es evidencia de que pierda."
+      >
+        <Input
+          type="number"
+          min={5}
+          max={2000}
+          className="w-24"
+          value={form.predictionSelectionMinSample ?? 50}
+          onChange={(e) => setField('predictionSelectionMinSample', clamp(Number(e.target.value) || 5, 5, 2000))}
+        />
+      </Field>
+      <Field
+        label="Boletín numérico en el prompt"
+        subtitle="def. apagado"
+        info="Añade al prompt del scheduler un bloque de NÚMEROS con muestra: winrate y A/E por mercado, A/E por selección con picks y aciertos, la lista literal de selecciones vetadas y los topes de confianza. Nunca lecciones en prosa: solo números y una nota fija que pide bajar la confianza donde el histórico falla, sin invitar a subirla en ningún sitio (premiar lo que va bien empeora: está medido). Sin muestra suficiente no se manda nada. Es texto que se repite en cada partido del lote: mide el coste en tokens (Consumo) una semana antes de dejarlo encendido."
+      >
+        <Toggle
+          value={form.predictionCalibrationBulletinEnabled ?? false}
+          onChange={(v) => setField('predictionCalibrationBulletinEnabled', v)}
+        />
+      </Field>
+    </>
+  );
+}
+
+function VerdictPill({ run }: { run: EngineStudyRun }) {
+  const label = verdictLabel(run);
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium font-sans uppercase tracking-wide',
+        verdictTone(run.verdict, run.status),
+      )}
+    >
+      {label}
+    </span>
   );
 }
 

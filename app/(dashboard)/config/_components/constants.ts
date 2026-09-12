@@ -124,7 +124,7 @@ export const ENGINE_LAYERS: Array<{ key: EngineLayerKey; title: string; info: st
   {
     key: 'calibrationEnabled',
     title: 'Confidence calibration',
-    info: "Remaps the LLM's declared confidence to the empirical winrate (per market and per model) using the calibration map built from settled picks. Corrects the systemic over-confidence. Conservative: only ever lowers confidence, never raises it. Inert until the map is built — run the Calibration rebuild in Data Maintenance, then enable.",
+    info: "Remaps the LLM's declared confidence to the empirical winrate (per market and per model, and per selection when the weekly study has built those bins) using the calibration map built from settled picks. Corrects the systemic over-confidence. Conservative: only ever lowers confidence, never raises it. Inert until the map is built: the rebuild lives in THIS card, under \"Estudio del motor\" (\"Recalibrar ahora\", or the weekly switch), and it only replaces the current map when the candidate is not worse in walk-forward validation. Note: total_goals will stay without a bin for several weeks — its rawConfidence is written by the engine's own selectors only since 2026-09-07, so its history cannot be recovered from the LLM logs.",
   },
   {
     key: 'correctScoreModelEnabled',

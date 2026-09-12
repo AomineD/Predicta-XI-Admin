@@ -169,6 +169,43 @@ export interface PredictionConfig {
   combinadasPremiumExcludedTeams?: number[];
   /** Per-model max output token override. Empty/missing → backend uses baked-in default. */
   llmMaxTokens?: Record<string, number>;
+  // ─── Estudio del motor (plan "motor que aprende", fase A) ───
+  /** Recalibración semanal del mapa de confianza con guarda walk-forward. */
+  engineStudyEnabled?: boolean;
+  /** Día (0 = domingo) y hora en horario de Caracas de la corrida semanal. */
+  engineStudyDayOfWeek?: number;
+  engineStudyHourCaracas?: number;
+  /** Días finales reservados como holdout del walk-forward (7-60). */
+  engineStudyHoldoutDays?: number;
+  // ─── Veto por selección y boletín (fase B) ───
+  /** Marca `weakSelection` en los picks de selecciones que pierden. */
+  predictionWeakSelectionFilter?: boolean;
+  /** Piso de A/E por selección para la PREDICCIÓN (0-1.5; 0 = apagado). */
+  predictionSelectionMinAe?: number;
+  /** Picks liquidados mínimos para que el piso actúe (5-2000). */
+  predictionSelectionMinSample?: number;
+  /** Boletín numérico (winrate/A/E con muestra, vetos, topes) en el prompt del scheduler. */
+  predictionCalibrationBulletinEnabled?: boolean;
+  // ─── Conteo adaptativo de combinadas (plan "más combinadas", fase D) ───
+  combinadasAdaptiveCounts?: boolean;
+  combinadasMinRegular?: number;
+  combinadasMaxRegular?: number;
+  combinadasMinPremium?: number;
+  combinadasMaxPremium?: number;
+  weeklyCombinadasMinRegular?: number;
+  weeklyCombinadasMaxRegular?: number;
+  weeklyCombinadasMinPremium?: number;
+  weeklyCombinadasMaxPremium?: number;
+  // ─── Combinada del día escalonada (fase E) ───
+  combinadasDailyRelease?: boolean;
+  combinadasDailyHourCaracas?: number;
+  combinadasDailyAvoidWindowReuse?: boolean;
+  // ─── Tema "Segura" (fase F) ───
+  combinadasThemeSafeEnabled?: boolean;
+  combinadasThemeSafeTier?: 'regular' | 'premium';
+  combinadasThemeSafeMinOdds?: number;
+  combinadasThemeSafeMaxOdds?: number;
+  combinadasThemeSafeLegs?: number;
 }
 
 /** Umbrales del generador de recomendaciones por mercado (idea #24). Debe reflejar
@@ -255,6 +292,8 @@ export type LiveCompanionConfig = {
 export interface MaintenanceCreditsConfig {
   maintenanceMode: boolean;
   maintenanceMessage: string | null;
+  /** English variant. `null` = not translated yet; the app falls back to Spanish. */
+  maintenanceMessageEn: string | null;
   minSupportedBuild: number;
   minSupportedVersion: string | null;
   minRecommendedBuild: number;

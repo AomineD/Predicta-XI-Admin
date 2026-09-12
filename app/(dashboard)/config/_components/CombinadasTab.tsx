@@ -1,7 +1,7 @@
 'use client';
 
 import { useMutation } from '@tanstack/react-query';
-import { SectionCard, Field, SubHeading, Toggle } from '@/components/ui/form-controls';
+import { SectionCard, Field, SubHeading, Toggle, NumInput } from '@/components/ui/form-controls';
 import { Input, Select } from '@/components/ui/inputs';
 import { Button } from '@/components/ui/Button';
 import { api } from '@/lib/api';
@@ -36,6 +36,57 @@ function firstRunDays(splitDay: number) {
 
 function isValidFirstRunDay(day: number, splitDay: number) {
   return !splitDay || (day >= 1 && day < splitDay);
+}
+
+/** Acota al rango: el input vacio da Number('') === 0, que para un minimo > 0
+ *  se colaria hasta que el zod lo rechazara al guardar. */
+const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
+
+/** Par min/max dentro de un solo Field, con el aviso en linea cuando el minimo
+ *  supera al maximo. El backend RECHAZA el guardado en ese caso (refine con
+ *  path en la clave Max), y el consumidor, si le llegara, se quedaria con el
+ *  maximo y avisaria en el log: nunca un cero silencioso. */
+function MinMaxPair({
+  min,
+  max,
+  onMin,
+  onMax,
+  lo,
+  hi,
+  step,
+}: {
+  min: number;
+  max: number;
+  onMin: (v: number) => void;
+  onMax: (v: number) => void;
+  lo: number;
+  hi: number;
+  step?: number;
+}) {
+  // Los pares DECIMALES (cuotas) van con NumInput: un Input controlado con
+  // Number() en cada tecla convierte el "1." intermedio en 1 y no deja escribir
+  // 1.55. Los enteros siguen el patron de los pares ya existentes.
+  const decimal = step != null && step < 1;
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center gap-2">
+        {decimal ? (
+          <NumInput value={min} onChange={(v) => onMin(clamp(v, lo, hi))} min={lo} max={hi} step={step} />
+        ) : (
+          <Input type="number" min={lo} max={hi} className="w-20" value={min} onChange={(e) => onMin(clamp(Number(e.target.value) || lo, lo, hi))} />
+        )}
+        <span className="text-xs text-text-muted">a</span>
+        {decimal ? (
+          <NumInput value={max} onChange={(v) => onMax(clamp(v, lo, hi))} min={lo} max={hi} step={step} />
+        ) : (
+          <Input type="number" min={lo} max={hi} className="w-20" value={max} onChange={(e) => onMax(clamp(Number(e.target.value) || lo, lo, hi))} />
+        )}
+      </div>
+      {min > max && (
+        <span className="text-xs font-sans text-warning">El mínimo supera al máximo: el guardado se rechaza.</span>
+      )}
+    </div>
+  );
 }
 
 export function CombinadasTab({
@@ -202,6 +253,66 @@ export function CombinadasTab({
           </div>
         </Field>
 
+        <SubHeading>Conteo adaptativo</SubHeading>
+        <Field
+          label="Conteo adaptativo"
+          subtitle="def. apagado"
+          info="El número de combinadas deja de ser un objetivo fijo (los «Count» de arriba) y sale del pool elegible de cada ventana: partidos distintos disponibles × usos por partido ÷ patas mínimas, acotado entre el mínimo y el máximo de abajo, por tier y por scope. Corrige el acantilado medido en 22 días: seis sin ninguna combinada y días flacos con 0 regular + 1 premium, porque el modo calidad premium se saltaba el techo del pool mientras la regular lo respetaba; con esto el techo aplica a las dos. Apagado, mandan los «Count» de siempre: el rollback es este switch. Si el mínimo supera al máximo, el guardado se rechaza (y en el motor ganaría el máximo con aviso en el log, nunca un cero silencioso). Si el pool corto vuelve, sube el máximo; no bajes el mínimo, que es el que evita el acantilado. Cada combinada es una llamada al LLM: mide el gasto en Consumo antes y después."
+        >
+          <Toggle value={form.combinadasAdaptiveCounts ?? false} onChange={(v) => setField('combinadasAdaptiveCounts', v)} />
+        </Field>
+        <Field
+          label="Regular diaria min/max"
+          subtitle="def. 0 a 2"
+          info="Rango del conteo adaptativo de la regular diaria (0-10). Un mínimo 0 permite emitir cero en un día flaco en vez de raspar el fondo del pool."
+        >
+          <MinMaxPair
+            lo={0}
+            hi={10}
+            min={form.combinadasMinRegular ?? 0}
+            max={form.combinadasMaxRegular ?? 2}
+            onMin={(v) => setField('combinadasMinRegular', v)}
+            onMax={(v) => setField('combinadasMaxRegular', v)}
+          />
+        </Field>
+        <Field
+          label="Premium diaria min/max"
+          subtitle="def. 0 a 2"
+          info="Rango del conteo adaptativo de la premium diaria (0-10). Con 3-4 premium por ventana, las combinaciones siguientes serán peores que la primera (el selector ya se llevó la de mayor probabilidad): vigila la liquidación por tier semana a semana y baja el máximo si el acierto cae."
+        >
+          <MinMaxPair
+            lo={0}
+            hi={10}
+            min={form.combinadasMinPremium ?? 0}
+            max={form.combinadasMaxPremium ?? 2}
+            onMin={(v) => setField('combinadasMinPremium', v)}
+            onMax={(v) => setField('combinadasMaxPremium', v)}
+          />
+        </Field>
+
+        <SubHeading>Combinada del día</SubHeading>
+        <Field
+          label="Una combinada nueva cada día"
+          subtitle="def. apagado"
+          info="Una combinada nueva cada día dentro de la ventana semanal, armada con la predicción oficial que ya existe (no se regenera nada), la cuota más reciente disponible y las alineaciones confirmadas como FILTRO de patas. Es la palanca de retención: una razón de abrir la app hoy. El aviso push sale una vez al día (dedupe por día) y el candado se suelta si el envío falla; un aviso al día es el límite que la gente tolera antes de silenciar la app. Con el flag apagado la diaria sigue como hoy, a la hora UTC de arriba."
+        >
+          <Toggle value={form.combinadasDailyRelease ?? false} onChange={(v) => setField('combinadasDailyRelease', v)} />
+        </Field>
+        <Field
+          label="Hora (Caracas)"
+          subtitle="0–19 · def. 10"
+          info="Hora de Caracas (0-19) a la que se arma la combinada del día cuando el flag está encendido. El tope es 19 porque el día de la corrida se cierra a las 20:00 de Caracas (medianoche UTC): una hora mayor abriría la puerta en un día que ya cambió, y el backend rechaza valores por encima de 19. Moverla a después de las alineaciones cambia la hora a la que llega el push, que ya es un hábito: decídelo aparte y mira primero la consulta de partidos repetidos."
+        >
+          <Input type="number" min={0} max={19} className="w-24" value={form.combinadasDailyHourCaracas ?? 10} onChange={(e) => setField('combinadasDailyHourCaracas', clamp(Number(e.target.value) || 0, 0, 19))} />
+        </Field>
+        <Field
+          label="Evitar partidos ya usados en la ventana"
+          subtitle="def. apagado"
+          info="El pool del día excluye los partidos que la ventana semanal en curso (la del día de corte) ya usó en otros días del mismo scope, para que la combinada de hoy traiga partidos nuevos. Repetir un partido en otro día no cuenta como combinada duplicada: solo consume su tope de uso por partido. Si la lectura falla, no excluye nada y la corrida sigue (fallo abierto, con aviso en el log). Nace apagado para que el deploy no cambie el pool sin que lo decidas. El rollout del plan es encender ESTE switch primero, una semana, y mirar la consulta de partidos repetidos antes de encender «Una combinada nueva cada día»."
+        >
+          <Toggle value={form.combinadasDailyAvoidWindowReuse ?? false} onChange={(v) => setField('combinadasDailyAvoidWindowReuse', v)} />
+        </Field>
+
         <SubHeading>Rango de patas y anti-solapamiento</SubHeading>
         <Field label="Patas min/max (regular)" subtitle="Dentro del tope global de arriba">
           <div className="flex items-center gap-2">
@@ -227,7 +338,7 @@ export function CombinadasTab({
         <Field
           label="Max. regular por partido"
           subtitle="def. 1 · 0 = sin tope"
-          info="En cuantas combinadas regular distintas puede aparecer un mismo partido. Hasta ahora el tier regular NO tenia tope y ese era el agujero: el 2026-09-07 seis combinadas salieron de siete picks distintos y un solo pick fallido (Cagliari over 1.5, presente en cinco de las seis) las mato todas a la vez. El conteo cubre la semana entera y cruza los dos productos, asi que la combinada semanal ya no puede volver a anclarse en un partido que la diaria uso esos dias (y al reves). Cada tier cuenta el suyo: una pata premium no recorta el pool regular. Ojo: con el tope activo el numero de combinadas queda limitado por los partidos distintos disponibles, asi que en dias flacos se generan menos, a proposito."
+          info="En cuantas combinadas regular distintas puede aparecer un mismo partido. Hasta ahora el tier regular NO tenia tope y ese era el agujero: el 2026-09-07 seis combinadas salieron de siete picks distintos y un solo pick fallido (Cagliari over 1.5, presente en cinco de las seis) las mato todas a la vez. El conteo cubre la semana entera y cruza los dos productos, asi que la combinada semanal ya no puede volver a anclarse en un partido que la diaria uso esos dias (y al reves). Cada tier cuenta el suyo: una pata premium no recorta el pool regular. Ojo: con el tope activo el numero de combinadas queda limitado por los partidos distintos disponibles, asi que en dias flacos se generan menos, a proposito. Con 2, las dos patas del mismo partido tienen que ser de FAMILIAS de mercado distintas (goles / resultado / tarjetas / corners / jugador): es una regla dura que no se relaja, para que 'mas de 2.5 goles' y 'ambos marcan' del mismo partido no se presenten como diversificacion. Es lo que le da pool a la ventana de lunes a jueves (4 partidos y 2 patas: techo 2 con un uso, 4 con dos). Sube a 2 solo despues de desplegar esa regla."
         >
           <Input type="number" min={0} max={5} className="w-24" value={form.combinadasMaxRegularPerMatch ?? 1} onChange={(e) => setField('combinadasMaxRegularPerMatch', Number(e.target.value))} />
         </Field>
@@ -298,6 +409,57 @@ export function CombinadasTab({
 
         <Field label="Equipos excluidos (premium)" subtitle="Salta cualquier combinada premium con estos equipos">
           <TeamBlacklistPicker value={form.combinadasPremiumExcludedTeams ?? []} onChange={(v) => setField('combinadasPremiumExcludedTeams', v)} />
+        </Field>
+      </SectionCard>
+
+      <SectionCard
+        title="Combinadas temáticas"
+        subtitle="Otra ventana de cuota sobre la misma maquinaria, sin competir por las patas de la del día"
+        info="Una combinada temática se arma DESPUÉS de las del día, con su propio cupo de uso por partido sembrado desde lo ya consumido (no roba patas), y se guarda con su tema. Es la misma selección de máxima probabilidad de la premium con otra ventana de cuota y patas fijas. La app la pinta con una etiqueta (necesita un AAB nuevo); el teaser de Telegram sigue publicando la del día, no la temática. Los temas siguientes (Goles, Liga) llegan cuando la Segura tenga tres semanas de datos."
+      >
+        <SubHeading>Tema Segura</SubHeading>
+        <Field
+          label="Tema Segura"
+          subtitle="def. apagado"
+          info="Arma cada día una combinada de pocas patas con cuota combinada corta (la ventana de abajo), eligiendo la combinación de MAYOR probabilidad con la misma maquinaria que la premium de máxima probabilidad. NO es una garantía de acierto y la app no puede presentarla como tal: con cuota 1.5-1.8 el objetivo realista ronda el 60 %, y con 2-3 unidades por semana no se puede concluir nada antes de tres semanas. El track record público sigue oculto bajo el mínimo de liquidadas de «Track record en la app», que es lo correcto. Con el pool corto no sale nada en vez de salirse de la ventana."
+        >
+          <Toggle value={form.combinadasThemeSafeEnabled ?? false} onChange={(v) => setField('combinadasThemeSafeEnabled', v)} />
+        </Field>
+        <Field
+          label="Tier"
+          subtitle="def. Gratis"
+          info="Gratis maximiza la retención (el objetivo declarado) pero puede canibalizar la premium, que a cuota 2.0 tiene un techo honesto de 47-50 % y ya va 3 ganadas / 11 perdidas; Premium la protege pero no retiene al usuario gratuito, que es quien se va. El control existe para no decidirlo en el código: cámbialo cuando lo midas."
+        >
+          <Select
+            className="w-40"
+            value={form.combinadasThemeSafeTier ?? 'regular'}
+            onChange={(e) => setField('combinadasThemeSafeTier', e.target.value === 'premium' ? 'premium' : 'regular')}
+          >
+            <option value="regular">Gratis</option>
+            <option value="premium">Premium</option>
+          </Select>
+        </Field>
+        <Field
+          label="Cuota combinada min/max"
+          subtitle="def. 1.50 a 1.80"
+          info="Ventana de cuota combinada del tema (1.1-5). La Segura elige la combinación de mayor probabilidad cuya cuota combinada cae dentro. Un mínimo por encima del máximo no se guarda."
+        >
+          <MinMaxPair
+            lo={1.1}
+            hi={5}
+            step={0.05}
+            min={form.combinadasThemeSafeMinOdds ?? 1.5}
+            max={form.combinadasThemeSafeMaxOdds ?? 1.8}
+            onMin={(v) => setField('combinadasThemeSafeMinOdds', v)}
+            onMax={(v) => setField('combinadasThemeSafeMaxOdds', v)}
+          />
+        </Field>
+        <Field
+          label="Patas"
+          subtitle="2–3 · def. 2"
+          info="Número FIJO de patas del tema (2 o 3). Dos patas a cuota 1.5-1.8 es el diseño medido; con tres la cuota se estira y la probabilidad baja."
+        >
+          <Input type="number" min={2} max={3} className="w-24" value={form.combinadasThemeSafeLegs ?? 2} onChange={(e) => setField('combinadasThemeSafeLegs', clamp(Number(e.target.value) || 2, 2, 3))} />
         </Field>
       </SectionCard>
 
@@ -373,6 +535,34 @@ export function CombinadasTab({
             <span className="text-xs text-text-muted">/</span>
             <Input type="number" min={0} max={5} className="w-20" value={form.weeklyCombinadasCountPremium ?? 1} onChange={(e) => setField('weeklyCombinadasCountPremium', Number(e.target.value))} />
           </div>
+        </Field>
+        <Field
+          label="Regular semanal min/max"
+          subtitle="def. 1 a 4"
+          info="Rango del conteo adaptativo de la regular semanal (0-8), por ventana. Solo actúa con «Conteo adaptativo» (card Combinadas) encendido; si no, manda «Cuantas generar». Con el fin de semana lleno (45-60 partidos con predicción) el pool da para 3-4 por tier; la ventana de lunes a jueves casi nunca pasa de 1. Enciéndelo dejando 1 a 1 la primera semana y sube después."
+        >
+          <MinMaxPair
+            lo={0}
+            hi={8}
+            min={form.weeklyCombinadasMinRegular ?? 1}
+            max={form.weeklyCombinadasMaxRegular ?? 4}
+            onMin={(v) => setField('weeklyCombinadasMinRegular', v)}
+            onMax={(v) => setField('weeklyCombinadasMaxRegular', v)}
+          />
+        </Field>
+        <Field
+          label="Premium semanal min/max"
+          subtitle="def. 1 a 4"
+          info="Rango del conteo adaptativo de la premium semanal (0-8), por ventana. Mismo criterio que la regular; con varias premium por ventana las siguientes combinaciones son peores que la primera, así que vigila la liquidación de la semanal antes de subir el máximo. El «Minimo de predicciones V1» sigue siendo la puerta de entrada de la ventana."
+        >
+          <MinMaxPair
+            lo={0}
+            hi={8}
+            min={form.weeklyCombinadasMinPremium ?? 1}
+            max={form.weeklyCombinadasMaxPremium ?? 4}
+            onMin={(v) => setField('weeklyCombinadasMinPremium', v)}
+            onMax={(v) => setField('weeklyCombinadasMaxPremium', v)}
+          />
         </Field>
         <Field
           label="Minimo de predicciones V1"

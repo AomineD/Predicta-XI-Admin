@@ -29,6 +29,7 @@ import {
   Database,
   Megaphone,
   Undo2,
+  FlaskConical,
 } from 'lucide-react';
 
 type IconType = ComponentType<{ size?: number; className?: string }>;
@@ -48,6 +49,7 @@ const NAV: NavEntry[] = [
       { href: '/predictions', label: 'Predictions', icon: Sparkles },
       { href: '/matches', label: 'Matches', icon: CalendarDays },
       { href: '/combinadas', label: 'Combinadas', icon: Layers },
+      { href: '/engine-study', label: 'Estudio del motor', icon: FlaskConical },
       { href: '/models', label: 'Models', icon: BarChart3 },
       { href: '/consumo', label: 'Consumo', icon: Activity },
     ],
