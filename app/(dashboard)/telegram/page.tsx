@@ -11,12 +11,15 @@ import { SectionCard, Field, Toggle, NumInput } from '@/components/ui/form-contr
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { LeaguePicker } from '@/components/pickers/LeaguePicker';
 import { TeamPicker } from '@/components/pickers/TeamPicker';
+import { TemplateEditor } from '@/components/telegram/TemplateEditor';
+import { CustomEmojiManager } from '@/components/telegram/CustomEmojiManager';
 
 /* ── tabs ───────────────────────────────────────────────────────────────────── */
 
 const TG_TABS = [
   { id: 'connection', label: 'Conexión' },
   { id: 'content', label: 'Contenido' },
+  { id: 'templates', label: 'Plantillas' },
   { id: 'creatives', label: 'Creativos' },
   { id: 'queue', label: 'Cola' },
   { id: 'history', label: 'Historial' },
@@ -175,7 +178,20 @@ const TYPE_LABELS: Record<string, string> = {
  * esos dos controles es peor que no tenerlos: quien los usa cree haber cambiado
  * algo y no pasa nada, sin ningún error que lo delate.
  */
-const DETERMINISTIC_TYPES = new Set<string>(['goal', 'promo', 'poll', 'fun_fact', 'news']);
+const DETERMINISTIC_TYPES = new Set<string>([
+  'goal',
+  'promo',
+  'poll',
+  'fun_fact',
+  'news',
+  // Los cinco con maqueta editable (pestaña «Plantillas»). Componen con su
+  // maqueta contra los hechos, sin pasar por el redactor: aquí su «Prompt extra»
+  // sería un control inerte, y lo que sí cambia el texto está en esa pestaña.
+  'match_result',
+  'standings_recap',
+  'match_teaser',
+  'today_matches',
+]);
 
 /**
  * Tipos de noticia que el selector editorial puede mirar, en el orden en el que
@@ -1414,7 +1430,9 @@ export default function TelegramPage() {
 
             <TypeCard
               title="Tablas"
-              subtitle="Top-5 de las ligas configuradas al cierre del día."
+              subtitle="Solo las ligas que se movieron ese día, al cierre."
+              info="Solo entran las competiciones con algún partido terminado ese día: publicar una tabla que no ha cambiado desde ayer enseña al lector a no abrir el mensaje. El texto se compone con su maqueta, en la pestaña «Plantillas»."
+              deterministic
               config={typeCfg('standings_recap')}
               onChange={(p) => patchType('standings_recap', p)}
               extra={
@@ -1432,6 +1450,8 @@ export default function TelegramPage() {
             <TypeCard
               title="Partidazo"
               subtitle="El partido marquee del día con el pronóstico principal."
+              info={'El texto de este tipo se compone con su maqueta, en la pestaña «Plantillas».'}
+              deterministic
               config={typeCfg('match_teaser')}
               onChange={(p) => patchType('match_teaser', p)}
             />
@@ -1456,7 +1476,7 @@ export default function TelegramPage() {
             <TypeCard
               title="Goles en vivo"
               subtitle="Avisa en el canal cada vez que cae un gol."
-              info="Se dispara por el gol, no por el reloj, así que no tiene horario. Solo cubre las ligas que ESPN sigue y que actives abajo. El texto es fijo (marcador, goleador y minuto): no pasa por el redactor IA para que salga en segundos y nadie pueda reescribir un marcador."
+              info="Se dispara por el gol, no por el reloj, así que no tiene horario. Solo cubre las ligas que ESPN sigue y que actives abajo. El texto es fijo (marcador, goleador y minuto): no pasa por el redactor IA para que salga en segundos y nadie pueda reescribir un marcador. Su maqueta se edita en la pestaña «Plantillas»."
               config={typeCfg('goal')}
               onChange={(p) => patchType('goal', p)}
               eventDriven
@@ -1470,6 +1490,18 @@ export default function TelegramPage() {
                     <Toggle
                       value={boolSetting('goal', 'shadowMode', true)}
                       onChange={(v) => patchSetting('goal', 'shadowMode', v)}
+                    />
+                  </Field>
+                  <Field
+                    label="Confirmación antes de publicar"
+                    subtitle="Segundos que el gol debe aguantar vivo. 0 = publicar al detectarlo."
+                    info="ESPN se desdice: en la jornada de sombra del 12-09-2026 detectó 45 goles y acertó los 41 reales, pero los otros 4 se cayeron solos en dos minutos o menos — tres goles que nunca existieron y un minuto corregido (19'→18') que habría mandado el MISMO gol dos veces. Con este margen el gol no sale hasta que sobrevive, así que esos 4 no se habrían publicado. El precio es inmediatez: con 150 s el gol llega al canal unos 3 minutos después de marcarse. Bajarlo a 90 lo devuelve por debajo de los 2 minutos a cambio de publicar algún desmentido. Con 0 se publica al primer avistamiento y el canal tendrá que desdecirse: un mensaje se borra, pero el push ya sonó."
+                  >
+                    <NumInput
+                      value={numSetting('goal', 'confirmSeconds', 150)}
+                      onChange={(v) => patchSetting('goal', 'confirmSeconds', v)}
+                      min={0}
+                      max={600}
                     />
                   </Field>
                   <Field
@@ -1524,7 +1556,8 @@ export default function TelegramPage() {
             <TypeCard
               title="Agenda del día"
               subtitle="Los partidos analizados que aún no han empezado."
-              info="Sale por la mañana y lista solo lo que queda por jugar. Enseña la confianza del análisis principal de cada partido, nunca cuál es el pronóstico: eso está en la app."
+              info="Sale por la mañana y lista solo lo que queda por jugar, agrupado por competición y con su jornada. Enseña la confianza del análisis principal de cada partido, nunca cuál es el pronóstico: eso está en la app. El texto se compone con su maqueta, en la pestaña «Plantillas»."
+              deterministic
               config={typeCfg('today_matches')}
               onChange={(p) => patchType('today_matches', p)}
               extra={
@@ -1595,7 +1628,7 @@ export default function TelegramPage() {
             <TypeCard
               title="Final del partido"
               subtitle="Marcador, goleadores y mejor jugador al terminar."
-              info="Se dispara cuando el partido acaba, no por el reloj. El mejor del partido sale de las notas de jugador: si esa captura está apagada o la fuente no publica notas de esa liga, el mensaje sale igual pero SIN esa línea — no se inventa. Como los goles, este tipo no consume el tope global del canal."
+              info="Se dispara cuando el partido acaba, no por el reloj. El mejor del partido sale de las notas de jugador: si esa captura está apagada o la fuente no publica notas de esa liga, el mensaje sale igual pero SIN esa línea — no se inventa. Como los goles, este tipo no consume el tope global del canal y su texto no pasa por el redactor IA: su maqueta se edita en la pestaña «Plantillas»."
               config={typeCfg('match_result')}
               onChange={(p) => patchType('match_result', p)}
               eventDriven
@@ -1958,6 +1991,36 @@ export default function TelegramPage() {
                   </div>
                 ))}
               </div>
+            )}
+          </div>
+
+          {/* ── TEMPLATES ── */}
+
+          <div hidden={tab !== 'templates'} role="tabpanel" id="tabpanel-templates" aria-labelledby="tab-templates">
+            <p className="text-xs text-text-muted font-sans mb-4 flex items-center gap-1.5">
+              Los cinco tipos cuyo texto se compone con una maqueta fija, sin pasar por el redactor IA.
+              <InfoPopover label="Qué tipos usan maqueta">
+                <p>
+                  Un marcador, una tabla y una agenda son datos: el margen creativo del modelo ahí solo puede
+                  estropearlos, y son los tipos que más se repiten. Al componerse con maqueta dejan de gastar tokens
+                  — el que más ahorra es «Finaliza partido», que se compone una vez por partido terminado.
+                </p>
+                <p className="mt-2">
+                  El resto (noticias, dato curioso, balance semanal…) sigue con el redactor: ahí el valor está
+                  justamente en cómo se cuenta.
+                </p>
+              </InfoPopover>
+            </p>
+            {/* Solo se monta con la pestaña abierta: el editor pide una vista previa
+                por cada pulsación con retardo, y montarlo escondido dispara esas
+                peticiones desde cualquier otra pestaña. */}
+            {tab === 'templates' && (
+              <>
+                <TemplateEditor />
+                <div className="mt-4">
+                  <CustomEmojiManager />
+                </div>
+              </>
             )}
           </div>
 
