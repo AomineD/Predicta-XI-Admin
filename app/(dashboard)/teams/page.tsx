@@ -6,6 +6,7 @@ import { api } from '@/lib/api';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Button } from '@/components/ui/Button';
 import { TeamNewsManager } from '@/components/team-news/TeamNewsManager';
+import { LogoEnrichmentStatusCard, useLogoEnrichment } from '@/components/teams/LogoEnrichment';
 
 interface Team {
   id: number;
@@ -259,6 +260,10 @@ export default function TeamsPage() {
     mutationFn: () => api.post('/admin/standings/sync-all', {}),
   });
 
+  // Escudos HD: el mismo barrido que el cron diario de las 03:30 UTC, lanzable
+  // desde aquí, con su progreso y la lista de clubes que siguen sin escudo nítido.
+  const logoEnrichment = useLogoEnrichment();
+
   // Preparación de nueva temporada (rollover de agosto). Dispara de golpe los
   // tres barridos —plantillas + fichajes + tablas— reutilizando los mismos
   // encoladores que los botones individuales. Resuelve la brecha de verano: sin
@@ -384,8 +389,31 @@ export default function TeamsPage() {
             >
               Sync Table
             </Button>
+            <Button
+              variant="secondary"
+              loading={logoEnrichment.launching || logoEnrichment.running}
+              disabled={!logoEnrichment.storageConfigured || logoEnrichment.running}
+              onClick={logoEnrichment.launch}
+              title={
+                !logoEnrichment.storageConfigured
+                  ? 'El servidor no tiene almacenamiento configurado: no hay dónde subir los escudos.'
+                  : logoEnrichment.running
+                    ? 'Ya hay un barrido de escudos en curso: su progreso está justo debajo.'
+                    : 'Cambia el escudo pixelado de Flashscore por el nítido de football-data en los clubes que aún no lo tienen. Es la misma pasada que corre sola cada día a las 03:30 UTC. Tarda unos 3 minutos. Máx. 1 cada 5 min.'
+              }
+            >
+              Escudos HD
+            </Button>
           </div>
         }
+      />
+
+      {/* El motivo de que «Escudos HD» esté deshabilitado (sin almacenamiento, una
+          pasada en curso) también se lee aquí, visible, y no solo en el `title`. */}
+      <LogoEnrichmentStatusCard
+        status={logoEnrichment.status}
+        launchError={logoEnrichment.launchError}
+        statusError={logoEnrichment.statusError}
       />
 
       {prepareSeason.isSuccess && (

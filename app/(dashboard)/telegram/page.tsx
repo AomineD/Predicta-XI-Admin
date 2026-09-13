@@ -307,15 +307,18 @@ function CreativeField({
   value,
   creatives,
   onChange,
+  subtitle = 'Creativo que acompaña a la publicación. Vacío = solo texto.',
 }: {
   value: string | null;
   creatives: Creative[];
   onChange: (v: string | null) => void;
+  /** Otro texto cuando el creativo no es la imagen principal (el respaldo de la agenda con escudos). */
+  subtitle?: string;
 }) {
   return (
     <Field
       label="Imagen"
-      subtitle="Creativo que acompaña a la publicación. Vacío = solo texto."
+      subtitle={subtitle}
       info="Se elige de los creativos subidos en la pestaña «Creativos». Telegram descarga la imagen desde su lado, así que tiene que estar publicada en nuestro dominio."
     >
       <div className="flex items-center gap-3">
@@ -864,12 +867,16 @@ export default function TelegramPage() {
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [previewType, setPreviewType] = useState<ContentType | null>(null);
   const [previewTtlSeconds, setPreviewTtlSeconds] = useState<number | null>(null);
+  /** La foto que acompañará al post. Sin verla aquí, una imagen rota o mal
+   *  compuesta (la agenda con escudos) solo se descubría ya publicada. */
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
 
   const discardPreview = () => {
     setPreviewText(null);
     setPreviewId(null);
     setPreviewType(null);
     setPreviewTtlSeconds(null);
+    setPreviewImageUrl(null);
   };
 
   // "Última verdad" de qué tipo está vigente, para que `onSuccess`/`onError`
@@ -892,7 +899,7 @@ export default function TelegramPage() {
       if (reuse && !previewId) {
         return Promise.reject(new Error('La vista previa ya no es válida. Vuelve a generarla.'));
       }
-      return api.post<{ status: string; text: string; usedLlm?: boolean; previewId?: string; previewTtlSeconds?: number }>(
+      return api.post<{ status: string; text: string; usedLlm?: boolean; imageUrl?: string | null; previewId?: string; previewTtlSeconds?: number }>(
         '/admin/telegram/compose',
         {
           type,
@@ -915,6 +922,7 @@ export default function TelegramPage() {
         setPreviewId(res.previewId ?? null);
         setPreviewType(vars.type);
         setPreviewTtlSeconds(res.previewTtlSeconds ?? null);
+        setPreviewImageUrl(res.imageUrl ?? null);
         setComposeMsg(res.usedLlm === false ? 'Vista previa (plantilla fija, sin IA).' : 'Vista previa.');
         return;
       }
@@ -1387,6 +1395,19 @@ export default function TelegramPage() {
                 )}
               </Field>
               {composeMsg && <p className="text-xs font-sans text-text-secondary pt-2">{composeMsg}</p>}
+              {/* La url sale de los hechos del post (el creativo o la imagen compuesta) y
+                  el backend ya la valida como http(s); se repite aquí porque va a un href. */}
+              {previewText && previewImageUrl && /^https?:\/\//i.test(previewImageUrl) && (
+                <a href={previewImageUrl} target="_blank" rel="noopener noreferrer" className="inline-block mt-2">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={previewImageUrl}
+                    alt="Imagen que acompaña a la publicación"
+                    referrerPolicy="no-referrer"
+                    className="max-h-80 rounded-xl border border-border"
+                  />
+                </a>
+              )}
               {previewText && (
                 <pre className="whitespace-pre-wrap text-xs text-text-secondary font-sans bg-surface-2 rounded-xl p-3 mt-2 max-h-80 overflow-auto">
                   {previewText}
@@ -1581,9 +1602,40 @@ export default function TelegramPage() {
                       emptyStateText="Vacío = todas las ligas activas."
                     />
                   </Field>
+                  <Field
+                    label="Imagen con escudos"
+                    subtitle="Compone la foto con los escudos de los partidos del día."
+                    info="Hasta 8 partidos, cada uno con su escudo local, la hora y el escudo visitante, sin nombres: ya van en el texto. Un equipo sin escudo nítido sale con sus iniciales, y los partidos que no caben se cuentan como «+N». Sustituye al creativo, que queda de respaldo si la imagen no se puede componer. No depende de «Tarjetas con 2 escudos», que es el interruptor de la tarjeta de un partido. Revísala con «Ver cómo queda» antes de encender el tipo."
+                  >
+                    <Toggle
+                      value={boolSetting('today_matches', 'crestCard', false)}
+                      onChange={(v) => patchSetting('today_matches', 'crestCard', v)}
+                    />
+                  </Field>
+                  {boolSetting('today_matches', 'crestCard', false) && (
+                    <Field
+                      label="Formato de la imagen"
+                      subtitle="El vertical se ve más grande en el móvil."
+                      info="Vertical (1080×1350): una columna de partidos. Horizontal (1200×630): el tamaño de las tarjetas de partido; a partir de 4 partidos los reparte en dos columnas."
+                    >
+                      <Select<'portrait' | 'landscape'>
+                        value={typeCfg('today_matches').settings.crestCardFormat === 'landscape' ? 'landscape' : 'portrait'}
+                        options={[
+                          { value: 'portrait', label: 'Vertical (1080×1350)' },
+                          { value: 'landscape', label: 'Horizontal (1200×630)' },
+                        ]}
+                        onChange={(v) => patchSetting('today_matches', 'crestCardFormat', v)}
+                      />
+                    </Field>
+                  )}
                   <CreativeField
                     value={imageOf('today_matches')}
                     creatives={creatives}
+                    subtitle={
+                      boolSetting('today_matches', 'crestCard', false)
+                        ? 'Respaldo si la imagen con escudos no se puede componer. Vacío = solo texto.'
+                        : undefined
+                    }
                     onChange={(v) => patchSetting('today_matches', 'imageUrl', v)}
                   />
                 </>
