@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Button } from '@/components/ui/Button';
-import { SectionCard } from '@/components/ui/form-controls';
+import { Field, SectionCard, Toggle } from '@/components/ui/form-controls';
 import { MatchesSubnav } from '@/components/matches/MatchesSubnav';
 import { formatDateTime } from '@/lib/utils';
 
@@ -23,6 +23,8 @@ interface FeaturedMatch {
 interface FeaturedResponse {
   leagueIds: number[];
   matches: FeaturedMatch[];
+  /** Kill-switch de "Today's results" en la Home (P-024). */
+  todayResultsEnabled?: boolean;
 }
 
 interface Competition {
@@ -62,6 +64,17 @@ export default function FeaturedMatchesPage() {
       qc.invalidateQueries({ queryKey: ['admin-featured-matches'] });
     },
   });
+
+  // ── Today's results (P-024) ────────────────────────────────────────────────
+  // El switch guarda al cambiar. Mientras la petición viaja se muestra el valor
+  // pedido, para que no rebote al anterior hasta que llegue la recarga.
+  const saveTodayResults = useMutation({
+    mutationFn: (enabled: boolean) => api.put('/admin/featured-results', { enabled }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-featured-matches'] }),
+  });
+  const todayResultsEnabled = saveTodayResults.isPending
+    ? (saveTodayResults.variables ?? false)
+    : (data?.todayResultsEnabled ?? false);
 
   // ── Manual order (pinned) ──────────────────────────────────────────────────
   // `pinned` is the ordered list of apiFootballIds the admin forces to the top
@@ -178,6 +191,24 @@ export default function FeaturedMatchesPage() {
               <span className="text-[11px] text-danger font-sans">{(saveLeagues.error as Error).message}</span>
             )}
           </div>
+        </SectionCard>
+
+        {/* Today's results (P-024) */}
+        <SectionCard
+          title="Today's results"
+          subtitle="Finished matches from the featured leagues, on Home."
+          info="A carousel right under Featured matches with today's finished matches from the leagues selected above, each with how our prediction did. 'Today' is each user's local day, not Caracas. Up to 10 matches, the user's favorite teams first. The block hides itself while nothing has finished yet. The hit rate uses the same count as the prediction report (without the longshot picks). Off by default."
+        >
+          <Field label="Show on Home" subtitle="def. off">
+            <Toggle
+              value={todayResultsEnabled}
+              onChange={(v) => saveTodayResults.mutate(v)}
+              disabled={isLoading || saveTodayResults.isPending}
+            />
+          </Field>
+          {saveTodayResults.isError && (
+            <span className="text-[11px] text-danger font-sans">{(saveTodayResults.error as Error).message}</span>
+          )}
         </SectionCard>
 
         {/* Manual order */}
