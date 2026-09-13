@@ -22,6 +22,48 @@ const MAX_CREATE_COST = 100;
 const MAX_GROUP_SIZE = 1000;
 
 const TIERS = ['free', 'premium', 'club'] as const;
+type TierId = (typeof TIERS)[number];
+
+const TIER_LABELS: Record<TierId, string> = { free: 'Free', premium: 'PRO', club: 'Club' };
+
+/** Funciones con plan mínimo (mirror of GROUP_FEATURES in quiniela-tier-limits.ts). */
+const TIER_FEATURES: { key: string; label: string; info: string }[] = [
+  {
+    key: 'createWeekly',
+    label: 'Crear quiniela de una jornada',
+    info: 'Plan mínimo para crear una quiniela de una sola jornada. Por debajo, el backend responde PREMIUM_REQUIRED o GROUP_CLUB_REQUIRED y la app muestra el candado con la suscripción que lo desbloquea.',
+  },
+  {
+    key: 'createRunning',
+    label: 'Crear quiniela de varias jornadas',
+    info: 'Plan mínimo para crear una corrida. Las semanas máximas y los partidos por semana salen de los topes por plan de la card "Limits by tier".',
+  },
+  {
+    key: 'createChampionship',
+    label: 'Crear quiniela de campeonato',
+    info: 'Plan mínimo para crear un campeonato. Free paga el costo en créditos de su card; PRO y Club crean gratis.',
+  },
+  {
+    key: 'createTeam',
+    label: 'Crear quiniela por equipos',
+    info: 'Plan mínimo para crear una quiniela por equipos. Equipos y miembros por equipo salen de los topes por plan de la card "Limits by tier".',
+  },
+  {
+    key: 'weeklyAutoSource',
+    label: 'Partidos automáticos en una jornada',
+    info: 'Candado de producto en la app: por debajo de este plan, "Entran solos" aparece bloqueado en una jornada. El backend no lo valida, porque quien elige a mano puede escoger los mismos partidos; lo que sí valida es el número de partidos de su plan.',
+  },
+  {
+    key: 'runningManualSource',
+    label: 'Elegir los partidos de cada jornada',
+    info: 'Plan mínimo para crear una corrida con "Los elijo yo". Curar las jornadas siguientes sigue siendo de Club.',
+  },
+  {
+    key: 'runningClubExtras',
+    label: 'Extras de Club',
+    info: 'Bono de podio propio y bono de marcadores exactos de la corrida. Por debajo de este plan se descartan al crear, sin error (las apps viejas los mandan siempre).',
+  },
+];
 
 /* ── inner tabs ────────────────────────────────────────────────────────────── */
 
@@ -109,6 +151,12 @@ interface SocialConfig {
   runningPerWeekPrizeCredits: number;
   runningMaxPrizeCredits: number;
   runningDefaultPodiumBonus: Record<string, number>;
+  // Topes y acceso por plan (migr 0218). Los globales runningMaxWeeks / teamMaxTeams /
+  // teamMaxMembersPerTeam siguen llegando, pero solo como respaldo: no se editan.
+  runningMaxWeeksByTier: Record<string, number>;
+  teamMaxTeamsByTier: Record<string, number>;
+  teamMaxMembersPerTeamByTier: Record<string, number>;
+  minTierByFeature: Record<string, TierId>;
   // Puntos de eliminatorias / categorías / ranking (idea #21). Antes hardcodeados.
   knockoutExactScorePoints: number;
   knockoutCorrectOutcomePoints: number;
@@ -607,13 +655,40 @@ function ConfigTab() {
         </Field>
       </SectionCard>
 
-      <SectionCard title="Limits by tier" subtitle="-1 = unlimited" info="Group size and active-group count by the owner's tier.">
+      <SectionCard title="Limits by tier" subtitle="-1 = unlimited" info="Topes por plan del DUEÑO al crear. Se congelan en el grupo al crearlo: si el dueño cambia de plan, sus grupos siguen como estaban.">
         <Field label="Max group size">
           <TierMap value={f.maxGroupSizeByTier} onChange={(v) => set('maxGroupSizeByTier', v)} min={1} max={MAX_GROUP_SIZE} allowUnlimited />
         </Field>
         <Field label="Max active groups">
           <TierMap value={f.maxActiveGroupsByTier} onChange={(v) => set('maxActiveGroupsByTier', v)} max={MAX_GROUP_SIZE} allowUnlimited />
         </Field>
+        <Field label="Varias jornadas · semanas máximas" subtitle="1–52" info="Hasta cuántas semanas puede durar una corrida desde que se crea. También acota cuántas jornadas ingiere.">
+          <TierMap value={f.runningMaxWeeksByTier} onChange={(v) => set('runningMaxWeeksByTier', v)} min={1} max={52} />
+        </Field>
+        <Field label="Por equipos · equipos" subtitle="2–8" info="Máximo de equipos de una quiniela por equipos.">
+          <TierMap value={f.teamMaxTeamsByTier} onChange={(v) => set('teamMaxTeamsByTier', v)} min={2} max={8} />
+        </Field>
+        <Field label="Por equipos · miembros por equipo" subtitle="1–100" info="Máximo de miembros por equipo que puede elegir el creador. La capacidad del grupo es equipos × miembros + 1.">
+          <TierMap value={f.teamMaxMembersPerTeamByTier} onChange={(v) => set('teamMaxMembersPerTeamByTier', v)} min={1} max={100} />
+        </Field>
+      </SectionCard>
+
+      <SectionCard title="Acceso por plan" subtitle="Plan mínimo" info="Qué plan hace falta para cada función. Los tipos nacen en Free: si hace falta volver atrás, se cambia aquí sin desplegar. La app pinta un candado con la suscripción que lo desbloquea.">
+        {TIER_FEATURES.map((feature) => (
+          <Field key={feature.key} label={feature.label} subtitle={feature.key} info={feature.info}>
+            <select
+              value={f.minTierByFeature[feature.key] ?? 'free'}
+              onChange={(e) => set('minTierByFeature', { ...f.minTierByFeature, [feature.key]: e.target.value as TierId })}
+              className="h-9 px-3 rounded-xl text-sm bg-surface-2 border border-border text-text-primary font-sans"
+            >
+              {TIERS.map((tier) => (
+                <option key={tier} value={tier}>
+                  {TIER_LABELS[tier]}
+                </option>
+              ))}
+            </select>
+          </Field>
+        ))}
       </SectionCard>
 
       <SectionCard title="Quinielas de jornada · partidos" subtitle="1–50" info="Rango de partidos que el dueño puede elegir al armar una quiniela de jornada. El mínimo NO aplica a una corrida (una jornada suya puede tener un solo partido); el tope por tier sí aplica a las dos.">
@@ -657,9 +732,9 @@ function ConfigTab() {
 
       <SectionCard
         title="Quinielas de jornada · varias semanas (corrida)"
-        subtitle="Off by default" info="La MISMA quiniela de jornada, pero durando varias semanas. El creador (PRO/Club) elige competiciones y cada semana sus partidos entran como una jornada nueva del mismo grupo — o, con curaduría manual, las pone él. Dos tablas (semanal + general acumulada); el podio de cada semana suma puntos a la general. Al terminar, un único premio escalado va al campeón general. Puntúa con los MISMOS puntos de la card de arriba. Inerte hasta encenderlo: el creador de la app solo ofrece la opción de varias jornadas con este flag + tier PRO/Club."
+        subtitle="Off by default" info="La MISMA quiniela de jornada, pero durando varias semanas. El creador elige competiciones y cada semana sus partidos entran como una jornada nueva del mismo grupo — o, con curaduría manual, las pone él. Dos tablas (semanal + general acumulada); el podio de cada semana suma puntos a la general. Al terminar, un único premio escalado va al campeón general. Puntúa con los MISMOS puntos de la card de arriba. Inerte hasta encenderlo: el creador de la app solo ofrece la opción de varias jornadas con este flag, y con candado a quien no llegue al plan mínimo de &quot;Acceso por plan&quot;."
       >
-        <Field label="Running pools enabled" subtitle="runningQuinielasEnabled" info="PRO and Club can create; Free can only join.">
+        <Field label="Running pools enabled" subtitle="runningQuinielasEnabled" info="Crea quien llegue al plan mínimo de la card &quot;Acceso por plan&quot;; las semanas máximas dependen de su plan.">
           <Toggle value={f.runningQuinielasEnabled} onChange={(v) => set('runningQuinielasEnabled', v)} />
         </Field>
         <Field
@@ -671,9 +746,6 @@ function ConfigTab() {
         </Field>
         <Field label="Creation cost (credits)" subtitle="0 = free" info="Charged to create one. Premium+ exempt, so PRO/Club create free.">
           <NumInput value={f.createCostRunning} onChange={(v) => set('createCostRunning', v)} min={0} max={MAX_CREATE_COST} />
-        </Field>
-        <Field label="Max weeks" subtitle="1–52" info="Upper bound on how long a run can last: the end date can't exceed this from now.">
-          <NumInput value={f.runningMaxWeeks} onChange={(v) => set('runningMaxWeeks', v)} min={1} max={52} />
         </Field>
         <Field
           label="Final prize: base (credits)"
@@ -716,18 +788,12 @@ function ConfigTab() {
 
       <SectionCard
         title="Team quinielas (idea #9)"
-        subtitle="Off by default" info="Club-only group type: members predict scorelines and the score is aggregated per team, with phase-by-phase elimination until a champion. Inert until enabled. The app gates the “create teams quiniela” option on this flag + Club tier."
+        subtitle="Off by default" info="Members predict scorelines and the score is aggregated per team, with phase-by-phase elimination until a champion. Inert until enabled. The app offers “create teams quiniela” with this flag, locked for owners below the minimum plan in “Acceso por plan”."
       >
-        <Field label="Team quinielas enabled" subtitle="teamQuinielasEnabled" info="Only Club owners can create.">
+        <Field label="Team quinielas enabled" subtitle="teamQuinielasEnabled" info="Crea quien llegue al plan mínimo de la card &quot;Acceso por plan&quot;; equipos y miembros por equipo dependen de su plan.">
           <Toggle value={f.teamQuinielasEnabled} onChange={(v) => set('teamQuinielasEnabled', v)} />
         </Field>
-        <Field label="Max teams" subtitle="2–8" info="Upper bound on teams per quiniela.">
-          <NumInput value={f.teamMaxTeams} onChange={(v) => set('teamMaxTeams', v)} min={2} max={8} />
-        </Field>
-        <Field label="Max members per team" subtitle="1–100" info="Upper bound on the per-team size the creator can choose.">
-          <NumInput value={f.teamMaxMembersPerTeam} onChange={(v) => set('teamMaxMembersPerTeam', v)} min={1} max={100} />
-        </Field>
-        <Field label="Creation cost (credits)" subtitle="0 = free" info="Charged to create one. Premium+ exempt, so Club creates free.">
+        <Field label="Creation cost (credits)" subtitle="0 = free" info="Charged to create one. Premium+ exempt, so PRO and Club create free.">
           <NumInput value={f.teamCreateCost} onChange={(v) => set('teamCreateCost', v)} min={0} max={MAX_CREATE_COST} />
         </Field>
         <Field label="Champion prize (credits)" subtitle="Per-prize cap: 500" info="House-funded credits paid to each member of the winning team.">
@@ -1116,7 +1182,7 @@ function ConfigTab() {
 
       <SectionCard
         title="Championship quiniela (idea #29)"
-        subtitle="Solo PRO/CLUB" info="Reemplaza a las quinielas de torneo y de eliminatoria: un solo tipo con tres fases — las categorías del torneo, la tabla de la fase de liga y las llaves. Las dos primeras fases cierran juntas antes del primer partido; las llaves, cada una en su kickoff. Los cortes de rango de la tabla se definen POR COMPETICIÓN en su editor; sin ellos, la fase de tabla no se ofrece."
+        subtitle="Plan mínimo en Acceso por plan" info="Reemplaza a las quinielas de torneo y de eliminatoria: un solo tipo con tres fases — las categorías del torneo, la tabla de la fase de liga y las llaves. Las dos primeras fases cierran juntas antes del primer partido; las llaves, cada una en su kickoff. Los cortes de rango de la tabla se definen POR COMPETICIÓN en su editor; sin ellos, la fase de tabla no se ofrece."
       >
         <Field label="Championship quinielas enabled" info="Master flag. Off = la app no ofrece crear campeonatos; los ya creados siguen liquidando.">
           <Toggle
@@ -1124,7 +1190,7 @@ function ConfigTab() {
             onChange={(v) => set('championshipQuinielasEnabled', v)}
           />
         </Field>
-        <Field label="Costo de creación" subtitle="Créditos" info="Los suscriptores (PRO/CLUB) están exentos — y son los únicos que pueden crearla.">
+        <Field label="Costo de creación" subtitle="Créditos" info="Lo paga Free al crearla; los suscriptores (PRO/CLUB) están exentos.">
           <NumInput
             value={f.createCostChampionship}
             onChange={(v) => set('createCostChampionship', v)}
