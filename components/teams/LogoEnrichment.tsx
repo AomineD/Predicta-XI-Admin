@@ -26,8 +26,12 @@ export interface LogoEnrichFallbackStats {
   updated: number;
   lookups: number;
   lookupsFailed: number;
-  /** Clubes que no se buscaron por el tope de búsquedas de la pasada. */
+  /** Clubes que no se buscaron por el tope de búsquedas, por cancelar o por cortar la fase. */
   notTried: number;
+  /** Clubes que no se buscaron porque ya se buscaron en los últimos 7 días sin resultado. Opcional en informes viejos. */
+  skippedRecentMiss?: number;
+  /** La fase se cortó a mitad porque TheSportsDB limitó (429) o falló varias veces seguidas. Opcional en informes viejos. */
+  stoppedEarly?: boolean;
 }
 
 /** Respuesta de `GET /admin/logos/enrich-hd/status`. */
@@ -256,6 +260,8 @@ function LogoEnrichmentReport({ report }: { report: LogoEnrichStatus['report'] }
   const fromTsdb = report.fallback?.updated ?? 0;
   const tsdbFailed = report.fallback?.lookupsFailed ?? 0;
   const notTried = report.fallback?.notTried ?? 0;
+  const stoppedEarly = report.fallback?.stoppedEarly ?? false;
+  const recentMisses = report.fallback?.skippedRecentMiss ?? 0;
   const withoutMatches = report.clubsWithoutMatches ?? 0;
 
   return (
@@ -274,14 +280,22 @@ function LogoEnrichmentReport({ report }: { report: LogoEnrichStatus['report'] }
       )}
       {tsdbFailed > 0 && (
         <p className="text-warning text-xs mt-1">
-          TheSportsDB no respondió en {tsdbFailed === 1 ? 'una búsqueda' : `${tsdbFailed} búsquedas`}: esos clubes
-          figuran «sin verificar» y se vuelven a buscar en la próxima pasada.
+          TheSportsDB no respondió en {tsdbFailed === 1 ? 'una búsqueda' : `${tsdbFailed} búsquedas`}
+          {stoppedEarly ? ' y la búsqueda se cortó a mitad' : ''}: esos clubes figuran «sin verificar» y se vuelven a
+          buscar en la próxima pasada.
         </p>
       )}
       {notTried > 0 && (
         <p className="text-text-muted text-xs mt-1">
-          {notTried === 1 ? 'Un club quedó' : `${notTried} clubes quedaron`} sin buscar en TheSportsDB por el tope de
-          búsquedas de cada pasada; figuran «sin verificar». Se busca primero a los que juegan antes.
+          {notTried === 1 ? 'Un club quedó' : `${notTried} clubes quedaron`} sin buscar en TheSportsDB en esta pasada
+          {stoppedEarly ? '' : ' por el tope de búsquedas'}; figuran «sin verificar». Se busca primero a los que juegan
+          antes.
+        </p>
+      )}
+      {recentMisses > 0 && (
+        <p className="text-text-muted text-xs mt-1">
+          {recentMisses === 1 ? 'Un club ya se buscó' : `${recentMisses} clubes ya se buscaron`} en TheSportsDB en los
+          últimos 7 días sin encontrar un escudo seguro: no se repite la búsqueda hasta entonces.
         </p>
       )}
       {clubs.length > 0 && (
