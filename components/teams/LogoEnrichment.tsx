@@ -30,7 +30,7 @@ export interface LogoEnrichFallbackStats {
   notTried: number;
   /** Clubes que no se buscaron porque ya se buscaron en los últimos 7 días sin resultado. Opcional en informes viejos. */
   skippedRecentMiss?: number;
-  /** La fase se cortó a mitad porque TheSportsDB limitó (429) o falló varias veces seguidas. Opcional en informes viejos. */
+  /** La fase se cortó a mitad: TheSportsDB limitó (429), o búsquedas o descargas fallaron varias veces seguidas. Opcional en informes viejos. */
   stoppedEarly?: boolean;
 }
 
@@ -280,9 +280,14 @@ function LogoEnrichmentReport({ report }: { report: LogoEnrichStatus['report'] }
       )}
       {tsdbFailed > 0 && (
         <p className="text-warning text-xs mt-1">
-          TheSportsDB no respondió en {tsdbFailed === 1 ? 'una búsqueda' : `${tsdbFailed} búsquedas`}
-          {stoppedEarly ? ' y la búsqueda se cortó a mitad' : ''}: esos clubes figuran «sin verificar» y se vuelven a
-          buscar en la próxima pasada.
+          TheSportsDB no respondió en {tsdbFailed === 1 ? 'una búsqueda' : `${tsdbFailed} búsquedas`}: esos clubes
+          figuran «sin verificar» y se vuelven a buscar en la próxima pasada.
+        </p>
+      )}
+      {stoppedEarly && (
+        <p className="text-warning text-xs mt-1">
+          La búsqueda en TheSportsDB se cortó a mitad: la API limitó las peticiones o fallaron varias búsquedas o
+          descargas seguidas.
         </p>
       )}
       {notTried > 0 && (
@@ -295,7 +300,7 @@ function LogoEnrichmentReport({ report }: { report: LogoEnrichStatus['report'] }
       {recentMisses > 0 && (
         <p className="text-text-muted text-xs mt-1">
           {recentMisses === 1 ? 'Un club ya se buscó' : `${recentMisses} clubes ya se buscaron`} en TheSportsDB en los
-          últimos 7 días sin encontrar un escudo seguro: no se repite la búsqueda hasta entonces.
+          últimos 7 días sin sacar un escudo utilizable: no se repite la búsqueda hasta entonces.
         </p>
       )}
       {clubs.length > 0 && (
