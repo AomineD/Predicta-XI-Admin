@@ -11,10 +11,23 @@ export interface LogoEnrichUnmatchedClub {
   name: string;
   country: string | null;
   /**
-   * `no_match`: no casó en ninguna liga. `no_crest`: casó, pero football-data no
-   * trae escudo. `unverified`: alguna liga no respondió, así que no se sabe.
+   * `no_match`: ni football-data ni TheSportsDB lo tienen con un nombre seguro.
+   * `no_crest`: casó en football-data pero sin escudo, y TheSportsDB tampoco lo
+   * resolvió. `unverified`: no se pudo comprobar del todo (una liga de
+   * football-data o una búsqueda de TheSportsDB no respondió, o no se llegó a
+   * buscar por el tope de la pasada).
    */
   reason: 'no_match' | 'no_crest' | 'unverified';
+}
+
+/** Lo que aportó TheSportsDB en la pasada. */
+export interface LogoEnrichFallbackStats {
+  /** Escudos subidos desde TheSportsDB; ya van dentro de `clubsUpdated`. */
+  updated: number;
+  lookups: number;
+  lookupsFailed: number;
+  /** Clubes que no se buscaron por el tope de búsquedas de la pasada. */
+  notTried: number;
 }
 
 /** Respuesta de `GET /admin/logos/enrich-hd/status`. */
@@ -50,6 +63,10 @@ export interface LogoEnrichStatus {
     clubsFailed: number;
     /** Ligas cuya lista de equipos no se pudo pedir a football-data. Opcional en informes viejos. */
     competitionsFailed?: string[];
+    /** Clubes sin escudo nítido y sin ningún partido: no se buscan ni se listan. Opcional en informes viejos. */
+    clubsWithoutMatches?: number;
+    /** Opcional en informes viejos. */
+    fallback?: LogoEnrichFallbackStats;
     nationalsUpdated: number;
     nationalsFailed: number;
     leaguesUpdated: number;
@@ -61,8 +78,9 @@ const STATUS_QUERY_KEY = ['logo-enrich-status'] as const;
 
 /** El job reporta sus fases en inglés; aquí se enseñan en español. */
 const PHASE_LABELS: Record<number, string> = {
-  1: 'Escudos de clubes y emblemas de liga',
-  2: 'Banderas de selecciones',
+  1: 'Escudos de football-data y emblemas de liga',
+  2: 'Escudos de TheSportsDB',
+  3: 'Banderas de selecciones',
 };
 const ITEM_LABELS: Record<string, string> = { competition: 'competición', team: 'equipo' };
 
@@ -152,13 +170,15 @@ export function LogoEnrichmentStatusCard({
       <div className="flex items-center gap-1.5">
         <span className="text-text-primary font-medium">Escudos HD</span>
         <InfoPopover label="Qué hace el barrido de escudos HD">
-          Cambia el escudo pixelado de Flashscore por el nítido de football-data en los clubes de las
-          ligas que cubrimos, y las banderas de las selecciones, y los sube a nuestro almacenamiento.
-          Corre solo cada día a las 03:30 UTC; el botón lanza esa misma pasada ahora. Un club{' '}
-          <strong>sin casar</strong> es uno que football-data no tiene en ninguna de esas ligas, o no
-          con un nombre que se reconozca: suelen ser rivales de rondas previas europeas o equipos de
-          segunda división, y se quedan con el escudo de Flashscore. Uno <strong>sin verificar</strong>{' '}
-          no se pudo comprobar porque football-data no respondió para alguna liga.
+          Cambia el escudo pixelado de Flashscore por uno nítido y lo sube a nuestro almacenamiento:
+          primero el de football-data en los clubes de las ligas que cubre; los que no están ahí
+          (rivales de previas europeas, equipos de segunda) se buscan en TheSportsDB, hasta{' '}
+          40 por pasada y empezando por los que juegan antes; y al final las banderas de las
+          selecciones. Corre solo cada día a las 03:30 UTC; el botón lanza esa misma pasada ahora. Un
+          club <strong>sin casar</strong> es uno que ninguna de las dos fuentes tiene con un nombre y
+          un país seguros, y se queda con el escudo de Flashscore. Uno <strong>sin verificar</strong>{' '}
+          no se pudo comprobar del todo: una fuente no respondió o no se llegó a buscar. Los clubes
+          sin ningún partido no se buscan ni se listan.
         </InfoPopover>
         {job?.finishedAt && job.status !== 'running' && (
           <span className="text-text-muted text-xs ml-auto">{formatDateTime(job.finishedAt)}</span>
@@ -217,7 +237,7 @@ function LogoEnrichmentProgress({ progress }: { progress: LogoEnrichStatus['prog
 
 const REASON_NOTES: Record<LogoEnrichUnmatchedClub['reason'], string> = {
   no_match: '',
-  no_crest: ' · football-data no trae escudo',
+  no_crest: ' · football-data lo tiene sin escudo',
   unverified: ' · sin verificar',
 };
 
@@ -233,17 +253,35 @@ function LogoEnrichmentReport({ report }: { report: LogoEnrichStatus['report'] }
   const notListed = report.clubsUnmatched - clubs.length;
   const failed = report.clubsFailed + report.nationalsFailed + report.leaguesFailed;
   const unreachable = report.competitionsFailed ?? [];
+  const fromTsdb = report.fallback?.updated ?? 0;
+  const tsdbFailed = report.fallback?.lookupsFailed ?? 0;
+  const notTried = report.fallback?.notTried ?? 0;
+  const withoutMatches = report.clubsWithoutMatches ?? 0;
 
   return (
     <div className="mt-1">
       <p className="text-xs text-text-secondary">
-        {report.clubsUpdated} escudos nuevos · {report.leaguesUpdated} emblemas de liga ·{' '}
-        {report.nationalsUpdated} banderas · {report.clubsUnmatched} clubes sin casar · {failed} fallos de descarga
+        {report.clubsUpdated} escudos nuevos{fromTsdb > 0 ? ` (${fromTsdb} de TheSportsDB)` : ''} ·{' '}
+        {report.leaguesUpdated} emblemas de liga · {report.nationalsUpdated} banderas · {report.clubsUnmatched} clubes
+        sin casar · {failed} fallos de descarga
+        {withoutMatches > 0 ? ` · ${withoutMatches} sin partidos (no se buscan)` : ''}
       </p>
       {unreachable.length > 0 && (
         <p className="text-warning text-xs mt-1">
           football-data no respondió para {unreachable.length === 1 ? 'una liga' : `${unreachable.length} ligas`} (
           {unreachable.join(', ')}): los clubes que no casaron en las demás figuran «sin verificar», no como sin casar.
+        </p>
+      )}
+      {tsdbFailed > 0 && (
+        <p className="text-warning text-xs mt-1">
+          TheSportsDB no respondió en {tsdbFailed === 1 ? 'una búsqueda' : `${tsdbFailed} búsquedas`}: esos clubes
+          figuran «sin verificar» y se vuelven a buscar en la próxima pasada.
+        </p>
+      )}
+      {notTried > 0 && (
+        <p className="text-text-muted text-xs mt-1">
+          {notTried === 1 ? 'Un club quedó' : `${notTried} clubes quedaron`} sin buscar en TheSportsDB por el tope de
+          búsquedas de cada pasada; figuran «sin verificar». Se busca primero a los que juegan antes.
         </p>
       )}
       {clubs.length > 0 && (
