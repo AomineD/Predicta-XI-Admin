@@ -98,7 +98,16 @@ export const DATA_FIELDS = [
 // no off switch, so there it only omits the setting and the provider default
 // applies. See the field's ⓘ in GeneralTab.
 export const REASONING_OPTIONS = ['', 'none', 'low', 'medium', 'high'];
-export const PROVIDERS = ['deepseek', 'openai', 'google', 'zhipu', 'moonshot'];
+export const PROVIDERS = ['deepseek', 'openai', 'google', 'google_translate', 'zhipu', 'moonshot'] as const;
+
+export const PROVIDER_LABELS: Record<(typeof PROVIDERS)[number], string> = {
+  deepseek: 'DeepSeek',
+  openai: 'OpenAI',
+  google: 'Google Gemini',
+  google_translate: 'Google Cloud Translation',
+  zhipu: 'Zhipu',
+  moonshot: 'Moonshot',
+};
 
 // All toggles below map to a `boolean` field on PredictionConfig, so indexing
 // PredictionConfig[EngineLayerKey] collapses to `boolean` and setField stays typed.

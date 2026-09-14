@@ -85,6 +85,8 @@ function ConfigPageInner() {
     if (!cfg) return null;
     return {
       ...cfg,
+      previewTranslationMode: cfg.previewTranslationMode ?? 'llm',
+      newsExtractionMode: cfg.newsExtractionMode ?? 'llm',
       matchSyncEnabled: cfg.matchSyncEnabled ?? false,
       matchSyncIntervalHours: cfg.matchSyncIntervalHours ?? 12,
       resultSyncEnabled: cfg.resultSyncEnabled ?? false,

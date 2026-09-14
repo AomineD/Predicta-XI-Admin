@@ -187,6 +187,56 @@ export function GeneralTab({ form, setField }: { form: PredictionConfig; setFiel
       <SectionCard title="Input Data Fields" subtitle="Data sources the model receives to generate predictions">
         <MultiCheckbox options={DATA_FIELDS} value={form.inputDataFields} onChange={(v) => setField('inputDataFields', v)} />
       </SectionCard>
+
+      <SectionCard
+        title="Auxiliary processing"
+        subtitle="Choose where translations and team-news extraction run"
+        info="These controls apply to auxiliary content processing. They do not change the model used to generate predictions."
+      >
+        <Field
+          label="Preview translation"
+          subtitle="English match previews → Spanish"
+          info="Google Cloud NMT translates without a generative LLM call. Legacy LLM keeps the previous behavior for rollback. Disabled leaves the English original visible when no matching cached translation exists."
+        >
+          <Select
+            className="w-64"
+            value={form.previewTranslationMode}
+            onChange={(e) =>
+              setField('previewTranslationMode', e.target.value as PredictionConfig['previewTranslationMode'])
+            }
+          >
+            <option value="google_nmt">Google Cloud NMT</option>
+            <option value="llm">Legacy LLM</option>
+            <option value="disabled">Disabled</option>
+          </Select>
+        </Field>
+
+        <Field
+          label="News extraction"
+          subtitle="Classify and structure team news"
+          info="Shadow validation compares deterministic rules with the LLM while keeping the LLM result authoritative. Hybrid uses rules for clear cases and sends only ambiguous items to the LLM. Rules only never calls the LLM."
+        >
+          <Select
+            className="w-64"
+            value={form.newsExtractionMode}
+            onChange={(e) => setField('newsExtractionMode', e.target.value as PredictionConfig['newsExtractionMode'])}
+          >
+            <option value="shadow">Shadow validation</option>
+            <option value="hybrid">Hybrid</option>
+            <option value="llm">LLM only</option>
+            <option value="rules_only">Rules only</option>
+            <option value="disabled">Disabled</option>
+          </Select>
+        </Field>
+
+        <div className="mt-3 rounded-xl border border-border bg-surface-2 px-4 py-3">
+          <p className="text-xs leading-relaxed text-text-muted font-sans">
+            The <span className="font-medium text-text-secondary">team_news</span> input field only controls whether
+            news is synchronized and included before prediction generation. Home curation and explicit manual syncs use
+            their own gates.
+          </p>
+        </div>
+      </SectionCard>
     </div>
   );
 }

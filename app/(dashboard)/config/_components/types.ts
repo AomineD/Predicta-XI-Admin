@@ -3,6 +3,10 @@
 
 export interface PredictionConfig {
   model: string;
+  /** Motor usado para traducir las previas visibles en la app. */
+  previewTranslationMode: 'llm' | 'google_nmt' | 'disabled';
+  /** Estrategia de clasificación y extracción de noticias de equipo. */
+  newsExtractionMode: 'llm' | 'shadow' | 'hybrid' | 'rules_only' | 'disabled';
   batchSize: number;
   automationEnabled: boolean;
   outputMarkets: string[];
@@ -267,10 +271,12 @@ export interface TeamLite {
 }
 
 export interface ApiKey {
-  id: string;
+  id: number;
   provider: string;
+  isActive: boolean;
+  lastTestedAt: string | null;
+  testStatus: 'success' | 'failed' | null;
   createdAt: string;
-  updatedAt: string;
 }
 
 export interface CompetitionLite {

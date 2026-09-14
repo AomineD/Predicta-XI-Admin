@@ -9,8 +9,17 @@ import { Input, Select } from '@/components/ui/inputs';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useToast } from '@/components/ui/ToastProvider';
-import { PROVIDERS } from './constants';
+import { cn, formatDateTime } from '@/lib/utils';
+import { PROVIDERS, PROVIDER_LABELS } from './constants';
 import type { ApiKey } from './types';
+
+type ApiKeyTestResult = { testResult: 'success' | 'failed'; error?: string };
+const TESTABLE_PROVIDERS = new Set(['deepseek', 'openai', 'google', 'google_translate']);
+
+const providerLabel = (provider: string) =>
+  provider in PROVIDER_LABELS
+    ? PROVIDER_LABELS[provider as keyof typeof PROVIDER_LABELS]
+    : provider;
 
 export function ApiKeysTab() {
   const qc = useQueryClient();
@@ -25,6 +34,7 @@ export function ApiKeysTab() {
   const [newKey, setNewKey] = useState('');
   const [showKey, setShowKey] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ApiKey | null>(null);
+  const activeApiKeys = (apiKeys ?? []).filter((key) => key.isActive);
 
   const addKey = useMutation({
     mutationFn: () => api.post('/admin/api-keys', { provider: newProvider, key: newKey }),
@@ -38,11 +48,21 @@ export function ApiKeysTab() {
   });
 
   const deleteKey = useMutation({
-    mutationFn: (id: string) => api.delete(`/admin/api-keys/${id}`),
+    mutationFn: (id: number) => api.delete(`/admin/api-keys/${id}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['api-keys'] });
       setDeleteTarget(null);
       toast.success('API key removed.');
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const testKey = useMutation({
+    mutationFn: (id: number) => api.post<ApiKeyTestResult>(`/admin/api-keys/${id}/test`, {}),
+    onSuccess: (result) => {
+      qc.invalidateQueries({ queryKey: ['api-keys'] });
+      if (result.testResult === 'success') toast.success('API key test succeeded.');
+      else toast.error(result.error ? `API key test failed: ${result.error}` : 'API key test failed.');
     },
     onError: (err: Error) => toast.error(err.message),
   });
@@ -92,18 +112,46 @@ export function ApiKeysTab() {
 
   return (
     <div>
-      <SectionCard title="API Keys" subtitle="Encrypted LLM provider keys for prediction generation">
-        {(apiKeys ?? []).length > 0 && (
+      <SectionCard title="API Keys" subtitle="Encrypted provider keys for predictions and auxiliary services">
+        {activeApiKeys.length > 0 && (
           <div className="divide-y divide-border mb-4">
-            {(apiKeys ?? []).map((k) => (
-              <div key={k.id} className="flex items-center justify-between py-3">
-                <div>
-                  <span className="text-sm font-medium text-text-primary font-sans">{k.provider}</span>
-                  <span className="ml-3 text-xs text-text-muted font-sans">••••••••••••</span>
+            {activeApiKeys.map((k) => (
+              <div key={k.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-medium text-text-primary font-sans">{providerLabel(k.provider)}</span>
+                    <span className="text-xs text-text-muted font-sans">••••••••••••</span>
+                    <span
+                      className={cn(
+                        'rounded-full px-2 py-0.5 text-[10px] font-semibold font-sans',
+                        k.testStatus === 'success' && 'bg-success/15 text-success',
+                        k.testStatus === 'failed' && 'bg-danger/15 text-danger',
+                        !k.testStatus && 'bg-surface-3 text-text-muted',
+                      )}
+                    >
+                      {k.testStatus === 'success' ? 'Test passed' : k.testStatus === 'failed' ? 'Test failed' : 'Not tested'}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-text-muted/60 font-sans">
+                    {k.lastTestedAt ? `Last tested ${formatDateTime(k.lastTestedAt)}` : 'No connectivity test has run yet.'}
+                  </p>
                 </div>
-                <Button variant="danger" size="sm" onClick={() => setDeleteTarget(k)}>
-                  Remove
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    loading={testKey.isPending && testKey.variables === k.id}
+                    disabled={testKey.isPending || !TESTABLE_PROVIDERS.has(k.provider)}
+                    onClick={() => testKey.mutate(k.id)}
+                    aria-label={`Test ${providerLabel(k.provider)} API key`}
+                    title={TESTABLE_PROVIDERS.has(k.provider) ? undefined : 'Connectivity test is not available for this provider.'}
+                  >
+                    Test
+                  </Button>
+                  <Button variant="danger" size="sm" onClick={() => setDeleteTarget(k)}>
+                    Remove
+                  </Button>
+                </div>
               </div>
             ))}
           </div>
@@ -116,7 +164,7 @@ export function ApiKeysTab() {
               <option value="">Select provider</option>
               {PROVIDERS.map((p) => (
                 <option key={p} value={p}>
-                  {p}
+                  {PROVIDER_LABELS[p]}
                 </option>
               ))}
             </Select>
@@ -213,7 +261,7 @@ export function ApiKeysTab() {
         title="Remove API key?"
         message={
           deleteTarget
-            ? `The ${deleteTarget.provider} key will be permanently removed. Predictions that rely on this provider will fail until a new key is added.`
+            ? `The ${providerLabel(deleteTarget.provider)} key will be permanently removed. Features that rely on this provider will fail until a new key is added.`
             : ''
         }
         confirmLabel="Remove key"
