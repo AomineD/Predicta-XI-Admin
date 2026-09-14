@@ -31,6 +31,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useToast } from '@/components/ui/ToastProvider';
+import styles from './telegram-layout.module.css';
 
 /* ── contrato con el backend ────────────────────────────────────────────────── */
 
@@ -157,7 +158,7 @@ function TelegramBubble({ html, label }: { html: string; label: string }) {
     <div>
       <div className="text-[10px] uppercase tracking-wider text-text-muted/60 font-sans mb-1.5">{label}</div>
       <div
-        className="rounded-2xl rounded-tl-md px-3.5 py-2.5 text-[13px] leading-relaxed whitespace-pre-wrap break-words font-sans"
+        className="min-w-0 rounded-2xl rounded-tl-md px-3.5 py-2.5 text-[13px] leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere] [&_pre]:whitespace-pre-wrap [&_pre]:[overflow-wrap:anywhere] font-sans"
         style={{ background: '#182533', color: '#e9edf2' }}
         dangerouslySetInnerHTML={{ __html: safe }}
       />
@@ -218,7 +219,8 @@ function VariablePalette({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 text-[11px] font-sans font-semibold uppercase tracking-wider text-text-secondary"
+        aria-expanded={open}
+        className="flex flex-wrap items-center gap-1.5 text-left text-[11px] font-sans font-semibold uppercase tracking-wider text-text-secondary"
       >
         <span>{open ? '▾' : '▸'}</span>
         Variables de este tipo
@@ -344,9 +346,9 @@ export function TemplateEditor() {
   const chars = draft[lang].length;
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-[220px_minmax(0,1fr)_minmax(320px,420px)] gap-4">
+    <div className={styles.templates}>
       {/* Lista de tipos */}
-      <div className="flex xl:flex-col gap-1.5 overflow-x-auto no-scrollbar">
+      <div className={styles.types} role="group" aria-label="Tipo de plantilla">
         {items.map((i) => {
           const meta = TYPE_META[i.contentType] ?? { label: i.contentType, hint: '' };
           const active = i.contentType === selected;
@@ -356,8 +358,10 @@ export function TemplateEditor() {
               key={i.contentType}
               type="button"
               onClick={() => setSelected(i.contentType)}
+              aria-pressed={active}
               className={cn(
-                'text-left rounded-xl border px-3 py-2.5 transition-colors shrink-0 xl:shrink',
+                styles.type,
+                'text-left rounded-xl border px-3 py-2.5 transition-colors focus-visible:outline-2 focus-visible:outline-primary',
                 active
                   ? 'border-primary/50 bg-primary/10'
                   : 'border-border bg-surface hover:bg-surface-2',
@@ -369,7 +373,7 @@ export function TemplateEditor() {
                 </span>
                 {hasDraft && <span className="w-1.5 h-1.5 rounded-full bg-warning" title="Sin guardar" />}
               </div>
-              <p className="text-[11px] text-text-muted/60 font-sans mt-0.5 leading-tight hidden xl:block">{meta.hint}</p>
+              <p className={cn(styles.typeHint, 'text-[11px] text-text-muted/60 font-sans mt-0.5 leading-tight')}>{meta.hint}</p>
               <span
                 className={cn(
                   'inline-block mt-1.5 px-1.5 h-4 leading-4 rounded text-[10px] font-sans',
@@ -385,6 +389,7 @@ export function TemplateEditor() {
 
       {/* Editor */}
       <Card
+        className="min-w-0 p-4 sm:p-5"
         title={TYPE_META[selected]?.label ?? selected}
         info={
           <>
@@ -407,6 +412,8 @@ export function TemplateEditor() {
                 key={l}
                 type="button"
                 onClick={() => setLang(l)}
+                aria-pressed={lang === l}
+                aria-label={l === 'es' ? 'Editar en español' : 'Editar en inglés'}
                 className={cn(
                   'px-3 h-7 rounded-md text-xs font-sans font-medium transition-colors uppercase',
                   lang === l ? 'bg-surface-3 text-text-primary' : 'text-text-muted hover:text-text-primary',
@@ -420,6 +427,7 @@ export function TemplateEditor() {
       >
         <textarea
           ref={textareaRef}
+          aria-label={`Plantilla ${TYPE_META[selected]?.label ?? selected} en ${lang === 'es' ? 'español' : 'inglés'}`}
           value={draft[lang]}
           onChange={(e) => setDraftLang(e.target.value)}
           spellCheck={false}
@@ -427,11 +435,11 @@ export function TemplateEditor() {
           maxLength={maxChars}
           className="w-full rounded-xl bg-surface-2 border border-border px-3 py-2.5 font-mono text-[12.5px] leading-relaxed text-text-primary focus:outline-none focus:border-primary/50 resize-y"
         />
-        <div className="flex items-center justify-between mt-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 mt-2">
           <span className={cn('text-[11px] font-sans', chars > maxChars * 0.9 ? 'text-warning' : 'text-text-muted/60')}>
             {chars} / {maxChars} caracteres
           </span>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {dirty && (
               <Button
                 variant="ghost"
@@ -476,6 +484,7 @@ export function TemplateEditor() {
 
       {/* Vista previa */}
       <Card
+        className="min-w-0 p-4 sm:p-5"
         title="Cómo queda"
         subtitle={
           previewQ.data?.usedSampleData

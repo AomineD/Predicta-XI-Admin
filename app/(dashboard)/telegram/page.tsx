@@ -12,6 +12,8 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { LeaguePicker } from '@/components/pickers/LeaguePicker';
 import { TeamPicker } from '@/components/pickers/TeamPicker';
 import { TemplateEditor } from '@/components/telegram/TemplateEditor';
+import { ContentTypeCard } from '@/components/telegram/ContentTypeCard';
+import telegramStyles from '@/components/telegram/telegram-layout.module.css';
 import { CustomEmojiManager } from '@/components/telegram/CustomEmojiManager';
 
 /* ── tabs ───────────────────────────────────────────────────────────────────── */
@@ -588,22 +590,35 @@ function TypeCard({
   };
 
   return (
-    <SectionCard title={title} subtitle={subtitle} info={info}>
-      <Field label="Activo" subtitle="Si está apagado, este tipo nunca se publica.">
-        <Toggle value={config.enabled} onChange={(v) => onChange({ enabled: v })} />
-      </Field>
-      <Field
-        label="Modo"
-        subtitle={lockedMode ? lockedMode.reason : undefined}
-        info="Automático publica solo; Con aprobación deja un borrador en la cola."
-      >
-        <Select
-          value={lockedMode ? lockedMode.mode : config.mode}
-          options={MODE_OPTIONS}
-          onChange={(v) => onChange({ mode: v })}
-          disabled={Boolean(lockedMode)}
-        />
-      </Field>
+    <ContentTypeCard
+      title={title}
+      subtitle={subtitle}
+      info={info}
+      enabled={config.enabled}
+      onEnabledChange={(enabled) => onChange({ enabled })}
+      schedule={eventDriven
+        ? 'Se publica cuando ocurre el evento.'
+        : `${config.hours.length ? config.hours.map((hour) => `${String(hour).padStart(2, '0')}:00`).join(', ') : 'Sin horario'} · Bogotá · ${config.weekdays.length === 7 ? 'Todos los días' : config.weekdays.map((day) => WEEKDAY_LABELS[day]).join(', ')}`}
+      controls={
+        <>
+          <label className="flex min-w-0 flex-col gap-1 text-[11px] font-sans text-text-muted">
+            Modo
+            <Select
+              value={lockedMode ? lockedMode.mode : config.mode}
+              options={MODE_OPTIONS}
+              onChange={(v) => onChange({ mode: v })}
+              disabled={Boolean(lockedMode)}
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-[11px] font-sans text-text-muted">
+            Tope diario
+            <NumInput value={config.maxPerDay} onChange={(v) => onChange({ maxPerDay: v })} min={1} max={100} />
+          </label>
+        </>
+      }
+    >
+      {lockedMode && <p className="py-2 text-xs font-sans text-text-muted">{lockedMode.reason}</p>}
+      <p className="py-2 text-xs font-sans text-text-muted">Automático publica solo; Con aprobación deja un borrador en la cola.</p>
       {!eventDriven && (
         <>
           <Field
@@ -622,7 +637,7 @@ function TypeCard({
             subtitle="Días de la semana en los que se publica."
             info="Al menos uno. Quitar todos equivaldría a apagar el tipo sin que el interruptor lo refleje, así que no se permite."
           >
-            <div className="flex gap-1">
+            <div className="flex flex-wrap gap-1">
               {WEEKDAY_LABELS.map((label, day) => {
                 const on = config.weekdays.includes(day);
                 return (
@@ -646,17 +661,11 @@ function TypeCard({
           </Field>
         </>
       )}
-      <Field
-        label="Tope diario del tipo"
-        subtitle="Máximo de publicaciones al día de este tipo."
-        info={
-          eventDriven
-            ? 'Este tipo NO consume el tope global del canal: una tarde de goles no puede dejar sin cupo al resto de la parrilla. Este es su único límite diario.'
-            : 'Se aplica además del tope global del canal, nunca en su lugar: un tipo con tope 5 sigue sin poder pasarse del límite global.'
-        }
-      >
-        <NumInput value={config.maxPerDay} onChange={(v) => onChange({ maxPerDay: v })} min={1} max={100} />
-      </Field>
+      <p className="py-2 text-xs text-text-muted font-sans">
+        {eventDriven
+          ? 'El tope diario de este tipo es independiente del tope global del canal.'
+          : 'El tope diario de este tipo se aplica además del tope global del canal.'}
+      </p>
       {extra}
       {!eventDriven && !deterministic && (
         <Field label="Prompt extra (opcional)" subtitle="Vacío = por defecto" info="Instrucción adicional para el redactor IA.">
@@ -667,7 +676,7 @@ function TypeCard({
           />
         </Field>
       )}
-    </SectionCard>
+    </ContentTypeCard>
   );
 }
 
@@ -1140,7 +1149,7 @@ export default function TelegramPage() {
   };
 
   return (
-    <div className="p-8 max-w-3xl">
+    <div className={`${telegramStyles.page} min-w-0 w-full p-4 sm:p-6 lg:p-8 ${tab === 'templates' ? 'max-w-[1600px]' : 'max-w-3xl'}`}>
       <PageHeader
         title="Telegram"
         description="Canal de marketing bilingüe (ES+EN)." info="Inerte hasta configurar token + canal y encender el switch maestro."
