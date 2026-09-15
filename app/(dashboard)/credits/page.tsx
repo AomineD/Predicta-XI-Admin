@@ -59,6 +59,8 @@ interface CreditsConfig {
   actionRewardShareCredits: number;
   actionRewardProfileEnabled: boolean;
   actionRewardProfileCredits: number;
+  // Precio proporcional por tier (migr 0222). Se edita en el tab Market Tiers.
+  tierProportionalPricingEnabled: boolean;
 }
 
 // Fields that live on the GET /admin/credits-config row but are EDITED on other
@@ -609,6 +611,36 @@ function CreditsPageInner() {
 
       {/* TIERS TAB */}
       <div hidden={tab !== 'tiers'} role="tabpanel" id="tabpanel-tiers" aria-labelledby="tab-tiers">
+      {/* ── Precio proporcional (migr 0222). Se guarda con "Save Config". ── */}
+      <SectionCard
+        title="Tier pricing"
+        subtitle="Save Config to apply"
+        info="Controls what a tier charges when the match does not bring every market the tier promises."
+      >
+        <Field
+          label="Proportional pricing"
+          subtitle="ON: cost scales with available markets"
+          info={
+            <>
+              <p className="mb-2">
+                ON: a tier charges max(1, ceil(cost × available ÷ promised)) based on the markets the match
+                actually has. Example: Strategic (10 cr, 4 markets) with 1 available costs 3.
+              </p>
+              <p className="mb-2">OFF: the full tier cost is charged whenever at least one market is available.</p>
+              <p>
+                A tier with zero available markets is never charged, with this switch ON or OFF. Re-opening a
+                tier the user already unlocked stays free.
+              </p>
+            </>
+          }
+        >
+          <Toggle
+            value={f.tierProportionalPricingEnabled ?? true}
+            onChange={(v) => set('tierProportionalPricingEnabled', v)}
+          />
+        </Field>
+      </SectionCard>
+
       {/* ── Section D: Market Tiers ── */}
       <SectionCard title="Market Tiers" info="Configure prediction access tiers with different markets and costs.">
         <div className="flex justify-end mb-3">

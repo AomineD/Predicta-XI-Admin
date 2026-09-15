@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { InfoPopover } from '@/components/ui/InfoPopover';
 import { useToast } from '@/components/ui/ToastProvider';
+import { FeedbackCard } from './FeedbackCard';
 import type {
   HomeNewsCuratorConfig,
   LiveCompanionConfig,
@@ -876,6 +877,9 @@ export function MaintenanceTab() {
           </>
         )}
       </SectionCard>
+
+      {/* Canal de feedback (fase 5 del plan de 2026-09-15) */}
+      <FeedbackCard />
 
       {/* Subscriber identity (idea #22) */}
       <SectionCard title="Subscriber identity" subtitle="Ship-dark" info="Animated PRO/CLUB visual identity wherever a person shows up (idea #22): friends, search, add-friend, quiniela management, the leaderboard table and King of the hill — tier ring, animated tag, gold name and 'member since'. The code ships in the app build but stays hidden until turned on here — turn it on only once the build that includes it is live in the stores.">

@@ -340,6 +340,8 @@ export interface MaintenanceCreditsConfig {
   // Insignias de usuario.
   badgesEnabled: boolean;
   badgesConfig: BadgesConfig;
+  // Canal de feedback (migr 0224). Opcional por el backend anterior a la migración.
+  feedbackEnabled?: boolean;
 }
 
 /** Umbrales de cada evaluador de insignias. Espejo de `shared/badges.ts`. */

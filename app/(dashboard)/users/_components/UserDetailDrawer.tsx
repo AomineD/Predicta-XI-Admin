@@ -6,6 +6,8 @@ import { api } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import { cn, formatDateTime } from '@/lib/utils';
 import { X } from 'lucide-react';
+import { AdjustCreditsSection } from './AdjustCreditsSection';
+import { UserInsightsSection } from './UserInsightsSection';
 
 interface Subscription {
   tier: string;
@@ -245,6 +247,12 @@ export function UserDetailDrawer({ id, onClose }: { id: string; onClose: () => v
 
             <CompSection userId={data.profile.id} subscription={data.subscription} />
 
+            <AdjustCreditsSection
+              userId={data.profile.id}
+              currentCredits={data.profile.credits}
+              deleted={data.profile.deletedAt != null}
+            />
+
             <Section title="Accesos">
               <div className="grid grid-cols-3 gap-3 text-sm">
                 <Field label="Predicciones" value={String(data.accessCounts.predictions)} />
@@ -252,6 +260,9 @@ export function UserDetailDrawer({ id, onClose }: { id: string; onClose: () => v
                 <Field label="Quinielas" value={String(data.accessCounts.quinielas)} />
               </div>
             </Section>
+
+            {/* KPIs con su propia query: el resto del drawer no espera por ellos. */}
+            <UserInsightsSection userId={data.profile.id} />
 
             <Section title="Compras IAP">
               {data.purchases.length === 0 ? (
