@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { SectionCard, Field, Toggle, SubHeading } from '@/components/ui/form-controls';
+import { SectionCard, Field, Toggle, SubHeading, NumInput } from '@/components/ui/form-controls';
 import { Input, Textarea, Select } from '@/components/ui/inputs';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
@@ -200,12 +200,23 @@ export function MaintenanceTab() {
   // Both live in the same card because the celebration is driven by the live score:
   // with `liveScoresEnabled` off there is no score change to detect, so turning the
   // celebration on alone does nothing.
-  type LiveScoresForm = { liveScoresEnabled: boolean; goalCelebrationEnabled: boolean };
+  // The goal push rides on the same ESPN poller that confirms goals, so it lives here too.
+  type LiveScoresForm = {
+    liveScoresEnabled: boolean;
+    goalCelebrationEnabled: boolean;
+    goalPushEnabled: boolean;
+    goalPushConfirmSeconds: number;
+  };
   const [liveScoresForm, setLiveScoresForm] = useState<LiveScoresForm | null>(null);
   const liveScoresInitial = useMemo(
     () =>
       maintCfg
-        ? { liveScoresEnabled: maintCfg.liveScoresEnabled, goalCelebrationEnabled: maintCfg.goalCelebrationEnabled }
+        ? {
+            liveScoresEnabled: maintCfg.liveScoresEnabled,
+            goalCelebrationEnabled: maintCfg.goalCelebrationEnabled,
+            goalPushEnabled: maintCfg.goalPushEnabled ?? false,
+            goalPushConfirmSeconds: maintCfg.goalPushConfirmSeconds ?? 150,
+          }
         : null,
     [maintCfg],
   );
@@ -803,6 +814,28 @@ export function MaintenanceTab() {
                 onChange={(v) => setLiveScoresForm({ ...liveScores, goalCelebrationEnabled: v })}
               />
             </Field>
+            <Field
+              label="Goal push to favorites"
+              subtitle="Requiere live scores"
+              info="When on, users get a push notification when there is a goal in a match of one of their favorite teams (either side). The goal is confirmed by the ESPN poller first (see the confirmation below), so a goal the VAR rules out does not notify. Each user can turn it off in the app's notification settings (on by default). Users without favorite teams receive nothing."
+            >
+              <Toggle
+                value={liveScores.goalPushEnabled}
+                onChange={(v) => setLiveScoresForm({ ...liveScores, goalPushEnabled: v })}
+              />
+            </Field>
+            <Field
+              label="Push confirmation"
+              subtitle="Seconds · 0–600 · def. 150"
+              info="How long a goal has to stay on ESPN before the push goes out. A push cannot be taken back: on the 2026-09-12 shadow day ESPN retracted some goals within two minutes. Lower means faster pushes and more false alarms; 0 notifies on first sight."
+            >
+              <NumInput
+                value={liveScores.goalPushConfirmSeconds}
+                onChange={(v) => setLiveScoresForm({ ...liveScores, goalPushConfirmSeconds: v })}
+                min={0}
+                max={600}
+              />
+            </Field>
             <div className="flex items-center gap-3 pt-3">
               <Button variant="primary" loading={saveLiveScores.isPending} onClick={() => saveLiveScores.mutate(liveScores)}>
                 Save live scores
@@ -810,6 +843,9 @@ export function MaintenanceTab() {
               {liveScores.liveScoresEnabled && <span className="text-xs font-sans text-success">Live scores are on for users on a build that includes it.</span>}
               {liveScores.goalCelebrationEnabled && !liveScores.liveScoresEnabled && (
                 <span className="text-xs font-sans text-warning">Goal celebration does nothing while live scores are off.</span>
+              )}
+              {liveScores.goalPushEnabled && !liveScores.liveScoresEnabled && (
+                <span className="text-xs font-sans text-warning">Goal push does nothing while live scores are off.</span>
               )}
             </div>
           </>

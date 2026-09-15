@@ -331,6 +331,10 @@ export interface MaintenanceCreditsConfig {
   homeNewsCuratorConfig: HomeNewsCuratorConfig;
   // Celebración de gol en vivo (idea #28). Depende de liveScoresEnabled.
   goalCelebrationEnabled: boolean;
+  // Push de gol a los favoritos. Depende de liveScoresEnabled. Opcionales por el
+  // backend anterior a la migración 0221.
+  goalPushEnabled?: boolean;
+  goalPushConfirmSeconds?: number;
   // Cortes de la escala de grados de una predicción liquidada.
   predictionGradeScale: PredictionGradeScale;
   // Insignias de usuario.
