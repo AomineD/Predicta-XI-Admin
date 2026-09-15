@@ -128,6 +128,8 @@ export interface PredictionConfig {
   combinadasPremiumMaxOdds?: number;
   combinadasPremiumMinEdgePct?: number;
   combinadasPremiumOddsFloor?: number;
+  /** Cuota mínima por pata de la regular (diaria y semanal) y de las Seguras. 0 = apagado. */
+  combinadasRegularLegOddsFloor?: number;
   enrichmentMode?: string;
   earlyEnrichmentHourUtc?: number;
   earlyEnrichmentTargetDayOffset?: number;

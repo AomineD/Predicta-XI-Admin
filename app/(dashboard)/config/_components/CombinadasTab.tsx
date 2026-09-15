@@ -168,6 +168,17 @@ export function CombinadasTab({
         <Field label="Max combined odds (regular)" subtitle="1.5–20" info="Reject regular combinadas whose product of odds exceeds this.">
           <Input type="number" min={1.5} max={20} step={0.1} className="w-24" value={form.combinadasRegularMaxOdds ?? 6.0} onChange={(e) => setField('combinadasRegularMaxOdds', Number(e.target.value))} />
         </Field>
+        <Field
+          label="Cuota mínima por pata (regular y Segura)"
+          subtitle="0–3 · 0 = apagado · def. 1.20"
+          info="Ninguna pata de la regular diaria, de la semanal ni de las Seguras paga menos que esto. Se aplica al armar el pool, así que ningún relleno posterior lo salta: antes salían combinadas a cuota 1.11 con patas a 1.03 que no le aportan nada al usuario. Subirlo deja menos candidatos entre semana (el pool ya es corto); si un día no sale regular, bájalo a 1.15 antes de apagarlo. Las Seguras usan el mayor entre este valor y su piso propio de 1.15."
+        >
+          <Input type="number" min={0} max={3} step={0.05} className="w-24" value={form.combinadasRegularLegOddsFloor ?? 1.2} onChange={(e) => {
+            // Vaciar el campo NO lo apaga: `Number('')` es 0, y aquí 0 significa apagado.
+            if (e.target.value.trim() === '') return;
+            setField('combinadasRegularLegOddsFloor', Number(e.target.value));
+          }} />
+        </Field>
         <Field label="Excluded teams (regular)" subtitle="Skip any regular combinada involving these teams">
           <TeamBlacklistPicker value={form.combinadasRegularExcludedTeams ?? []} onChange={(v) => setField('combinadasRegularExcludedTeams', v)} />
         </Field>
