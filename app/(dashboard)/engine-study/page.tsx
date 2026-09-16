@@ -18,6 +18,7 @@ import {
   ENGINE_STUDY_QUERY_KEY,
   RATE_LIMIT_NOTICE,
   WEEKDAY_LABELS,
+  aeTone,
   describeVerdict,
   fetchEngineStudy,
   fmtNum,
@@ -32,14 +33,8 @@ import {
   type EngineStudyRun,
   type WeeklyAeRow,
 } from './_components/engine-study-api';
-
-/** Color del A/E: a precio justo ronda 0.95; bajo 0.90 es la zona que se veta. */
-function aeTone(ae: number | null | undefined): string {
-  if (ae == null) return 'text-text-muted';
-  if (ae >= 1) return 'text-emerald-400';
-  if (ae >= 0.9) return 'text-text-primary';
-  return 'text-rose-400';
-}
+import { PerformanceBreakdownCard } from './_components/PerformanceBreakdownCard';
+import { CombinadaPerformanceCard } from './_components/CombinadaPerformanceCard';
 
 /** Color del movimiento de cuota: positivo = se acortó a favor del pick. */
 function clvTone(pct: number | null | undefined): string {
@@ -202,6 +197,10 @@ function StudyBody({
           emptyMessage="Sin semanas liquidadas todavía."
         />
       </Card>
+
+      <PerformanceBreakdownCard />
+
+      <CombinadaPerformanceCard />
 
       <Card
         title="Selecciones"
