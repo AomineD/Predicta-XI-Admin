@@ -264,6 +264,29 @@ export function CombinadasTab({
           </div>
         </Field>
 
+        <SubHeading>Confianza que ve el usuario</SubHeading>
+        <Field
+          label="Confianza anclada al precio"
+          subtitle="def. apagado · todas las combinadas"
+          info="Cada pata de una combinada (regular, premium, semanal y Seguras) muestra 100/cuota × el A/E de su selección en los últimos 90 días, sin pasar nunca de lo que paga la cuota ni bajar de ese valor × el suelo de abajo. Además, nunca muestra más que su confianza del informe + la subida máxima: la cifra no exagera lo que el usuario leyó en la predicción. La confianza combinada es el producto de esas patas. El ajuste del LLM de la combinada deja de entrar en el número (queda guardado en la pata solo para auditar) y el prompt le pide marcar el riesgo en el razonamiento en vez de restar puntos. Caso real: la premium del 2026-09-15 mostró 26 con una cuota que implicaba 38.6; con esto sale 35. Apagado = la fórmula de siempre. No reescribe combinadas ya emitidas."
+        >
+          <Toggle value={form.combinadasPriceAnchoredConfidence ?? false} onChange={(v) => setField('combinadasPriceAnchoredConfidence', v)} />
+        </Field>
+        <Field
+          label="Suelo de la confianza (× implícita)"
+          subtitle="0.50–1 · def. 0.88"
+          info="Una pata nunca queda por debajo de 100/cuota × este valor, por mal que vaya su selección. 0.88 = como mucho un 12 % por debajo del precio. Si choca con la subida máxima, gana la subida máxima. Sin muestra de la selección se usa un A/E de 0.95, el global medido. Solo actúa con la confianza anclada encendida."
+        >
+          <NumInput min={0.5} max={1} step={0.01} value={form.combinadasConfidenceMinPriceRatio ?? 0.88} onChange={(v) => setField('combinadasConfidenceMinPriceRatio', v)} />
+        </Field>
+        <Field
+          label="Subida máxima sobre el informe (pts)"
+          subtitle="0–20 · def. 8"
+          info="Una pata nunca muestra más que su confianza del informe + este valor. Con 8 solo muerde en los picks muy prudentes: una pata con 40 en el informe a cuota 1.55 (implícita 64.5) muestra 48, no 57. 0 = nunca por encima del informe. Solo actúa con la confianza anclada encendida."
+        >
+          <NumInput min={0} max={20} step={1} value={form.combinadasConfidenceMaxRisePts ?? 8} onChange={(v) => setField('combinadasConfidenceMaxRisePts', Math.round(v))} />
+        </Field>
+
         <SubHeading>Conteo adaptativo</SubHeading>
         <Field
           label="Conteo adaptativo"
