@@ -449,7 +449,7 @@ export function CombinadasTab({
       <SectionCard
         title="Combinadas temáticas"
         subtitle="Otra ventana de cuota sobre la misma maquinaria, sin competir por las patas de la del día"
-        info="Una combinada temática se arma DESPUÉS de las del día, con su propio cupo de uso por partido sembrado desde lo ya consumido (no roba patas), y se guarda con su tema. Es la misma selección de máxima probabilidad de la premium con otra ventana de cuota y patas fijas. La app la pinta con una etiqueta (necesita un AAB nuevo); el teaser de Telegram sigue publicando la del día, no la temática. Los temas siguientes (Goles, Liga) llegan cuando la Segura tenga tres semanas de datos."
+        info="Una combinada temática es la misma selección de máxima probabilidad de la premium con otra ventana de cuota y patas fijas, y se guarda con su tema. Cada día se arma PRIMERO la Segura premium, con la combinación de mayor probabilidad de la ventana, y DESPUÉS la gratis, con lo que queda y sin repetir ningún partido de la premium. Si el pool solo alcanza para una, se la queda la premium y el job lo anota como «premium_took_pool». Por defecto las temáticas se arman DESPUÉS de las del día y no usan sus partidos; con «Armar la Segura antes que las del día» se arman ANTES, compiten por el pool completo y son las del día las que no pueden usar sus partidos. La semanal sigue con UNA sola Segura: la gratis si su conteo es mayor que 0 y, si no, la premium. El teaser de Telegram sigue publicando la del día, no la temática."
       >
         <SubHeading>Tema Segura</SubHeading>
         <Field
@@ -460,18 +460,25 @@ export function CombinadasTab({
           <Toggle value={form.combinadasThemeSafeEnabled ?? false} onChange={(v) => setField('combinadasThemeSafeEnabled', v)} />
         </Field>
         <Field
-          label="Tier"
-          subtitle="def. Gratis"
-          info="Gratis maximiza la retención (el objetivo declarado) pero puede canibalizar la premium, que a cuota 2.0 tiene un techo honesto de 47-50 % y ya va 3 ganadas / 11 perdidas; Premium la protege pero no retiene al usuario gratuito, que es quien se va. El control existe para no decidirlo en el código: cámbialo cuando lo midas."
+          label="Segura premium por día"
+          subtitle="0–2 · def. 0"
+          info="Seguras para suscriptores que salen cada día. Se arman ANTES que las gratis, así que se llevan la combinación de mayor probabilidad de la ventana. Cuenta en el track record premium y en el de la Segura premium. 0 = sin Segura premium."
         >
-          <Select
-            className="w-40"
-            value={form.combinadasThemeSafeTier ?? 'regular'}
-            onChange={(e) => setField('combinadasThemeSafeTier', e.target.value === 'premium' ? 'premium' : 'regular')}
-          >
-            <option value="regular">Gratis</option>
-            <option value="premium">Premium</option>
-          </Select>
+          <NumInput min={0} max={2} step={1} value={form.combinadasThemeSafeCountPremium ?? 0} onChange={(v) => setField('combinadasThemeSafeCountPremium', clamp(Math.round(v), 0, 2))} />
+        </Field>
+        <Field
+          label="Segura gratis por día"
+          subtitle="0–2 · def. 1"
+          info="Seguras gratis que salen cada día, armadas con el pool que dejan las premium y sin repetir sus partidos. Un día flaco puede quedarse sin gratis porque la premium se llevó la única combinación: vigílalo en las notas del job («premium_took_pool»). Si pasa más de un 30 % de los días, baja la premium a 0. 0 = sin Segura gratis."
+        >
+          <NumInput min={0} max={2} step={1} value={form.combinadasThemeSafeCountRegular ?? 1} onChange={(v) => setField('combinadasThemeSafeCountRegular', clamp(Math.round(v), 0, 2))} />
+        </Field>
+        <Field
+          label="Armar la Segura antes que las del día"
+          subtitle="def. apagado"
+          info="Encendido, las Seguras se arman ANTES que la regular y la premium del día: compiten por el pool completo y las del día salen sin sus partidos (un pool más flaco para ellas). Apagado, las Seguras se arman DESPUÉS y no usan los partidos de las del día. Solo afecta a la diaria: la semanal siempre arma su Segura después de las suyas."
+        >
+          <Toggle value={form.combinadasThemeSafeFirst ?? false} onChange={(v) => setField('combinadasThemeSafeFirst', v)} />
         </Field>
         <Field
           label="Cuota combinada min/max"

@@ -160,7 +160,10 @@ function ConfigPageInner() {
       combinadasDailyHourCaracas: cfg.combinadasDailyHourCaracas ?? 10,
       combinadasDailyAvoidWindowReuse: cfg.combinadasDailyAvoidWindowReuse ?? false,
       combinadasThemeSafeEnabled: cfg.combinadasThemeSafeEnabled ?? false,
-      combinadasThemeSafeTier: cfg.combinadasThemeSafeTier ?? 'regular',
+      // `combinadasThemeSafeTier` ya no tiene control: lo sustituyen los conteos por tier.
+      combinadasThemeSafeCountPremium: cfg.combinadasThemeSafeCountPremium ?? 0,
+      combinadasThemeSafeCountRegular: cfg.combinadasThemeSafeCountRegular ?? 1,
+      combinadasThemeSafeFirst: cfg.combinadasThemeSafeFirst ?? false,
       combinadasThemeSafeMinOdds: cfg.combinadasThemeSafeMinOdds ?? 1.5,
       combinadasThemeSafeMaxOdds: cfg.combinadasThemeSafeMaxOdds ?? 1.8,
       combinadasThemeSafeLegs: cfg.combinadasThemeSafeLegs ?? 2,

@@ -214,7 +214,14 @@ export interface PredictionConfig {
   combinadasDailyAvoidWindowReuse?: boolean;
   // ─── Tema "Segura" (fase F) ───
   combinadasThemeSafeEnabled?: boolean;
+  /** Obsoleto desde la Segura doble: ningún control lo edita. Sigue viajando en `...cfg` con el
+   *  valor guardado, y el backend solo lo traduce a conteos si llega distinto de ese valor. */
   combinadasThemeSafeTier?: 'regular' | 'premium';
+  /** Segura doble: Seguras premium y gratis por día (0-2). */
+  combinadasThemeSafeCountPremium?: number;
+  combinadasThemeSafeCountRegular?: number;
+  /** Arma las Seguras antes que las combinadas del día. */
+  combinadasThemeSafeFirst?: boolean;
   combinadasThemeSafeMinOdds?: number;
   combinadasThemeSafeMaxOdds?: number;
   combinadasThemeSafeLegs?: number;
