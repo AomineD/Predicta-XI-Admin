@@ -141,6 +141,14 @@ interface TelegramPost {
    * lo necesita.
    */
   factsJson?: Record<string, unknown> | null;
+  /**
+   * Reglas resueltas en el backend (`listPosts`), para no copiarlas aquí: el
+   * panel es otro despliegue y una copia se desincronizaría en silencio.
+   * Opcionales porque un backend anterior no las manda; sin ellas no se ofrece el
+   * reintento, que es la dirección segura.
+   */
+  retryable?: boolean;
+  emptyRun?: boolean;
 }
 
 interface PostsPage {
@@ -284,7 +292,7 @@ const MODE_OPTIONS: { value: PublishMode; label: string }[] = [
   { value: 'approval', label: 'Con aprobación' },
 ];
 
-function StatusPill({ status }: { status: TelegramPost['status'] }) {
+function StatusPill({ status, emptyRun = false }: { status: TelegramPost['status']; emptyRun?: boolean }) {
   const map: Record<TelegramPost['status'], { label: string; cls: string }> = {
     pending_approval: { label: 'Pendiente', cls: 'bg-warning/15 border-warning text-warning' },
     approved: { label: 'Aprobado', cls: 'bg-primary/15 border-primary text-primary' },
@@ -292,9 +300,10 @@ function StatusPill({ status }: { status: TelegramPost['status'] }) {
     rejected: { label: 'Rechazado', cls: 'bg-surface-3 border-border text-text-muted' },
     failed: { label: 'Falló', cls: 'bg-danger/15 border-danger text-danger' },
   };
-  const s = map[status];
+  const s = emptyRun ? { label: 'Sin datos', cls: 'bg-surface-3 border-border text-text-muted' } : map[status];
   return <span className={`px-2 py-0.5 text-[11px] font-medium rounded-full border font-sans ${s.cls}`}>{s.label}</span>;
 }
+
 
 /* ── selector de creativo ───────────────────────────────────────────────────── */
 
@@ -737,13 +746,17 @@ function PostCard({
   post: TelegramPost;
   actions?: React.ReactNode;
 }) {
+  // "No había nada que publicar": el backend la guarda como `failed` para que el
+  // cron no la repita, pero no es un envío fallido, y pintarla en rojo como
+  // «Falló» invitaba a reintentarla.
+  const emptyRun = post.emptyRun === true;
   return (
     <div className="rounded-2xl p-5 mb-4" style={{ background: '#121A2B', border: '1px solid rgba(255,255,255,0.08)' }}>
       <div className="flex items-center justify-between gap-3 mb-3">
         <div className="flex items-center gap-2">
           <span className="text-sm font-semibold text-text-primary font-sans">{TYPE_LABELS[post.contentType] ?? post.contentType}</span>
-          <StatusPill status={post.status} />
-          {!post.usedLlm && <span className="text-[11px] text-text-muted font-sans">(plantilla)</span>}
+          <StatusPill status={post.status} emptyRun={emptyRun} />
+          {!post.usedLlm && !emptyRun && <span className="text-[11px] text-text-muted font-sans">(plantilla)</span>}
         </div>
         <span className="text-[11px] text-text-muted font-sans">
           {post.createdAt ? new Date(post.createdAt).toLocaleString() : ''}
@@ -756,8 +769,10 @@ function PostCard({
       {post.deepLink && (
         <p className="text-[11px] text-text-muted font-sans mt-2 break-all">CTA: {post.deepLink}</p>
       )}
-      {post.errorLog && (
-        <p className="text-[11px] text-danger font-sans mt-2">Error: {post.errorLog}</p>
+      {emptyRun ? (
+        <p className="text-[11px] text-text-muted font-sans mt-2">No había nada que publicar en esta franja.</p>
+      ) : (
+        post.errorLog && <p className="text-[11px] text-danger font-sans mt-2">Error: {post.errorLog}</p>
       )}
       {actions && <div className="flex flex-wrap gap-2 mt-3">{actions}</div>}
     </div>
@@ -1957,7 +1972,7 @@ export default function TelegramPage() {
                   <Field
                     label="Equipos"
                     subtitle="Vacío = todos."
-                    info="Para seguir solo a unos clubes concretos. Vacío NO restringe."
+                    info="Para seguir solo a unos clubes concretos. Vacío NO restringe. Con equipos elegidos, el canal recolecta sus noticias una hora antes de la publicación del día (hasta 40 equipos; si también eliges ligas, solo los que las juegan), porque la recolección general solo cubre los clubes que juegan ese día en la Home o que se van a predecir. Solo publica noticias que traten de verdad del equipo: el feed de Flashscore mezcla noticias de otros clubes y esas se descartan."
                   >
                     <TeamPicker
                       value={arraySetting('news', 'teamIds')}
@@ -2151,7 +2166,7 @@ export default function TelegramPage() {
                   key={post.id}
                   post={post}
                   actions={
-                    post.status === 'failed' ? (
+                    post.retryable === true ? (
                       <Button variant="secondary" size="sm" loading={postAction.isPending} onClick={() => postAction.mutate({ id: post.id, action: 'publish' })}>Reintentar publicación</Button>
                     ) : undefined
                   }
