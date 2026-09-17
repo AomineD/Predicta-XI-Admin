@@ -25,9 +25,21 @@ interface LastSyncJob {
   errorLog: string | null;
 }
 
+interface GroupAccuracy {
+  pct: number | null;
+  won: number;
+  settled: number;
+}
+
 interface DashboardMetrics {
   mostVisitedMatch: { prediction_id: string; visits: string; home: string; away: string; kickoff: string } | null;
   globalAccuracy: number | null;
+  // Motor-sesgos phase 7: the same picks split by the principal odds threshold.
+  // Optional: an older backend does not send them.
+  principalAccuracy?: GroupAccuracy;
+  riskAccuracy?: GroupAccuracy;
+  unpricedAccuracy?: GroupAccuracy;
+  principalMaxOdds?: number;
   weeklyAccuracy: number | null;
   lastWeekAccuracy: number | null;
   pendingPredictions: number;
@@ -159,6 +171,27 @@ export default function DashboardPage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <MetricCard label="Global Accuracy" value={formatPct(data?.globalAccuracy)} sub="Per-market accuracy" accent />
         <MetricCard label="Weekly Accuracy" value={formatPct(data?.weeklyAccuracy)} sub="This week" />
+        {data?.principalAccuracy && data.riskAccuracy && (
+          <>
+            <MetricCard
+              label="Principal Picks"
+              value={formatPct(data.principalAccuracy.pct)}
+              sub={`Odds ≤ ${(data.principalMaxOdds ?? 1.6).toFixed(2)} · ${data.principalAccuracy.won}/${data.principalAccuracy.settled}`}
+            />
+            <MetricCard
+              label="Risk Picks"
+              value={formatPct(data.riskAccuracy.pct)}
+              sub={`Odds > ${(data.principalMaxOdds ?? 1.6).toFixed(2)} · ${data.riskAccuracy.won}/${data.riskAccuracy.settled}`}
+            />
+            {data.unpricedAccuracy && (
+              <MetricCard
+                label="Unpriced Picks"
+                value={data.unpricedAccuracy.settled}
+                sub={`No odds, not counted in either group · ${formatPct(data.unpricedAccuracy.pct)} hit`}
+              />
+            )}
+          </>
+        )}
         <MetricCard label="Pending" value={isLoading ? '…' : data?.pendingPredictions} sub="Awaiting settlement" />
         <MetricCard label="Active Users" value={isLoading ? '…' : data?.activeUsers} sub="Last 7 days" />
         <MetricCard label="Credits Consumed" value={isLoading ? '…' : data?.creditsConsumedLast7Days} sub="Last 7 days" />

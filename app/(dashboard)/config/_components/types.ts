@@ -50,6 +50,9 @@ export interface PredictionConfig {
   // Symmetric suggested corners/cards lines in the LLM payload (floor(avg) + 0.5
   // instead of round(avg) - 0.5, which always left the average above the line).
   predictionSymmetricPropLines?: boolean;
+  // Max odds (inclusive) of a "principal" pick in the app report and stats; above it
+  // the pick is "risk", and a pick without odds counts in neither (motor-sesgos phase 7).
+  predictionPrincipalMaxOdds?: number;
   // Selector floors (round-tripped; tuned via API). Optional in the admin form.
   totalsSelector?: { confFloor: number; confCeiling: number; oddsFloor: number };
   // Special value markets (idea #1): engine derives exotic markets from the Poisson

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { SectionCard, Field, SubHeading } from '@/components/ui/form-controls';
 import { Input, Select } from '@/components/ui/inputs';
-import { Toggle } from '@/components/ui/form-controls';
+import { Toggle, NumInput } from '@/components/ui/form-controls';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/ToastProvider';
 import { cn, formatDateTime } from '@/lib/utils';
@@ -161,6 +161,13 @@ export function GeneralTab({ form, setField }: { form: PredictionConfig; setFiel
           info="Cambia la línea sugerida de córners y tarjetas que recibe el modelo. Hasta ahora era el promedio redondeado menos 0.5, así que el promedio quedaba SIEMPRE por encima de la línea y el modelo casi nunca pedía 'menos de': el 68 % de los córners salía 'más de', y en 120 días perdían los dos lados (A/E 0.81-0.83). Encendido, la línea es la .5 más cercana al promedio (medio punto arriba o abajo) y el modelo compara con la línea de la casa cuando hay cuota. Corre desde la siguiente predicción, sin esperar a otro enriquecimiento. No vuelve rentables los córners: quita el sesgo. Afecta al scheduler y al bridge a la vez; reversible."
         >
           <Toggle value={form.predictionSymmetricPropLines ?? false} onChange={(v) => setField('predictionSymmetricPropLines', v)} />
+        </Field>
+        <Field
+          label="Cuota máxima de un pick principal"
+          subtitle="def. 1.60"
+          info="Separa en la app los 'Picks principales' de los 'Picks de riesgo', en el informe y en las estadísticas del usuario, cada grupo con su propio acierto. Hasta esta cuota (incluida) el pick es principal; por encima, de riesgo. Las lecturas secundarias van siempre a riesgo, y un pick sin cuota no cuenta en ningún grupo (se enseña solo como contador: todavía no tiene precio de referencia). Medido en 90 días: a cuota ≤ 1.60 los picks aciertan 76 % y por encima 48 %. El grupo se calcula al leer, así que cambiarlo reclasifica toda la historia al momento. También lo usan el dashboard y el Estudio del motor."
+        >
+          <NumInput min={1.1} max={3} step={0.05} value={form.predictionPrincipalMaxOdds ?? 1.6} onChange={(v) => setField('predictionPrincipalMaxOdds', Math.min(3, Math.max(1.1, v)))} />
         </Field>
         {form.totalsUnifiedEnabled && (
           <div className="mt-3 flex items-start gap-2 rounded-lg border border-dashed border-border bg-surface-2 px-3 py-2">
