@@ -186,6 +186,10 @@ export interface PredictionConfig {
   combinadasExcludeCorners?: boolean;
   /** Saca las tarjetas "más de" de las patas de combinadas, las dos tiers. */
   combinadasExcludeCardsOver?: boolean;
+  /** Nivel relativo al producto en vez del % en la tarjeta de la lista (fase 8). */
+  combinadasConfidenceLevelEnabled?: boolean;
+  /** Cortes de nivel por producto. Sin entrada = ese producto sigue con su %. */
+  combinadasConfidenceLevelCuts?: Record<string, { mid: number; high: number }>;
   /** Liquidadas mínimas para que la app muestre el track record de una tier. 0 = siempre. */
   trackRecordPublicMinSettled?: number;
   combinadasPremiumExcludedTeams?: number[];

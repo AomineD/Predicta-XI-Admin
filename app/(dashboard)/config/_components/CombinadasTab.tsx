@@ -89,6 +89,89 @@ function MinMaxPair({
   );
 }
 
+/** Productos que pueden tener nivel. Las mismas claves que valida el backend. */
+const CONFIDENCE_LEVEL_PRODUCTS = [
+  { key: 'premium', label: 'Premium del día' },
+  { key: 'regular', label: 'Regular del día' },
+  { key: 'segura_premium', label: 'Segura premium' },
+  { key: 'segura_regular', label: 'Segura gratis' },
+] as const;
+
+type ConfidenceLevelCuts = Record<string, { mid: number; high: number }>;
+
+/**
+ * Cortes de nivel por producto. Un producto SIN cortes no entra en el sistema:
+ * su tarjeta sigue enseñando el %, que es lo que se quiere para la regular y la
+ * Segura. "Quitar" borra la entrada; los cortes se dan en puntos de confianza
+ * mostrada y salen de los terciles reales medidos de ese producto.
+ */
+function ConfidenceLevelCutsEditor({
+  cuts,
+  onChange,
+}: {
+  cuts: ConfidenceLevelCuts;
+  onChange: (next: ConfidenceLevelCuts) => void;
+}) {
+  const setCut = (key: string, patch: Partial<{ mid: number; high: number }>) => {
+    const current = cuts[key] ?? { mid: 40, high: 55 };
+    onChange({ ...cuts, [key]: { ...current, ...patch } });
+  };
+  const remove = (key: string) => {
+    const next = { ...cuts };
+    delete next[key];
+    onChange(next);
+  };
+
+  return (
+    <div className="flex flex-col gap-2">
+      {CONFIDENCE_LEVEL_PRODUCTS.map(({ key, label }) => {
+        const cut = cuts[key];
+        const inverted = !!cut && cut.high <= cut.mid;
+        return (
+          <div key={key} className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <span className="w-36 text-xs text-text-muted">{label}</span>
+              {cut ? (
+                <>
+                  <span className="text-xs text-text-muted">media desde</span>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={99}
+                    className="w-20"
+                    value={cut.mid}
+                    onChange={(e) => setCut(key, { mid: clamp(Math.round(Number(e.target.value)) || 1, 1, 99) })}
+                  />
+                  <span className="text-xs text-text-muted">alta desde</span>
+                  <Input
+                    type="number"
+                    min={2}
+                    max={100}
+                    className="w-20"
+                    value={cut.high}
+                    onChange={(e) => setCut(key, { high: clamp(Math.round(Number(e.target.value)) || 2, 2, 100) })}
+                  />
+                  <Button variant="ghost" onClick={() => remove(key)}>Quitar</Button>
+                </>
+              ) : (
+                <>
+                  <span className="text-xs text-text-muted">sin cortes · sigue con su %</span>
+                  <Button variant="ghost" onClick={() => setCut(key, {})}>Dar de alta</Button>
+                </>
+              )}
+            </div>
+            {inverted && (
+              <span className="text-xs font-sans text-warning">
+                &quot;Alta&quot; tiene que ser mayor que &quot;media&quot;: el guardado se rechaza.
+              </span>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function CombinadasTab({
   form,
   setField,
@@ -285,6 +368,23 @@ export function CombinadasTab({
           info="Una pata nunca muestra más que su confianza del informe + este valor. Con 8 solo muerde en los picks muy prudentes: una pata con 40 en el informe a cuota 1.55 (implícita 64.5) muestra 48, no 57. 0 = nunca por encima del informe. Solo actúa con la confianza anclada encendida."
         >
           <NumInput min={0} max={20} step={1} value={form.combinadasConfidenceMaxRisePts ?? 8} onChange={(v) => setField('combinadasConfidenceMaxRisePts', Math.round(v))} />
+        </Field>
+        <Field
+          label="Nivel en lugar de porcentaje en la lista"
+          subtitle="def. apagado"
+          info="En la tarjeta de la lista, los productos DADOS DE ALTA abajo enseñan un nivel relativo a su producto ('Confianza alta para una premium') en vez del %. Solo se pinta si ese producto está CALIBRADO: acierto real monotónico (alta ≥ media ≥ moderada) con 30 liquidadas por nivel en 90 días. Mientras no lo esté, su tarjeta enseña solo la cuota combinada. El % real no desaparece nunca: sigue en el detalle, junto al acierto medido de cada nivel. La premium del día tiene un techo honesto de 43-50 % y enseñar '43 %' al lado de la Segura con '61 %' se lee como una nota suspensa, aunque sea el número correcto para ese producto. Medido el 2026-09-17: ningún producto pasa aún la calibración, así que encenderlo hoy solo deja la premium con su cuota."
+        >
+          <Toggle value={form.combinadasConfidenceLevelEnabled ?? false} onChange={(v) => setField('combinadasConfidenceLevelEnabled', v)} />
+        </Field>
+        <Field
+          label="Cortes de nivel por producto"
+          subtitle="puntos de confianza mostrada"
+          info="Bordes INFERIORES incluidos: por debajo de 'media' el nivel es moderada. Sácalos de los terciles reales de la confianza mostrada de ese producto en 90 días, no de un número elegido a ojo (consulta 8.7 del plan motor-sesgos). Medido el 2026-09-17: premium mid 36 / high 49 (sembrado) y regular mid 51 / high 57 (sin sembrar a propósito: su % se lee bien y darla de alta la sacaría del % sin necesidad). Un producto sin cortes no entra en el sistema. Cambiar un corte rehace la calibración en menos de un minuto, sin esperar a ningún job."
+        >
+          <ConfidenceLevelCutsEditor
+            cuts={form.combinadasConfidenceLevelCuts ?? {}}
+            onChange={(next) => setField('combinadasConfidenceLevelCuts', next)}
+          />
         </Field>
 
         <SubHeading>Conteo adaptativo</SubHeading>
