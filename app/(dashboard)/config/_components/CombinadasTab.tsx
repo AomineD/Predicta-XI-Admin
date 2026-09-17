@@ -400,6 +400,22 @@ export function CombinadasTab({
           <Input type="number" min={0} max={10} step={0.05} className="w-24" value={form.combinadasCalibrationOddsExempt ?? 0} onChange={(e) => setField('combinadasCalibrationOddsExempt', Number(e.target.value))} />
         </Field>
 
+        <SubHeading>Córners y tarjetas</SubHeading>
+        <Field
+          label="Excluir córners de combinadas"
+          subtitle="def. apagado"
+          info="Saca los córners de las patas, en las DOS tiers (diaria, semanal y Seguras) y en las que arma Claude, por los dos lados: 'más de' y 'menos de'. Medido en 120 días de predicciones oficiales: los córners pierden por los dos lados (A/E 0.81-0.83) con un margen de la casa del 9.3 %. No es un sesgo que otro filtro corrija, es un mercado sin señal. Siguen saliendo en el informe de cada partido."
+        >
+          <Toggle value={form.combinadasExcludeCorners ?? false} onChange={(v) => setField('combinadasExcludeCorners', v)} />
+        </Field>
+        <Field
+          label='Excluir tarjetas "más de" de combinadas'
+          subtitle="def. apagado"
+          info="Saca de las patas las tarjetas 'más de', en las DOS tiers y en las que arma Claude. Las tarjetas 'menos de' se quedan. Medido en 120 días: 'más de 3.5' acierta un 27 % menos de lo que paga su cuota (A/E 0.725). Siguen saliendo en el informe de cada partido."
+        >
+          <Toggle value={form.combinadasExcludeCardsOver ?? false} onChange={(v) => setField('combinadasExcludeCardsOver', v)} />
+        </Field>
+
         <SubHeading>Calibración por selección</SubHeading>
         <Field
           label="A/E mínimo por selección"

@@ -47,6 +47,9 @@ export interface PredictionConfig {
   // Deterministic guard for cards/corners (P-011): anchors confidence to the line's
   // Sportium odds, flips an unsupported cards "over" to "under" and caps blind corners.
   structuralMarketsGuardEnabled: boolean;
+  // Symmetric suggested corners/cards lines in the LLM payload (floor(avg) + 0.5
+  // instead of round(avg) - 0.5, which always left the average above the line).
+  predictionSymmetricPropLines?: boolean;
   // Selector floors (round-tripped; tuned via API). Optional in the admin form.
   totalsSelector?: { confFloor: number; confCeiling: number; oddsFloor: number };
   // Special value markets (idea #1): engine derives exotic markets from the Poisson
@@ -176,6 +179,10 @@ export interface PredictionConfig {
   combinadasGoalFormFilter?: boolean;
   /** Umbral de esa forma: goles por partido, media de los dos equipos. */
   combinadasGoalFormThreshold?: number;
+  /** Saca los córners (los dos lados) de las patas de combinadas, las dos tiers. */
+  combinadasExcludeCorners?: boolean;
+  /** Saca las tarjetas "más de" de las patas de combinadas, las dos tiers. */
+  combinadasExcludeCardsOver?: boolean;
   /** Liquidadas mínimas para que la app muestre el track record de una tier. 0 = siempre. */
   trackRecordPublicMinSettled?: number;
   combinadasPremiumExcludedTeams?: number[];
