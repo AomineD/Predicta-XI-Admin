@@ -32,6 +32,7 @@ export function MultiCheckbox({
         <button
           key={opt}
           type="button"
+          aria-pressed={value.includes(opt)}
           onClick={() => toggle(opt)}
           className={cn(
             'px-3 py-1 rounded-lg text-xs font-sans font-medium transition-colors cursor-pointer',

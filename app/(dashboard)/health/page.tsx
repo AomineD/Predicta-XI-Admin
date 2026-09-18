@@ -8,6 +8,7 @@ import { InfoPopover } from '@/components/ui/InfoPopover';
 import { MetricCard } from '@/components/ui/MetricCard';
 import { cn, formatDateTime } from '@/lib/utils';
 import { BackfillsCard } from './_components/BackfillsCard';
+import { OnexbetHealthCard } from './_components/OnexbetHealthCard';
 
 interface ServiceCheck {
   status: string;
@@ -266,6 +267,8 @@ export default function HealthPage() {
 
       {/* Fuera del bloque anterior a proposito: si el overview de salud falla, los
           backfills siguen operables — que es justo cuando suelen hacer falta. */}
+      <OnexbetHealthCard />
+
       <BackfillsCard />
     </div>
   );

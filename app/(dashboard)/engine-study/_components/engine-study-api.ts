@@ -316,8 +316,13 @@ export function performanceKeyLabel(dimension: PerformanceDimension, key: string
       switch (key) {
         case 'sportium':
           return 'Sportium';
+        case 'flashscore':
+          return 'Flashscore';
+        case 'onexbet':
+          return '1xBet (respaldo)';
         case 'other':
-          return 'Otra (Flashscore)';
+          // Picks anteriores a la migración 0231, sin fuente guardada: se estima.
+          return 'Otra (estimada: Flashscore)';
         default:
           return humanize(key);
       }

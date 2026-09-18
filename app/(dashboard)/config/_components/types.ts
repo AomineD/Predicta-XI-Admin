@@ -264,6 +264,23 @@ export interface SportiumConfig {
   requestTimeoutMs: number;
 }
 
+/** Config de las cuotas de respaldo de 1xBet (plan motor-sesgos, fase 9). Autocontenida
+ *  (tabla `onexbet_config` con GET/PUT propios), como Sportium. */
+export interface OnexbetConfig {
+  enabled: boolean;
+  influencePredictions: boolean;
+  captureV1: boolean;
+  captureV2: boolean;
+  matchConfidenceMin: number;
+  baseUrls: string[];
+  fcountry: string;
+  leagueMap: Array<{ competitionId: number; ligaId: number }>;
+  marketsEnabled: string[];
+  requestDelayMs: number;
+  maxRequestsPerHour: number;
+  requestTimeoutMs: number;
+}
+
 /** Config de la fuente de datos secundaria/fallback (ESPN, idea #20). Autocontenida
  *  (tabla `data_source_config` con GET/PUT propios), como Sportium. */
 export interface DataSourceConfig {
