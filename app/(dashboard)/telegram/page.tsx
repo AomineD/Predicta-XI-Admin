@@ -10,11 +10,12 @@ import { Tabs } from '@/components/ui/Tabs';
 import { SectionCard, Field, Toggle, NumInput } from '@/components/ui/form-controls';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { LeaguePicker } from '@/components/pickers/LeaguePicker';
-import { TeamPicker } from '@/components/pickers/TeamPicker';
 import { TemplateEditor } from '@/components/telegram/TemplateEditor';
 import { ContentTypeCard } from '@/components/telegram/ContentTypeCard';
 import telegramStyles from '@/components/telegram/telegram-layout.module.css';
 import { CustomEmojiManager } from '@/components/telegram/CustomEmojiManager';
+import { TeamsSelection } from '@/components/telegram/TeamsSelection';
+import { TeamGroupsManager } from '@/components/telegram/TeamGroupsManager';
 
 /* ── tabs ───────────────────────────────────────────────────────────────────── */
 
@@ -23,6 +24,7 @@ const TG_TABS = [
   { id: 'content', label: 'Contenido' },
   { id: 'templates', label: 'Plantillas' },
   { id: 'creatives', label: 'Creativos' },
+  { id: 'groups', label: 'Grupos' },
   { id: 'queue', label: 'Cola' },
   { id: 'history', label: 'Historial' },
   { id: 'metrics', label: 'Rendimiento' },
@@ -1562,18 +1564,21 @@ export default function TelegramPage() {
                   </Field>
                   <Field
                     label="Equipos"
-                    subtitle="Vacío = todos los de esas ligas."
-                    info="Al revés que las ligas: aquí vacío NO restringe. Con equipos puestos, solo se publica el gol si uno de los dos del partido está en la lista."
+                    subtitle="Grupos + equipos sueltos. Vacío = todos los de esas ligas."
+                    info="Al revés que las ligas: aquí vacío NO restringe. Con equipos puestos, solo se publica el gol si uno de los dos del partido está en la lista. Los equipos de los grupos se suman a los sueltos, y un grupo elegido SIEMPRE restringe: si se queda sin equipos, no sale ningún gol (no pasa a salir de todos). Los grupos se crean y editan en la pestaña «Grupos»."
                   >
-                    <TeamPicker
-                      value={arraySetting('goal', 'teamIds')}
-                      onChange={(v) => patchSetting('goal', 'teamIds', v)}
+                    <TeamsSelection
+                      groupIds={arraySetting('goal', 'teamGroupIds')}
+                      onGroupsChange={(v) => patchSetting('goal', 'teamGroupIds', v)}
+                      teamIds={arraySetting('goal', 'teamIds')}
+                      onTeamsChange={(v) => patchSetting('goal', 'teamIds', v)}
+                      onManageGroups={() => setTab('groups')}
                     />
                   </Field>
                   <Field
                     label="Equipos populares"
                     subtitle="Suma los N más marcados como favoritos. 0 = apagado."
-                    info="Se calculan cada madrugada a partir de los favoritos de los usuarios y se suman a la lista manual de arriba. OJO con la asimetría: si la lista manual está vacía, poner un número aquí NO amplía la cobertura, la ACOTA a esos equipos. Con 0 el filtro es exactamente la lista manual."
+                    info="Se calculan cada madrugada a partir de los favoritos de los usuarios y se suman a los equipos y grupos de arriba. OJO con la asimetría: si no hay ni equipos ni grupos, poner un número aquí NO amplía la cobertura, la ACOTA a esos equipos. Con 0 el filtro es exactamente lo de arriba."
                   >
                     <NumInput
                       value={numSetting('goal', 'popularTeamsCount', 0)}
@@ -1723,17 +1728,21 @@ export default function TelegramPage() {
                   </Field>
                   <Field
                     label="Equipos"
-                    subtitle="Vacío = todos los de esas ligas."
+                    subtitle="Grupos + equipos sueltos. Vacío = todos los de esas ligas."
+                    info="Igual que en los goles: vacío NO restringe, los equipos de los grupos se suman a los sueltos, y un grupo elegido SIEMPRE restringe aunque se quede sin equipos. Los grupos se crean y editan en la pestaña «Grupos»."
                   >
-                    <TeamPicker
-                      value={arraySetting('match_result', 'teamIds')}
-                      onChange={(v) => patchSetting('match_result', 'teamIds', v)}
+                    <TeamsSelection
+                      groupIds={arraySetting('match_result', 'teamGroupIds')}
+                      onGroupsChange={(v) => patchSetting('match_result', 'teamGroupIds', v)}
+                      teamIds={arraySetting('match_result', 'teamIds')}
+                      onTeamsChange={(v) => patchSetting('match_result', 'teamIds', v)}
+                      onManageGroups={() => setTab('groups')}
                     />
                   </Field>
                   <Field
                     label="Equipos populares"
                     subtitle="Suma los N más marcados como favoritos. 0 = apagado."
-                    info="Igual que en los goles: se calculan cada madrugada desde los favoritos de los usuarios y se suman a la lista manual. Con la lista manual vacía, poner un número aquí ACOTA a esos equipos en vez de ampliar."
+                    info="Igual que en los goles: se calculan cada madrugada desde los favoritos de los usuarios y se suman a los equipos y grupos de arriba. Sin equipos ni grupos, poner un número aquí ACOTA a esos equipos en vez de ampliar."
                   >
                     <NumInput
                       value={numSetting('match_result', 'popularTeamsCount', 0)}
@@ -1971,12 +1980,15 @@ export default function TelegramPage() {
                   </Field>
                   <Field
                     label="Equipos"
-                    subtitle="Vacío = todos."
-                    info="Para seguir solo a unos clubes concretos. Vacío NO restringe. Con equipos elegidos, el canal recolecta sus noticias una hora antes de la publicación del día (hasta 40 equipos; si también eliges ligas, solo los que las juegan), porque la recolección general solo cubre los clubes que juegan ese día en la Home o que se van a predecir. Solo publica noticias que traten de verdad del equipo: el feed de Flashscore mezcla noticias de otros clubes y esas se descartan."
+                    subtitle="Grupos + equipos sueltos. Vacío = todos."
+                    info="Para seguir solo a unos clubes concretos. Vacío NO restringe. Los equipos de los grupos se suman a los sueltos, y un grupo elegido SIEMPRE restringe: si se queda sin equipos, no sale ninguna noticia. Con equipos elegidos, el canal recolecta sus noticias una hora antes de la publicación del día (hasta 40 equipos, los sueltos primero; si también eliges ligas, solo los que las juegan), porque la recolección general solo cubre los clubes que juegan ese día en la Home o que se van a predecir. Solo publica noticias que traten de verdad del equipo: el feed de Flashscore mezcla noticias de otros clubes y esas se descartan."
                   >
-                    <TeamPicker
-                      value={arraySetting('news', 'teamIds')}
-                      onChange={(v) => patchSetting('news', 'teamIds', v)}
+                    <TeamsSelection
+                      groupIds={arraySetting('news', 'teamGroupIds')}
+                      onGroupsChange={(v) => patchSetting('news', 'teamGroupIds', v)}
+                      teamIds={arraySetting('news', 'teamIds')}
+                      onTeamsChange={(v) => patchSetting('news', 'teamIds', v)}
+                      onManageGroups={() => setTab('groups')}
                     />
                   </Field>
                   {/* Sin campo de imagen: el pie de una foto de Telegram son 1.024
@@ -2098,6 +2110,12 @@ export default function TelegramPage() {
                 </div>
               </>
             )}
+          </div>
+
+          {/* ── GRUPOS DE EQUIPOS ── */}
+
+          <div hidden={tab !== 'groups'} role="tabpanel" id="tabpanel-groups" aria-labelledby="tab-groups">
+            {tab === 'groups' && <TeamGroupsManager typeLabel={(t) => TYPE_LABELS[t] ?? t} />}
           </div>
 
           {/* ── QUEUE ── */}
