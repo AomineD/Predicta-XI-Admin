@@ -1542,13 +1542,33 @@ export default function TelegramPage() {
                   <Field
                     label="Confirmación antes de publicar"
                     subtitle="Segundos que el gol debe aguantar vivo. 0 = publicar al detectarlo."
-                    info="ESPN se desdice: en la jornada de sombra del 12-09-2026 detectó 45 goles y acertó los 41 reales, pero los otros 4 se cayeron solos en dos minutos o menos — tres goles que nunca existieron y un minuto corregido (19'→18') que habría mandado el MISMO gol dos veces. Con este margen el gol no sale hasta que sobrevive, así que esos 4 no se habrían publicado. El precio es inmediatez: con 150 s el gol llega al canal unos 3 minutos después de marcarse. Bajarlo a 90 lo devuelve por debajo de los 2 minutos a cambio de publicar algún desmentido. Con 0 se publica al primer avistamiento y el canal tendrá que desdecirse: un mensaje se borra, pero el push ya sonó."
+                    info="ESPN se desdice: en la jornada de sombra del 12-09-2026 detectó 45 goles y acertó los 41 reales, pero los otros 4 se cayeron solos en dos minutos o menos — tres goles que nunca existieron y un minuto corregido (19'→18') que habría mandado el MISMO gol dos veces. Con este margen el gol no sale hasta que sobrevive, así que esos 4 no se habrían publicado. El precio es inmediatez: el gol llega al canal unos segundos después de este margen. Con «Marcar goles anulados» encendido, un valor bajo (30 s) es viable: si ESPN retira el gol después de publicarlo, el mensaje se tacha con «(Anulado)» en vez de quedarse mintiendo. Los avisos push no dependen de este campo: tienen su propia confirmación, porque un push ya enviado no se puede corregir."
                   >
                     <NumInput
                       value={numSetting('goal', 'confirmSeconds', 150)}
                       onChange={(v) => patchSetting('goal', 'confirmSeconds', v)}
                       min={0}
                       max={600}
+                    />
+                  </Field>
+                  <Field
+                    label="Marcar goles anulados"
+                    subtitle="Tacha el aviso y añade «(Anulado)» si ESPN retira el gol."
+                    info="Edita el MISMO mensaje, no manda otro: el titular queda tachado con «(Anulado)» en español y «(Disallowed)» en inglés. La retirada tiene que aguantar la misma «Confirmación antes de publicar» que el gol, para no tachar un gol que ESPN solo dejó de mostrar un momento. Si ESPN corrige el minuto o el goleador, no se tacha: es el mismo gol. Si el gol seguía en la cola de aprobación, se rechaza. Los avisos push ya enviados no se pueden corregir."
+                  >
+                    <Toggle
+                      value={boolSetting('goal', 'annulEdit', true)}
+                      onChange={(v) => patchSetting('goal', 'annulEdit', v)}
+                    />
+                  </Field>
+                  <Field
+                    label="Imagen con los dos escudos"
+                    subtitle="Apagado = el gol sale solo como texto."
+                    info="La tarjeta de local contra visitante que acompaña al aviso. Además de este interruptor, necesita «Tarjetas con 2 escudos» encendido en la configuración general: apagar aquel la quita en todos los tipos, y este solo en los goles."
+                  >
+                    <Toggle
+                      value={boolSetting('goal', 'cardImage', true)}
+                      onChange={(v) => patchSetting('goal', 'cardImage', v)}
                     />
                   </Field>
                   <Field
