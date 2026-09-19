@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { SectionCard, Field, Toggle, NumInput } from '@/components/ui/form-controls';
+import { SectionCard, Field, Toggle, NumInput, SubHeading } from '@/components/ui/form-controls';
 import { InfoPopover } from '@/components/ui/InfoPopover';
 import { Input } from '@/components/ui/inputs';
 import { Button } from '@/components/ui/Button';
@@ -69,6 +69,7 @@ export function PlayerRatingsCard() {
     return {
       enabled: (c.enabled as boolean) ?? false,
       influencePredictions: (c.influencePredictions as boolean) ?? false,
+      lineupFeedEnabled: (c.lineupFeedEnabled as boolean) ?? false,
       captureDelayMinutes: n('captureDelayMinutes', 15),
       retryMinutes: n('retryMinutes', 20),
       maxAttempts: n('maxAttempts', 4),
@@ -78,6 +79,8 @@ export function PlayerRatingsCard() {
       minAppearances: n('minAppearances', 3),
       goodThreshold: n('goodThreshold', 7),
       greatThreshold: n('greatThreshold', 8),
+      podiumEnabled: (c.podiumEnabled as boolean) ?? false,
+      podiumMinRating: n('podiumMinRating', 8),
       momentumWindowMatches: n('momentumWindowMatches', 5),
       momentumHalfLifeMatches: n('momentumHalfLifeMatches', 2),
       momentumMinMatches: n('momentumMinMatches', 3),
@@ -232,6 +235,25 @@ export function PlayerRatingsCard() {
               disabled={!pr.enabled}
             />
           </Field>
+          <Field
+            label="Leer del feed de alineación"
+            info={
+              <>
+                Lee las notas del feed de alineación de la fuente, que trae el identificador de cada jugador. Con él,
+                tocar a un jugador en «Notas de los jugadores» abre su perfil, y dos jugadores del mismo equipo con el
+                mismo nombre abreviado dejan de fundirse en uno. Si el feed falla, la captura cae a la página (sin
+                identificador, pero con la nota) y Health avisa con «Notas sin slug (24 h)».{' '}
+                <b>Después de encenderlo</b>, lanza en Health → Backfills «Rellenar el slug de las notas de jugador»
+                para reescribir lo ya capturado.
+              </>
+            }
+          >
+            <Toggle
+              value={pr.lineupFeedEnabled}
+              onChange={(v) => setForm({ ...pr, lineupFeedEnabled: v })}
+              disabled={!pr.enabled}
+            />
+          </Field>
 
           <Field label="Retraso de captura (min)" subtitle="5–120 · def. 15" info="Minutos tras el final del partido antes del primer intento. La fuente publica las notas unos minutos después del pitido.">
             <NumInput value={pr.captureDelayMinutes} onChange={(v) => setForm({ ...pr, captureDelayMinutes: v })} min={5} max={120} />
@@ -260,6 +282,31 @@ export function PlayerRatingsCard() {
           </Field>
           <Field label="Corte de nota notable" subtitle="1–10 · def. 8.0" info="Desde esta nota el chip se destaca. Debe ser mayor que el corte de nota buena.">
             <NumInput value={pr.greatThreshold} onChange={(v) => setForm({ ...pr, greatThreshold: v })} min={1} max={10} step={0.1} />
+          </Field>
+
+          <SubHeading>Podio del día</SubHeading>
+          <Field
+            label="Podio en Home"
+            info="Muestra en Inicio, debajo de «Resultados de hoy», a los tres mejores jugadores del día del usuario: uno por equipo y con la nota mínima de abajo. Si ese día no hay tres jugadores por encima, el bloque no aparece. Tocar un puesto abre el perfil del jugador (o el partido, si no tiene perfil). Requiere la versión 1.1.13 de la app; las anteriores lo ignoran."
+          >
+            <Toggle
+              value={pr.podiumEnabled}
+              onChange={(v) => setForm({ ...pr, podiumEnabled: v })}
+              disabled={!pr.enabled}
+            />
+          </Field>
+          <Field
+            label="Nota mínima del podio"
+            subtitle="1.0–10.0 · def. 8.0"
+            info="Nota que un jugador necesita para entrar al podio. Más alta = menos días con podio, pero con actuaciones más destacadas. Con 8.0, del 11 al 19 de septiembre hubo podio 8 de 9 días."
+          >
+            <NumInput
+              value={pr.podiumMinRating}
+              onChange={(v) => setForm({ ...pr, podiumMinRating: v })}
+              min={1}
+              max={10}
+              step={0.1}
+            />
           </Field>
 
           <Field label="Momento: partidos de la ventana" subtitle="3–15 · def. 5" info="Cuántos partidos recientes entran en el cálculo del momento del equipo.">

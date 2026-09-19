@@ -470,6 +470,8 @@ export interface PlayerRatingsConfig {
   enabled: boolean;
   /** Aparte del maestro: deja que el momento del equipo entre al contexto del modelo. */
   influencePredictions: boolean;
+  /** Lee las notas del feed de alineación (trae el slug del jugador); el DOM queda de respaldo. */
+  lineupFeedEnabled: boolean;
   captureDelayMinutes: number;
   retryMinutes: number;
   maxAttempts: number;
@@ -479,6 +481,10 @@ export interface PlayerRatingsConfig {
   minAppearances: number;
   goodThreshold: number;
   greatThreshold: number;
+  /** Podio del día en Home (P-020). La app lo pinta solo con el maestro también encendido. */
+  podiumEnabled: boolean;
+  /** Nota mínima para entrar al podio; con menos de tres jugadores por encima no hay podio. */
+  podiumMinRating: number;
   momentumWindowMatches: number;
   momentumHalfLifeMatches: number;
   momentumMinMatches: number;
