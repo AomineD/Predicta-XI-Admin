@@ -16,6 +16,7 @@ import telegramStyles from '@/components/telegram/telegram-layout.module.css';
 import { CustomEmojiManager } from '@/components/telegram/CustomEmojiManager';
 import { TeamsSelection } from '@/components/telegram/TeamsSelection';
 import { TeamGroupsManager } from '@/components/telegram/TeamGroupsManager';
+import { RivalriesManager } from '@/components/telegram/RivalriesManager';
 
 /* ── tabs ───────────────────────────────────────────────────────────────────── */
 
@@ -25,6 +26,7 @@ const TG_TABS = [
   { id: 'templates', label: 'Plantillas' },
   { id: 'creatives', label: 'Creativos' },
   { id: 'groups', label: 'Grupos' },
+  { id: 'rivalries', label: 'Rivalidades' },
   { id: 'queue', label: 'Cola' },
   { id: 'history', label: 'Historial' },
   { id: 'metrics', label: 'Rendimiento' },
@@ -52,6 +54,7 @@ const CONTENT_TYPES = [
   'poll',
   'fun_fact',
   'news',
+  'changelog',
 ] as const;
 type ContentType = typeof CONTENT_TYPES[number];
 
@@ -176,6 +179,7 @@ const TYPE_LABELS: Record<string, string> = {
   poll: 'Encuesta',
   fun_fact: 'Dato curioso',
   news: 'Noticias',
+  changelog: 'Novedades de la app',
   manual: 'Manual',
 };
 
@@ -192,6 +196,8 @@ const TYPE_LABELS: Record<string, string> = {
  */
 const DETERMINISTIC_TYPES = new Set<string>([
   'goal',
+  // Su texto lo redacta el command y lo aprueba un humano antes de salir.
+  'changelog',
   'promo',
   'poll',
   'fun_fact',
@@ -1496,11 +1502,25 @@ export default function TelegramPage() {
 
             <TypeCard
               title="Partidazo"
-              subtitle="El partido marquee del día con el pronóstico principal."
+              subtitle="El mejor partido del día, si lo hay."
               info={'El texto de este tipo se compone con su maqueta, en la pestaña «Plantillas».'}
               deterministic
               config={typeCfg('match_teaser')}
               onChange={(p) => patchType('match_teaser', p)}
+              extra={
+                <Field
+                  label="Exigencia"
+                  subtitle="Nota mínima para llamarlo partidazo. Si ninguno llega, ese día no se publica."
+                  info="Cada partido del día recibe una nota de 0 a 100 con tres señales que se suman: la clasificación (manda el PEOR de los dos puestos — un 2º contra un 3º puntúa alto, un 1º contra un colista no), si la pareja está declarada como derbi en la pestaña «Rivalidades», y la fase del torneo (una final o una semifinal puntúan por sí solas). Con 50 pasan un 2º contra 3º, un derbi, unos cuartos entre equipos de arriba y cualquier semifinal o final. Súbelo para hablar menos y mejor; con 0 se publica siempre el mejor candidato, aunque no sea gran cosa. Un partido marcado como destacado en Partidos entra siempre, sea cual sea la nota."
+                >
+                  <NumInput
+                    value={numSetting('match_teaser', 'minMarqueeScore', 50)}
+                    onChange={(v) => patchSetting('match_teaser', 'minMarqueeScore', v)}
+                    min={0}
+                    max={100}
+                  />
+                </Field>
+              }
             />
 
             <TypeCard
@@ -1605,6 +1625,16 @@ export default function TelegramPage() {
                       onChange={(v) => patchSetting('goal', 'popularTeamsCount', v)}
                       min={0}
                       max={100}
+                    />
+                  </Field>
+                  <Field
+                    label="Modo prioritario"
+                    subtitle="Si hoy no juega ninguno de esos equipos, publica los goles de todos."
+                    info="Convierte el filtro de equipos en una preferencia en vez de un muro: mientras alguno de los equipos elegidos tenga partido hoy, solo salen sus goles; el día que ninguno juega, en vez de quedarse mudo el canal publica los del resto de las ligas activas. Se mira el día entero (el partido de la noche ya cuenta por la mañana), y los topes por partido y por día siguen mandando igual. Sin equipos ni grupos elegidos no cambia nada. Si la comprobación falla, el filtro se mantiene cerrado."
+                  >
+                    <Toggle
+                      value={boolSetting('goal', 'priorityMode', false)}
+                      onChange={(v) => patchSetting('goal', 'priorityMode', v)}
                     />
                   </Field>
                   <Field
@@ -2018,6 +2048,30 @@ export default function TelegramPage() {
                 </>
               }
             />
+
+            <TypeCard
+              title="Novedades de la app"
+              subtitle="Anuncia en el canal una novedad ya publicada en «¿Qué hay de nuevo?»."
+              info={
+                <>
+                  No se agenda ni se compone sola: la dispara el command
+                  <code> /changelog-telegram</code> con el id de una novedad que YA está
+                  publicada en la app. Si esa entrada no existe o todavía no está publicada, no
+                  se anuncia nada — el canal no puede contar algo que el usuario no ve al abrir.
+                  El texto del canal es propio (admite emojis y un tono más suelto) y no el mismo
+                  de la pantalla de novedades; si el command no lo manda, se usa el de la app.
+                  Cada novedad se anuncia una sola vez.
+                </>
+              }
+              config={typeCfg('changelog')}
+              onChange={(p) => patchType('changelog', p)}
+              eventDriven
+              deterministic
+              lockedMode={{
+                mode: 'approval',
+                reason: 'Clavado en aprobación: el texto lo redacta una sesión de Claude a partir de archivos del repo, así que nada sale sin que lo leas.',
+              }}
+            />
           </div>
 
           {/* ── CREATIVOS ── */}
@@ -2136,6 +2190,12 @@ export default function TelegramPage() {
 
           <div hidden={tab !== 'groups'} role="tabpanel" id="tabpanel-groups" aria-labelledby="tab-groups">
             {tab === 'groups' && <TeamGroupsManager typeLabel={(t) => TYPE_LABELS[t] ?? t} />}
+          </div>
+
+          {/* ── RIVALIDADES (derbis y clásicos) ── */}
+
+          <div hidden={tab !== 'rivalries'} role="tabpanel" id="tabpanel-rivalries" aria-labelledby="tab-rivalries">
+            {tab === 'rivalries' && <RivalriesManager />}
           </div>
 
           {/* ── QUEUE ── */}
