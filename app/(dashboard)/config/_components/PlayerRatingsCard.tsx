@@ -77,8 +77,11 @@ export function PlayerRatingsCard() {
       maxMatchAgeHours: n('maxMatchAgeHours', 72),
       competitionNoRatingsStreak: n('competitionNoRatingsStreak', 10),
       minAppearances: n('minAppearances', 3),
+      weakThreshold: n('weakThreshold', 5.6),
+      fairThreshold: n('fairThreshold', 6.5),
       goodThreshold: n('goodThreshold', 7),
-      greatThreshold: n('greatThreshold', 8),
+      strongThreshold: n('strongThreshold', 7.6),
+      greatThreshold: n('greatThreshold', 8.5),
       podiumEnabled: (c.podiumEnabled as boolean) ?? false,
       podiumMinRating: n('podiumMinRating', 8),
       momentumWindowMatches: n('momentumWindowMatches', 5),
@@ -207,7 +210,14 @@ export function PlayerRatingsCard() {
     },
   ];
 
-  const invalidThresholds = !!pr && pr.goodThreshold >= pr.greatThreshold;
+  // La escala de color tiene que ser CRECIENTE de punta a punta. Se comprueba la
+  // cadena entera y no solo un par: dos cortes que por separado son válidos
+  // pueden cruzarse entre ellos y dejar un tramo de color al que no llega
+  // ninguna nota, sin un solo error visible.
+  const colorScale = !pr
+    ? []
+    : [pr.weakThreshold, pr.fairThreshold, pr.goodThreshold, pr.strongThreshold, pr.greatThreshold];
+  const invalidThresholds = colorScale.some((v, i) => i > 0 && colorScale[i - 1] >= v);
 
   return (
     <SectionCard
@@ -277,10 +287,25 @@ export function PlayerRatingsCard() {
           <Field label="Partidos mínimos para mostrar la media" subtitle="1–20 · def. 3" info="Por debajo de esto la app pinta un guion en vez de una nota. Evita que un solo partido produzca una media engañosa.">
             <NumInput value={pr.minAppearances} onChange={(v) => setForm({ ...pr, minAppearances: v })} min={1} max={20} />
           </Field>
-          <Field label="Corte de nota buena" subtitle="1–10 · def. 7.0" info="Desde esta nota el chip se pinta en verde suave.">
+          <SubHeading>Escala de color del chip</SubHeading>
+          <p className="text-xs text-text-muted font-sans pb-2">
+            Seis tramos: por debajo del primer corte es rojo y desde el último, el degradado multicolor que la app
+            reserva a lo que destaca (y al mejor del partido, sea cual sea su nota). Los cinco valores tienen que ir de
+            menor a mayor.
+          </p>
+          <Field label="Corte de nota floja" subtitle="1–10 · def. 5.6" info="Desde esta nota el chip pasa de rojo a naranja rojizo. Por debajo, rojo.">
+            <NumInput value={pr.weakThreshold} onChange={(v) => setForm({ ...pr, weakThreshold: v })} min={1} max={10} step={0.1} />
+          </Field>
+          <Field label="Corte de nota correcta" subtitle="1–10 · def. 6.5" info="Desde esta nota el chip se pinta naranja: un partido sin brillo pero sin errores.">
+            <NumInput value={pr.fairThreshold} onChange={(v) => setForm({ ...pr, fairThreshold: v })} min={1} max={10} step={0.1} />
+          </Field>
+          <Field label="Corte de nota buena" subtitle="1–10 · def. 7.0" info="Desde esta nota el chip se pinta en verde claro.">
             <NumInput value={pr.goodThreshold} onChange={(v) => setForm({ ...pr, goodThreshold: v })} min={1} max={10} step={0.1} />
           </Field>
-          <Field label="Corte de nota notable" subtitle="1–10 · def. 8.0" info="Desde esta nota el chip se destaca. Debe ser mayor que el corte de nota buena.">
+          <Field label="Corte de nota muy buena" subtitle="1–10 · def. 7.6" info="Desde esta nota el chip se pinta en verde oscuro.">
+            <NumInput value={pr.strongThreshold} onChange={(v) => setForm({ ...pr, strongThreshold: v })} min={1} max={10} step={0.1} />
+          </Field>
+          <Field label="Corte de nota excelente" subtitle="1–10 · def. 8.5" info="Desde esta nota el chip sale con el degradado multicolor. Súbelo para reservarlo a lo excepcional; bájalo y dejará de significar nada.">
             <NumInput value={pr.greatThreshold} onChange={(v) => setForm({ ...pr, greatThreshold: v })} min={1} max={10} step={0.1} />
           </Field>
 
@@ -327,7 +352,7 @@ export function PlayerRatingsCard() {
               Guardar
             </Button>
             {invalidThresholds && (
-              <span className="text-xs font-sans text-danger">El corte de nota buena debe ser menor que el de notable.</span>
+              <span className="text-xs font-sans text-danger">Los cinco cortes de color tienen que ir de menor a mayor.</span>
             )}
             {!invalidThresholds && pr.enabled && !pr.influencePredictions && (
               <span className="text-xs font-sans text-warning">Visible en la app; todavía no influye en las predicciones.</span>

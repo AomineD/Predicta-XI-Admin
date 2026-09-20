@@ -479,7 +479,11 @@ export interface PlayerRatingsConfig {
   maxMatchAgeHours: number;
   competitionNoRatingsStreak: number;
   minAppearances: number;
+  /** Los cinco cortes de la escala de color del chip, en orden creciente. */
+  weakThreshold: number;
+  fairThreshold: number;
   goodThreshold: number;
+  strongThreshold: number;
   greatThreshold: number;
   /** Podio del día en Home (P-020). La app lo pinta solo con el maestro también encendido. */
   podiumEnabled: boolean;
