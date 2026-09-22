@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Pencil } from 'lucide-react';
+import { Pencil, Plus } from 'lucide-react';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
@@ -12,6 +12,12 @@ import { Field, Toggle } from '@/components/ui/form-controls';
 import { Input, Select, Textarea } from '@/components/ui/inputs';
 import { Modal } from '@/components/ui/Modal';
 import { useToast } from '@/components/ui/ToastProvider';
+import {
+  CreateCompetitionModal,
+  StandingsSourcesEditor,
+  type CreateCompetitionPayload,
+  type FlashscoreStandingsSource,
+} from '@/components/competitions/CreateCompetitionModal';
 
 interface Competition {
   id: number;
@@ -24,10 +30,12 @@ interface Competition {
   active: boolean;
   flashscoreSlug: string | null;
   flashscoreSeasonId: string | null;
+  flashscoreStandingsSources: FlashscoreStandingsSource[] | null;
   // Edicion de Flashscore donde vive el CUADRO de eliminatoria, cuando no es la
   // misma que la de la fase de grupos. Null = se usa flashscoreSeasonId.
   flashscoreBracketSeasonId: string | null;
   currentSeasonYear: string | null;
+  seasonDisplayLabel: string | null;
   supportsQuiniela: boolean;
   quinielaFormat: 'group_then_knockout' | 'league_then_knockout' | 'single_phase' | null;
   // Categorías que los usuarios pueden predecir en la quiniela social de esta
@@ -71,8 +79,10 @@ type CompetitionUpdate = Partial<
     | 'logoCustom'
     | 'flashscoreSlug'
     | 'flashscoreSeasonId'
+    | 'flashscoreStandingsSources'
     | 'flashscoreBracketSeasonId'
     | 'currentSeasonYear'
+    | 'seasonDisplayLabel'
     | 'supportsQuiniela'
     | 'quinielaFormat'
     | 'groupPlayableCategories'
@@ -272,8 +282,12 @@ function CompetitionDetailsEditor({
   const [country, setCountry] = useState(comp.country ?? '');
   const [flashscoreSlug, setFlashscoreSlug] = useState(comp.flashscoreSlug ?? '');
   const [flashscoreSeasonId, setFlashscoreSeasonId] = useState(comp.flashscoreSeasonId ?? '');
+  const [flashscoreStandingsSources, setFlashscoreStandingsSources] = useState<FlashscoreStandingsSource[]>(
+    comp.flashscoreStandingsSources ?? [],
+  );
   const [flashscoreBracketSeasonId, setFlashscoreBracketSeasonId] = useState(comp.flashscoreBracketSeasonId ?? '');
   const [currentSeasonYear, setCurrentSeasonYear] = useState(comp.currentSeasonYear ?? '');
+  const [seasonDisplayLabel, setSeasonDisplayLabel] = useState(comp.seasonDisplayLabel ?? '');
   const [supportsQuiniela, setSupportsQuiniela] = useState(comp.supportsQuiniela);
   const [quinielaFormat, setQuinielaFormat] = useState<Competition['quinielaFormat']>(comp.quinielaFormat);
   const [playableCats, setPlayableCats] = useState<string[]>(comp.groupPlayableCategories ?? []);
@@ -319,7 +333,7 @@ function CompetitionDetailsEditor({
   // Cup) is identified by a non-empty flashscore_season_id. In that case the
   // backend needs current_season_year too — without it Team Sync skips the
   // row entirely with a warn.
-  const isTournamentShape = flashscoreSeasonId.trim().length > 0;
+  const isTournamentShape = flashscoreSeasonId.trim().length > 0 || flashscoreStandingsSources.length > 0;
   const missingSeasonYear = isTournamentShape && currentSeasonYear.trim().length === 0;
   const contextTooLong = historicalContext.length > 12000;
   // Espejo de la validacion del backend: el token viaja crudo dentro de la URL
@@ -327,6 +341,19 @@ function CompetitionDetailsEditor({
   const bracketSeasonIdInvalid =
     flashscoreBracketSeasonId.trim().length > 0 &&
     !/^[A-Za-z0-9]{1,32}$/.test(flashscoreBracketSeasonId.trim());
+  const primarySeasonIdInvalid =
+    flashscoreSeasonId.trim().length > 0 && !/^[A-Za-z0-9]{1,32}$/.test(flashscoreSeasonId.trim());
+  const normalizedFlashscoreSlug = flashscoreSlug.trim().replace(/\/+$/, '');
+  const flashscoreSlugInvalid =
+    normalizedFlashscoreSlug.length > 0 &&
+    !/^football\/[a-z0-9-]{1,64}\/[a-z0-9-]{1,96}$/.test(normalizedFlashscoreSlug);
+  const sourcePrefixes = flashscoreStandingsSources.map((s) => s.groupKeyPrefix?.trim().toUpperCase() ?? '');
+  const sourceSeasonIds = flashscoreStandingsSources.map((s) => s.seasonId.trim());
+  const standingsSourcesInvalid = flashscoreStandingsSources.some((s) =>
+    !/^[A-Za-z0-9]{1,32}$/.test(s.seasonId.trim()) ||
+    (!!s.groupKeyPrefix && !/^[A-Za-z0-9]{1,12}$/.test(s.groupKeyPrefix.trim())) ||
+    (s.expectedRows != null && (!Number.isInteger(s.expectedRows) || s.expectedRows < 2 || s.expectedRows > 128)),
+  ) || flashscoreStandingsSources.length > 8 || new Set(sourcePrefixes).size !== sourcePrefixes.length || new Set(sourceSeasonIds).size !== sourceSeasonIds.length;
 
   // Espejo de `normalizeLeaguePhaseConfig` del backend: si no cuadra, se manda
   // null y la fase de tabla no se ofrece. Validar aquí evita guardar basura que
@@ -354,15 +381,23 @@ function CompetitionDetailsEditor({
           </Button>
           <Button
             variant="primary"
-            disabled={missingSeasonYear || contextTooLong || leaguePhaseInvalid || bracketSeasonIdInvalid}
+            disabled={missingSeasonYear || contextTooLong || leaguePhaseInvalid || bracketSeasonIdInvalid || primarySeasonIdInvalid || flashscoreSlugInvalid || standingsSourcesInvalid}
             onClick={() =>
               onSave({
                 name: name.trim() || undefined,
                 country: country.trim() ? country.trim() : null,
                 flashscoreSlug: flashscoreSlug.trim() ? flashscoreSlug.trim() : null,
                 flashscoreSeasonId: flashscoreSeasonId.trim() ? flashscoreSeasonId.trim() : null,
+                flashscoreStandingsSources: flashscoreStandingsSources.length > 0
+                  ? flashscoreStandingsSources.map((source) => ({
+                      ...source,
+                      seasonId: source.seasonId.trim(),
+                      groupKeyPrefix: source.groupKeyPrefix?.trim().toUpperCase() || null,
+                    }))
+                  : null,
                 flashscoreBracketSeasonId: flashscoreBracketSeasonId.trim() ? flashscoreBracketSeasonId.trim() : null,
                 currentSeasonYear: currentSeasonYear.trim() ? currentSeasonYear.trim() : null,
+                seasonDisplayLabel: seasonDisplayLabel.trim() ? seasonDisplayLabel.trim() : null,
                 supportsQuiniela,
                 quinielaFormat,
                 groupPlayableCategories: playableCats,
@@ -414,6 +449,20 @@ function CompetitionDetailsEditor({
         {missingSeasonYear && (
           <p className="text-xs text-danger font-sans -mt-2">Required when Flashscore season id is set — Team Sync will skip otherwise.</p>
         )}
+        <label className="block">
+          <span className="text-xs text-text-muted font-sans">Season display label</span>
+          <Input className="mt-1" value={seasonDisplayLabel} onChange={(e) => setSeasonDisplayLabel(e.target.value)} placeholder="2026/27 (optional)" maxLength={24} />
+        </label>
+        {(primarySeasonIdInvalid || flashscoreSlugInvalid || standingsSourcesInvalid) && (
+          <p className="text-xs text-danger font-sans -mt-2">Flashscore season IDs, prefixes or expected row counts are invalid or duplicated.</p>
+        )}
+
+        <Field
+          label="Standings sources"
+          info="Use multiple sources when Flashscore splits one competition into separate editions. The sync only replaces the saved table when every configured source is complete."
+        >
+          <StandingsSourcesEditor value={flashscoreStandingsSources} onChange={setFlashscoreStandingsSources} />
+        </Field>
 
         <label className="block">
           <span className="text-xs text-text-muted font-sans inline-flex items-center gap-1">
@@ -655,6 +704,7 @@ export default function CompetitionsPage() {
   const toast = useToast();
   const [editingLogoId, setEditingLogoId] = useState<number | null>(null);
   const [editingDetails, setEditingDetails] = useState<Competition | null>(null);
+  const [creating, setCreating] = useState(false);
 
   const { data: competitions, isLoading } = useQuery<Competition[]>({
     queryKey: ['competitions'],
@@ -693,6 +743,16 @@ export default function CompetitionsPage() {
     onError: (err: Error) => toast.error(err.message),
   });
 
+  const createCompetition = useMutation({
+    mutationFn: (body: CreateCompetitionPayload) => api.post<Competition>('/admin/competitions', body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['competitions'] });
+      setCreating(false);
+      toast.success('Competition created.');
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
   const toggleFeatured = useMutation({
     mutationFn: async ({ apiFootballId, featured }: { apiFootballId: number; featured: boolean }) => {
       const fullConfig = await api.get<PredictionConfig>('/admin/prediction-config');
@@ -714,6 +774,9 @@ export default function CompetitionsPage() {
         description="Manage supported football leagues and competitions"
         action={
           <div className="flex gap-2">
+            <Button variant="secondary" onClick={() => setCreating(true)}>
+              <Plus size={15} /> Add Competition
+            </Button>
             <Button variant="ghost" loading={syncTeams.isPending} onClick={() => syncTeams.mutate()}>
               Sync Teams
             </Button>
@@ -857,6 +920,17 @@ export default function CompetitionsPage() {
             setEditingDetails(null);
           }}
           onClose={() => setEditingDetails(null)}
+        />
+      )}
+
+      {creating && (
+        <CreateCompetitionModal
+          open
+          pending={createCompetition.isPending}
+          onClose={() => {
+            if (!createCompetition.isPending) setCreating(false);
+          }}
+          onCreate={(payload) => createCompetition.mutate(payload)}
         />
       )}
     </div>
