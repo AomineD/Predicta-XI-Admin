@@ -44,6 +44,10 @@ interface Competition {
   // Formato de llave para la quiniela de eliminatorias: a un partido o ida/vuelta.
   // Null = la competición NO se ofrece para la quiniela de llaves.
   knockoutLegFormat: 'single_match' | 'two_legged' | null;
+  // Rondas que, siendo `two_legged`, se juegan a partido único (la final lo es siempre).
+  knockoutSingleMatchRounds: KnockoutSingleMatchRound[];
+  // Vueltas del round-robin de grupos: 1 (Mundial) o 2 (Nations League).
+  groupStageLegs: 1 | 2;
   historicalContext: string | null;
   isNationalTeamCompetition: boolean;
   // 3.er puesto: si la competición tiene partido por el 3.er puesto e incluirlo en
@@ -87,6 +91,8 @@ type CompetitionUpdate = Partial<
     | 'quinielaFormat'
     | 'groupPlayableCategories'
     | 'knockoutLegFormat'
+    | 'knockoutSingleMatchRounds'
+    | 'groupStageLegs'
     | 'historicalContext'
     | 'isNationalTeamCompetition'
     | 'thirdPlaceEnabled'
@@ -177,6 +183,16 @@ function buildLeaguePhaseConfig(raw: {
     groupKey: groupKey.length > 0 ? groupKey : null,
   };
 }
+
+type KnockoutSingleMatchRound = 'round_of_32' | 'round_of_16' | 'quarter_finals' | 'semi_finals';
+
+/** Rondas que el admin puede declarar a partido único en una competición a ida y vuelta. */
+const SINGLE_MATCH_ROUND_OPTIONS: ReadonlyArray<{ key: KnockoutSingleMatchRound; label: string }> = [
+  { key: 'round_of_32', label: 'Dieciseisavos' },
+  { key: 'round_of_16', label: 'Octavos' },
+  { key: 'quarter_finals', label: 'Cuartos' },
+  { key: 'semi_finals', label: 'Semifinales' },
+];
 
 /** Fila de "toggle con etiqueta" (pill) — reemplaza los checkboxes nativos. */
 function ToggleRow({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) {
@@ -292,6 +308,10 @@ function CompetitionDetailsEditor({
   const [quinielaFormat, setQuinielaFormat] = useState<Competition['quinielaFormat']>(comp.quinielaFormat);
   const [playableCats, setPlayableCats] = useState<string[]>(comp.groupPlayableCategories ?? []);
   const [knockoutLegFormat, setKnockoutLegFormat] = useState<Competition['knockoutLegFormat']>(comp.knockoutLegFormat);
+  const [singleMatchRounds, setSingleMatchRounds] = useState<KnockoutSingleMatchRound[]>(
+    comp.knockoutSingleMatchRounds ?? [],
+  );
+  const [groupStageLegs, setGroupStageLegs] = useState<1 | 2>(comp.groupStageLegs === 2 ? 2 : 1);
   const [historicalContext, setHistoricalContext] = useState(comp.historicalContext ?? '');
   const [isNationalTeamCompetition, setIsNationalTeamCompetition] = useState(comp.isNationalTeamCompetition);
   const [thirdPlaceEnabled, setThirdPlaceEnabled] = useState(comp.thirdPlaceEnabled);
@@ -352,6 +372,8 @@ function CompetitionDetailsEditor({
   const standingsSourcesInvalid = flashscoreStandingsSources.some((s) =>
     !/^[A-Za-z0-9]{1,32}$/.test(s.seasonId.trim()) ||
     (!!s.groupKeyPrefix && !/^[A-Za-z0-9]{1,12}$/.test(s.groupKeyPrefix.trim())) ||
+    // «Título» identifica la división por su prefijo de grupo: sin prefijo no hay forma.
+    (s.titleEligible === true && !s.groupKeyPrefix?.trim()) ||
     (s.expectedRows != null && (!Number.isInteger(s.expectedRows) || s.expectedRows < 2 || s.expectedRows > 128)),
   ) || flashscoreStandingsSources.length > 8 || new Set(sourcePrefixes).size !== sourcePrefixes.length || new Set(sourceSeasonIds).size !== sourceSeasonIds.length;
 
@@ -402,6 +424,8 @@ function CompetitionDetailsEditor({
                 quinielaFormat,
                 groupPlayableCategories: playableCats,
                 knockoutLegFormat,
+                knockoutSingleMatchRounds: singleMatchRounds,
+                groupStageLegs,
                 historicalContext: historicalContext.trim() ? historicalContext : null,
                 isNationalTeamCompetition,
                 thirdPlaceEnabled,
@@ -459,7 +483,7 @@ function CompetitionDetailsEditor({
 
         <Field
           label="Standings sources"
-          info="Use multiple sources when Flashscore splits one competition into separate editions. The sync only replaces the saved table when every configured source is complete."
+          info="Use multiple sources when Flashscore splits one competition into separate editions. The sync only replaces the saved table when every configured source is complete. Mark «Título» on the division that plays for the title (it needs a prefix): only its teams are offered as champion and runner-up in the social quiniela. With none marked, every team is."
         >
           <StandingsSourcesEditor value={flashscoreStandingsSources} onChange={setFlashscoreStandingsSources} />
         </Field>
@@ -564,7 +588,67 @@ function CompetitionDetailsEditor({
           </Select>
         </label>
 
+        {knockoutLegFormat === 'two_legged' && (
+          <div className="rounded-xl border border-border p-3 space-y-2">
+            <span className="flex items-center gap-1.5">
+              <span className="text-xs text-text-muted font-sans">Rondas a partido único</span>
+              <InfoPopover label="Qué son las rondas a partido único">
+                En una competición a ida y vuelta, las rondas marcadas aquí se juegan a un solo partido. La
+                final ya lo es siempre. La Nations League juega los cuartos a ida y vuelta y las semifinales
+                a partido único: marca Semifinales. Si una ronda a partido único queda sin marcar, la quiniela
+                de llaves se queda esperando la vuelta y no avanza.
+              </InfoPopover>
+            </span>
+            <div className="flex flex-wrap gap-1.5">
+              {SINGLE_MATCH_ROUND_OPTIONS.map((r) => {
+                const on = singleMatchRounds.includes(r.key);
+                return (
+                  <button
+                    key={r.key}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() =>
+                      setSingleMatchRounds((prev) =>
+                        prev.includes(r.key) ? prev.filter((k) => k !== r.key) : [...prev, r.key],
+                      )
+                    }
+                    className={cn(
+                      'px-2 py-1 rounded-lg text-[11px] font-sans border transition-colors cursor-pointer',
+                      on
+                        ? 'bg-primary/15 border-primary text-primary'
+                        : 'bg-surface-2 border-border text-text-muted hover:text-text-primary',
+                    )}
+                  >
+                    {r.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         <ToggleRow label="3.er puesto (incluir en quiniela de llaves)" value={thirdPlaceEnabled} onChange={setThirdPlaceEnabled} />
+
+        <div className="block">
+          <span className="flex items-center gap-1.5">
+            <label htmlFor="group-stage-legs" className="text-xs text-text-muted font-sans">
+              Vueltas de la fase de grupos
+            </label>
+            <InfoPopover label="Qué son las vueltas de la fase de grupos">
+              Cuántas veces se enfrenta cada equipo con los de su grupo. Decide cuándo una tabla de grupo es
+              definitiva para liquidar: el Mundial juega una vuelta; la Nations League, dos (ida y vuelta).
+            </InfoPopover>
+          </span>
+          <Select
+            id="group-stage-legs"
+            className="mt-1"
+            value={String(groupStageLegs)}
+            onChange={(e) => setGroupStageLegs(e.target.value === '2' ? 2 : 1)}
+          >
+            <option value="1">1 vuelta</option>
+            <option value="2">2 vueltas (ida y vuelta)</option>
+          </Select>
+        </div>
 
         {/* ── Fase de liga: cortes de rango (idea #29) ─────────────────────── */}
         <div className="rounded-xl border border-border p-3 space-y-3">

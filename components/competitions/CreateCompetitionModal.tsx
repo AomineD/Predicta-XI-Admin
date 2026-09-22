@@ -11,6 +11,8 @@ export interface FlashscoreStandingsSource {
   seasonId: string;
   groupKeyPrefix: string | null;
   expectedRows: number | null;
+  /** Esta división disputa el título (League A en la Nations League). */
+  titleEligible?: boolean | null;
 }
 
 export interface CreateCompetitionPayload {
@@ -42,7 +44,7 @@ export function StandingsSourcesEditor({
   return (
     <div className="space-y-2">
       {value.map((source, index) => (
-        <div key={index} className="grid grid-cols-[90px_1fr_100px_auto] gap-2 items-center">
+        <div key={index} className="grid grid-cols-[90px_1fr_100px_auto_auto] gap-2 items-center">
           <Input
             aria-label={`Group prefix ${index + 1}`}
             value={source.groupKeyPrefix ?? ''}
@@ -66,6 +68,13 @@ export function StandingsSourcesEditor({
             onChange={(e) => patch(index, { expectedRows: e.target.value ? Number(e.target.value) : null })}
             placeholder="Rows"
           />
+          <span className="flex items-center gap-1.5" title="Esta división disputa el título">
+            <span className="text-[11px] text-text-muted font-sans">Título</span>
+            <Toggle
+              value={source.titleEligible === true}
+              onChange={(v) => patch(index, { titleEligible: v || null })}
+            />
+          </span>
           <Button
             variant="ghost"
             size="sm"
