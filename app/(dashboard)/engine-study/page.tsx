@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { FlaskConical } from 'lucide-react';
@@ -8,6 +9,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { MetricCard } from '@/components/ui/MetricCard';
 import { DataTable, type Column } from '@/components/ui/DataTable';
+import { Select } from '@/components/ui/inputs';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { Skeleton } from '@/components/ui/Skeleton';
@@ -29,6 +31,7 @@ import {
   verdictTone,
   type ClvAggregate,
   type EngineSelectionStat,
+  type EngineStudyBandRow,
   type EngineStudyOverview,
   type EngineStudyRun,
   type WeeklyAeRow,
@@ -181,6 +184,8 @@ function StudyBody({
 
       {latest && <VerdictCard run={latest} />}
 
+      {latest && <BandCalibrationCard run={latest} />}
+
       <MapStateCard data={data} />
 
       <Card
@@ -236,30 +241,111 @@ function StudyBody({
   );
 }
 
-function VerdictCard({ run }: { run: EngineStudyRun }) {
-  const rows: Array<{ label: string; logLoss: number | null; brier: number | null; hint: string }> = [
-    { label: 'Sin mapa', logLoss: run.noMapLogLoss, brier: run.noMapBrier, hint: 'confianza cruda del modelo' },
-    { label: 'Mapa vigente', logLoss: run.incumbentLogLoss, brier: run.incumbentBrier, hint: 'lo que corre hoy en producción' },
+type ScoreScope = 'all' | 'priced';
+
+type HypothesisRow = { label: string; logLoss: number | null; brier: number | null; hint: string };
+
+/** Las cinco hipótesis del veredicto. Con "Todas", el mercado y la mezcla no se
+ *  pintan: solo existen sobre la validación con cuota y compararlas contra la
+ *  muestra entera mezclaría dos poblaciones distintas. */
+function hypothesisRows(run: EngineStudyRun, scope: ScoreScope): HypothesisRow[] {
+  const priced = scope === 'priced' ? run.pricedScores : null;
+  const weight = run.pricedScores?.blendOddsWeight ?? 0.75;
+  const pick = (all: number | null, inPriced: number | null | undefined) =>
+    scope === 'priced' ? (inPriced ?? null) : all;
+  return [
+    {
+      label: 'Sin mapa',
+      logLoss: pick(run.noMapLogLoss, priced?.noMap?.logLoss),
+      brier: pick(run.noMapBrier, priced?.noMap?.brier),
+      hint: 'confianza cruda del modelo',
+    },
+    {
+      label: 'Mapa vigente',
+      logLoss: pick(run.incumbentLogLoss, priced?.incumbent?.logLoss),
+      brier: pick(run.incumbentBrier, priced?.incumbent?.brier),
+      hint: 'lo que enseña la app hoy: min(cruda, mapa)',
+    },
     {
       label: 'Candidato',
-      logLoss: run.candidateLogLoss,
-      brier: run.candidateBrier,
-      hint: 'entrenado solo con el tramo anterior a la validación',
+      logLoss: pick(run.candidateLogLoss, priced?.candidate?.logLoss),
+      brier: pick(run.candidateBrier, priced?.candidate?.brier),
+      hint: 'entrenado solo con el tramo anterior a la validación, con el mismo tope',
+    },
+    {
+      label: 'Mercado (1/cuota)',
+      logLoss: priced?.market?.logLoss ?? null,
+      brier: priced?.market?.brier ?? null,
+      hint: scope === 'priced' ? 'el precio, la referencia a batir' : 'solo con cuota: cambia el selector',
+    },
+    {
+      label: 'Precio + cruda',
+      logLoss: priced?.blend?.logLoss ?? null,
+      brier: priced?.blend?.brier ?? null,
+      hint:
+        scope === 'priced'
+          ? `${Math.round((1 - weight) * 100)} % cruda + ${Math.round(weight * 100)} % 1/cuota`
+          : 'solo con cuota: cambia el selector',
     },
   ];
+}
+
+function VerdictCard({ run }: { run: EngineStudyRun }) {
+  const [scope, setScope] = useState<ScoreScope>('all');
+  const rows = hypothesisRows(run, scope);
   const best = rows.reduce<number | null>(
     (acc, r) => (r.logLoss == null ? acc : acc == null ? r.logLoss : Math.min(acc, r.logLoss)),
     null,
   );
+  const missingPriced = scope === 'priced' && run.pricedScores == null;
+  const uncapped = run.uncappedScores;
 
   return (
     <Card
       title="Veredicto del walk-forward"
       subtitle={describeVerdict(run)}
-      info="Se decide con log-loss (menor es mejor) y un margen de tolerancia de 0.002: el candidato se aplica si su log-loss en validación no supera al del vigente más el margen. El Brier se muestra para contrastar. Con menos de 300 observaciones de validación no se decide nada y el mapa vigente queda intacto."
+      action={
+        <Select
+          className="w-40"
+          aria-label="Muestra puntuada"
+          value={scope}
+          onChange={(e) => setScope(e.target.value === 'priced' ? 'priced' : 'all')}
+        >
+          <option value="all">Todas</option>
+          <option value="priced">Solo con cuota</option>
+        </Select>
+      }
+      info={
+        <>
+          Se decide con log-loss (menor es mejor) y un margen de tolerancia de 0.002: el candidato se aplica si su
+          log-loss en validación no supera al del vigente más el margen. El Brier se muestra para contrastar. Con menos
+          de 300 observaciones de validación no se decide nada y el mapa vigente queda intacto.
+          <br />
+          <br />
+          Se puntúa lo que corre en producción: el mapa solo puede bajar la confianza, así que cada hipótesis con mapa
+          es min(cruda, mapa). Las corridas anteriores al 2026-10-13 puntuaban el mapa sin ese tope.
+          <br />
+          <br />
+          «Solo con cuota» repite todas las hipótesis sobre los picks de la validación que traían cuota, a igual
+          muestra, y añade el mercado (1/cuota) y la mezcla precio + cruda. Son informativas: no deciden el veredicto.
+          Si «Precio + cruda» gana al «Mapa vigente» aquí dos lunes seguidos, se puede encender la confianza anclada al
+          precio (fase 3 del plan del 2026-10-13).
+        </>
+      }
     >
       <div className="grid gap-4 md:grid-cols-[1fr_auto]">
         <div className="overflow-x-auto">
+          {scope === 'priced' && run.pricedScores && (
+            <p className="text-xs text-text-muted font-sans mb-2">
+              {run.pricedScores.n.toLocaleString()} observaciones con cuota de{' '}
+              {run.holdoutObservations.toLocaleString()} en validación.
+            </p>
+          )}
+          {missingPriced && (
+            <p className="text-xs text-text-muted font-sans mb-2">
+              Esta corrida no trae la medición con cuota: llega con la próxima corrida.
+            </p>
+          )}
           <table className="w-full text-sm font-sans">
             <thead>
               <tr className="border-b border-border">
@@ -288,6 +374,13 @@ function VerdictCard({ run }: { run: EngineStudyRun }) {
               ))}
             </tbody>
           </table>
+          {scope === 'all' && uncapped && (uncapped.incumbent || uncapped.candidate) && (
+            <p className="text-xs text-text-muted font-sans mt-2">
+              Sin el tope, con el mapa tal cual (solo informativo): vigente{' '}
+              <span className="tabular-nums text-text-secondary">{fmtNum(uncapped.incumbent?.logLoss, 5)}</span> ·
+              candidato <span className="tabular-nums text-text-secondary">{fmtNum(uncapped.candidate?.logLoss, 5)}</span>
+            </p>
+          )}
         </div>
         <dl className="text-xs font-sans text-text-secondary space-y-1 min-w-56">
           <div className="flex justify-between gap-4">
@@ -330,6 +423,87 @@ function VerdictCard({ run }: { run: EngineStudyRun }) {
           )}
         </dl>
       </div>
+    </Card>
+  );
+}
+
+/** Diferencia acierto − mostrada: más de 4 puntos es descalibración visible. */
+function gapTone(gap: number): string {
+  if (gap > 4) return 'text-amber-400';
+  if (gap < -4) return 'text-rose-400';
+  return 'text-text-primary';
+}
+
+const bandColumns: Column<EngineStudyBandRow>[] = [
+  { key: 'band', header: 'Cruda', render: (r) => <span className="font-medium">{r.band} %</span> },
+  { key: 'n', header: 'n', render: (r) => r.n.toLocaleString() },
+  { key: 'raw', header: 'Cruda media', render: (r) => `${fmtNum(r.rawMean, 1)}%` },
+  { key: 'shown', header: 'Mostrada', render: (r) => `${fmtNum(r.shownMean, 1)}%` },
+  { key: 'market', header: '1/cuota', render: (r) => (r.marketMean == null ? '—' : `${fmtNum(r.marketMean, 1)}%`) },
+  { key: 'hit', header: 'Acierto', render: (r) => `${fmtNum(r.hitRate, 1)}%` },
+  {
+    key: 'gap',
+    header: 'Acierto − mostrada',
+    render: (r) => {
+      const gap = r.hitRate - r.shownMean;
+      return (
+        <span className={cn('font-semibold tabular-nums', gapTone(gap))}>
+          {gap > 0 ? '+' : ''}
+          {fmtNum(gap, 1)}
+        </span>
+      );
+    },
+  },
+];
+
+function BandCalibrationCard({ run }: { run: EngineStudyRun }) {
+  const rows = run.bandReport;
+  const priced = rows?.filter((r) => r.priced) ?? [];
+  const unpriced = rows?.filter((r) => !r.priced) ?? [];
+
+  return (
+    <Card
+      title="Calibración por banda"
+      subtitle="Validación de la última corrida por banda de confianza cruda: lo que enseña la app frente a lo que aciertan los picks"
+      info={
+        <>
+          Cada fila agrupa los picks de la validación por su confianza cruda (la que declaró el modelo). «Mostrada» es lo
+          que vio el usuario con el mapa vigente: min(cruda, mapa). «1/cuota» es lo que decía el precio. «Acierto» es el
+          porcentaje real de picks ganados.
+          <br />
+          <br />
+          Si la mostrada queda varios puntos por debajo del acierto (en ámbar), la app infravalora sus picks; si queda
+          por encima (en rojo), los sobrevalora. Los picks con cuota y sin cuota se separan porque el mapa se porta
+          distinto en cada grupo: sin cuota es donde más ayuda.
+        </>
+      }
+    >
+      {!rows ? (
+        <p className="text-sm text-text-muted font-sans">
+          Sin informe por banda: llega con la próxima corrida del estudio.
+        </p>
+      ) : (
+        <div className="space-y-4">
+          <div>
+            <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider font-sans mb-2">Con cuota</h3>
+            <DataTable<EngineStudyBandRow>
+              columns={bandColumns}
+              data={priced}
+              keyExtractor={(r) => `p-${r.band}`}
+              emptyMessage="Sin picks con cuota en la validación."
+            />
+          </div>
+          <div>
+            <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider font-sans mb-2">Sin cuota</h3>
+            <DataTable<EngineStudyBandRow>
+              columns={bandColumns.filter((c) => c.key !== 'market')}
+              data={unpriced}
+              keyExtractor={(r) => `u-${r.band}`}
+              emptyMessage="Sin picks sin cuota en la validación."
+            />
+          </div>
+        </div>
+      )}
     </Card>
   );
 }
@@ -543,6 +717,20 @@ const historyColumns: Column<EngineStudyRun>[] = [
         {fmtNum(r.incumbentLogLoss, 4)} → {fmtNum(r.candidateLogLoss, 4)}
       </span>
     ),
+  },
+  {
+    key: 'priced',
+    header: 'Con cuota: vigente · precio + cruda',
+    render: (r) => {
+      const incumbent = r.pricedScores?.incumbent?.logLoss ?? null;
+      const blend = r.pricedScores?.blend?.logLoss ?? null;
+      const blendWins = incumbent != null && blend != null && blend < incumbent;
+      return (
+        <span className="tabular-nums">
+          {fmtNum(incumbent, 4)} · <span className={cn(blendWins && 'text-emerald-400')}>{fmtNum(blend, 4)}</span>
+        </span>
+      );
+    },
   },
   { key: 'vetoed', header: 'Vetadas', render: (r) => r.vetoedSelections },
   { key: 'started', header: 'Inicio', render: (r) => formatDateTime(r.startedAt) },

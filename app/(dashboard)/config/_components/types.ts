@@ -169,6 +169,10 @@ export interface PredictionConfig {
   /** Banda de confianza de una pata premium respecto a 100/cuota (puntos). */
   combinadasPremiumMaxConfOverImplied?: number;
   combinadasPremiumMinConfOverImplied?: number;
+  /** Forma asimétrica de la premium del día (una pata baja + una alta). */
+  combinadasPremiumAsymmetricShape?: boolean;
+  combinadasPremiumLowLegMax?: number;
+  combinadasPremiumHighLegMin?: number;
   /** Confianza de combinada anclada al precio (false = producto con el ajuste del LLM). */
   combinadasPriceAnchoredConfidence?: boolean;
   /** Suelo de cada pata como fracción de 100/cuota (0.5-1). */

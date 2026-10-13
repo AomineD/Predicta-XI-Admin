@@ -346,6 +346,43 @@ export function CombinadasTab({
             )}
           </div>
         </Field>
+        <Field
+          label="Forma asimétrica (una pata baja + una alta)"
+          subtitle="def. apagado · solo la premium del día"
+          info="Con el switch encendido y dos patas, entre las combinaciones que caben en la ventana de cuota se prefieren las que tienen una pata hasta 'Pata baja hasta' y otra desde 'Pata alta desde'; dentro de ellas manda el criterio de siempre (menor cuota). Si ese día no hay ninguna así, sale la premium de siempre y queda anotado en las notas del job (premium_shape_fell_back). Por qué: el selector de siempre deja casi siempre dos patas parecidas (~1.44 cada una), justo la banda de cuota más floja de los picks oficiales. Backtest preregistrado (2026-06-01 a 2026-10-12, ventana 1.70–2.10 y piso 1.20): +6,3 puntos de acierto por día, mejor en 4 de 5 meses y los mismos días con premium. Es una mejora frágil (el límite inferior del intervalo de A/E quedó en +0,001), así que se revisa a las 3 semanas de encenderla. Solo afecta a la premium del día: la semanal y las Seguras no cambian."
+        >
+          <Toggle value={form.combinadasPremiumAsymmetricShape ?? false} onChange={(v) => setField('combinadasPremiumAsymmetricShape', v)} />
+        </Field>
+        <Field
+          label="Pata baja hasta / Pata alta desde"
+          subtitle="def. 1.33 / 1.50"
+          info="Las dos cuotas que definen la forma asimétrica: una pata con cuota hasta el primer valor y otra con cuota desde el segundo. Con la ventana 1.70–2.10, el piso 1.20 y estos valores, la pata baja queda entre 1.20 y 1.33 y la alta desde 1.50. La forma no puede salir nunca si la 'Cuota mínima por pata (premium)' queda por encima de 'Pata baja hasta', si 'Pata baja hasta' no queda por debajo de 'Pata alta desde', si el piso × 'Pata alta desde' supera la cuota combinada máxima o si la premium pide más de dos patas: en esos casos el backend usa la de siempre y lo anota en el job (premium_shape_unreachable)."
+        >
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <NumInput min={1.01} max={5} step={0.01} value={form.combinadasPremiumLowLegMax ?? 1.33} onChange={(v) => setField('combinadasPremiumLowLegMax', v)} />
+              <span className="text-xs text-text-muted">/</span>
+              <NumInput min={1.01} max={10} step={0.01} value={form.combinadasPremiumHighLegMin ?? 1.5} onChange={(v) => setField('combinadasPremiumHighLegMin', v)} />
+            </div>
+            {(form.combinadasPremiumAsymmetricShape ?? false) && (form.combinadasPremiumOddsFloor ?? 1.35) > (form.combinadasPremiumLowLegMax ?? 1.33) && (
+              <span className="text-xs font-sans text-warning">
+                La cuota mínima por pata (premium) está por encima de &quot;Pata baja hasta&quot;: la forma asimétrica no puede salir.
+              </span>
+            )}
+            {(form.combinadasPremiumAsymmetricShape ?? false) && (form.combinadasPremiumLowLegMax ?? 1.33) >= (form.combinadasPremiumHighLegMin ?? 1.5) && (
+              <span className="text-xs font-sans text-warning">
+                &quot;Pata baja hasta&quot; tiene que quedar por debajo de &quot;Pata alta desde&quot;: la forma asimétrica no puede salir.
+              </span>
+            )}
+            {(form.combinadasPremiumAsymmetricShape ?? false) &&
+              (form.combinadasPremiumOddsFloor ?? 1.35) * (form.combinadasPremiumHighLegMin ?? 1.5) >
+                Math.max(form.combinadasPremiumMaxCombinedOdds ?? 2.6, form.combinadasPremiumMinCombinedOdds ?? 2.0) && (
+                <span className="text-xs font-sans text-warning">
+                  Ni la combinación asimétrica más barata (piso × &quot;Pata alta desde&quot;) cabe en la cuota combinada máxima: la forma no puede salir.
+                </span>
+              )}
+          </div>
+        </Field>
 
         <SubHeading>Confianza que ve el usuario</SubHeading>
         <Field

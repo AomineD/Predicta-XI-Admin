@@ -25,11 +25,51 @@ export interface EngineStudyRun {
   incumbentBrier: number | null;
   candidateBrier: number | null;
   noMapBrier: number | null;
+  /** 1/cuota sobre la validación con cuota. Null en corridas anteriores al 2026-10-13. */
+  marketLogLoss: number | null;
+  marketBrier: number | null;
+  pricedScores: EngineStudyPricedScores | null;
+  uncappedScores: EngineStudyUncappedScores | null;
+  bandReport: EngineStudyBandRow[] | null;
   vetoedSelections: number;
   model: string | null;
   error: string | null;
   startedAt: string;
   finishedAt: string | null;
+}
+
+export interface EngineStudyScore {
+  n: number;
+  logLoss: number;
+  brier: number;
+}
+
+/** Todas las hipótesis sobre la validación con cuota > 1, a igual muestra. */
+export interface EngineStudyPricedScores {
+  n: number;
+  noMap: EngineStudyScore | null;
+  incumbent: EngineStudyScore | null;
+  candidate: EngineStudyScore | null;
+  market: EngineStudyScore | null;
+  blend: EngineStudyScore | null;
+  blendOddsWeight: number;
+}
+
+/** Los mapas aplicados sin el tope `min(cruda, mapa)`. Solo informativo. */
+export interface EngineStudyUncappedScores {
+  incumbent: EngineStudyScore | null;
+  candidate: EngineStudyScore | null;
+}
+
+/** Una banda de confianza cruda de la validación. Medias en %. */
+export interface EngineStudyBandRow {
+  band: string;
+  priced: boolean;
+  n: number;
+  rawMean: number;
+  shownMean: number;
+  marketMean: number | null;
+  hitRate: number;
 }
 
 export interface EngineSelectionStat {
