@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { AlertTriangle } from 'lucide-react';
@@ -14,19 +15,22 @@ interface HealthOverviewAlerts {
 }
 
 /**
- * Critical-state banner shown on the Dashboard. Reads the same
- * `/admin/health/overview` payload as the Health page (React Query dedupes the
- * fetch) and renders only when the server reports one or more alerts. Red when
- * any alert is an error, amber when only warnings. Renders nothing when healthy.
+ * Critical-state banner. Reads the same `/admin/health/overview` payload as the
+ * Health page (React Query dedupes the fetch) and renders only when the server
+ * reports one or more alerts. Red when any alert is an error, amber when only
+ * warnings. Renders nothing when healthy.
+ *
+ * `errorsOnly` drops the warnings: it is the variant that follows you around
+ * every page, where an amber note would just teach you to ignore the bar.
  */
-export function HealthBanner() {
+export function HealthBanner({ errorsOnly = false }: { errorsOnly?: boolean }) {
   const { data } = useQuery<HealthOverviewAlerts>({
     queryKey: ['health-overview'],
     queryFn: () => api.get('/admin/health/overview'),
     refetchInterval: 60_000,
   });
 
-  const alerts = data?.alerts ?? [];
+  const alerts = (data?.alerts ?? []).filter((a) => !errorsOnly || a.level === 'error');
   if (alerts.length === 0) return null;
 
   const hasError = alerts.some((a) => a.level === 'error');
@@ -55,4 +59,20 @@ export function HealthBanner() {
       <span className="self-center text-xs text-text-muted">Ver Health →</span>
     </Link>
   );
+}
+
+/** Pages that already show the full alert list (warnings included). */
+const PAGES_WITH_FULL_ALERTS = new Set(['/', '/health']);
+
+/**
+ * The critical errors on every page of the panel, not only on the Dashboard.
+ *
+ * DeepSeek ran out of balance from 2026-10-30 to 2026-11-02 and the panel was
+ * opened in that window straight into Config: the red banner only lived on the
+ * Dashboard and Health, so it was never seen. Three days without predictions.
+ */
+export function GlobalCriticalBanner() {
+  const pathname = usePathname();
+  if (PAGES_WITH_FULL_ALERTS.has(pathname)) return null;
+  return <HealthBanner errorsOnly />;
 }
