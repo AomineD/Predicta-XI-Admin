@@ -5,6 +5,10 @@ export interface PredictionConfig {
   model: string;
   /** Motor usado para traducir las previas visibles en la app. */
   previewTranslationMode: 'llm' | 'google_nmt' | 'disabled';
+  /** Modelo del LLM que traduce las previas; null = el de las predicciones. */
+  previewTranslationModel: string | null;
+  /** 'scrape' = traduce cada previa al scrapearla; 'view' = al abrirla un usuario en español. */
+  previewTranslationTrigger: 'scrape' | 'view';
   /** Estrategia de clasificación y extracción de noticias de equipo. */
   newsExtractionMode: 'llm' | 'shadow' | 'hybrid' | 'rules_only' | 'disabled';
   batchSize: number;

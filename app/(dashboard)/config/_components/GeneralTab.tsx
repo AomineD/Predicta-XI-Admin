@@ -210,7 +210,7 @@ export function GeneralTab({ form, setField }: { form: PredictionConfig; setFiel
         <Field
           label="Preview translation"
           subtitle="English match previews → Spanish"
-          info="Google Cloud NMT translates without a generative LLM call. Legacy LLM keeps the previous behavior for rollback. Disabled leaves the English original visible when no matching cached translation exists."
+          info="LLM translates with the model chosen below. Google Cloud NMT bills about $20 per million characters beyond the free tier, roughly 40 times what DeepSeek costs per preview. Disabled leaves the English original visible when no matching cached translation exists."
         >
           <Select
             className="w-64"
@@ -219,9 +219,45 @@ export function GeneralTab({ form, setField }: { form: PredictionConfig; setFiel
               setField('previewTranslationMode', e.target.value as PredictionConfig['previewTranslationMode'])
             }
           >
+            <option value="llm">LLM</option>
             <option value="google_nmt">Google Cloud NMT</option>
-            <option value="llm">Legacy LLM</option>
             <option value="disabled">Disabled</option>
+          </Select>
+        </Field>
+
+        <Field
+          label="Translation model"
+          subtitle="Only used in LLM mode · DeepSeek recommended"
+          info="LLM that translates previews. Translating needs no reasoning, and only the DeepSeek models let the backend turn it off. The other models (GPT, Gemini, GLM, Kimi) keep reasoning at their own default: they cost more per preview and can run out of output before the translation ends, which then fails and retries later. The model needs an active API key, or saving is rejected. Same as predictions follows the Active model above, so changing that model also changes the cost of every translation."
+        >
+          <Select
+            className="w-64"
+            value={form.previewTranslationModel ?? ''}
+            onChange={(e) => setField('previewTranslationModel', e.target.value || null)}
+          >
+            <option value="">-- Same as predictions --</option>
+            {MODELS.map((m) => (
+              <option key={m} value={m}>
+                {MODEL_LABELS[m] ?? m}
+              </option>
+            ))}
+          </Select>
+        </Field>
+
+        <Field
+          label="When to translate"
+          subtitle="Scraping every preview, or only those opened in Spanish"
+          info="When scraped translates every preview as soon as it is scraped, even if nobody reads it in Spanish; opening a match never triggers a translation. When opened in Spanish translates a preview only the first time a Spanish-language user opens the match, for matches that have not kicked off or did so less than 48 hours ago; that user sees the English text for a few seconds and later visitors get the Spanish version. Already translated previews are reused in both modes."
+        >
+          <Select
+            className="w-64"
+            value={form.previewTranslationTrigger}
+            onChange={(e) =>
+              setField('previewTranslationTrigger', e.target.value as PredictionConfig['previewTranslationTrigger'])
+            }
+          >
+            <option value="scrape">When scraped</option>
+            <option value="view">When opened in Spanish</option>
           </Select>
         </Field>
 
